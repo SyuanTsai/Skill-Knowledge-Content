@@ -82,6 +82,19 @@ For long courses, checkpoint by lesson and material, write durable artifacts inc
 
 Generate NotebookLM or article exports from the verified durable notes. Keep exports replaceable and keep private source anchors, raw evidence, and proprietary course artifacts out of public repositories.
 
+## Example
+
+```text
+User request:
+"Capture modules 1–3 from this authorized course, including videos and PDFs, and prepare private NotebookLM-ready notes."
+
+Expected workflow:
+1. Inventory every lesson and attachment in modules 1–3.
+2. Record timestamps, PDF pages, code paths, and access gaps as source anchors.
+3. Build cross-source lesson events and verify coverage by material type.
+4. Export the verified notes without publishing private source material.
+```
+
 ## Answer future questions from the notes
 
 1. Search the manifest, material records, lesson notes, events, code, and evidence.
