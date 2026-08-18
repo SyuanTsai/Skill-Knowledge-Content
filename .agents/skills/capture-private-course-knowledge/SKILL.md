@@ -1,6 +1,6 @@
 ---
 name: capture-private-course-knowledge
-description: Capture, integrate, summarize, export, publish, and later retrieve authorized course and lecture materials from arbitrary public or private websites and files, including authenticated videos without captions, PDFs, slides, attachments, and code. Use when an agent must inventory a course, extract spoken, visual, and document content, link video timestamps to PDF pages or other sources, preserve code and demonstrations with evidence, create durable notes, NotebookLM-ready sources, or evidence-based Jekyll articles, or reconstruct teaching context without bypassing access controls or claiming analysis of inaccessible material.
+description: Capture authorized course or lecture material into an evidence-linked knowledge base. Use when an agent must inventory public or private lessons and reconstruct teaching context across videos and PDFs plus slides, code and attachments. Preserve precise source anchors and produce durable notes and NotebookLM-ready sources or evidence-based articles without bypassing access controls.
 ---
 
 # Capture Private Course Knowledge
