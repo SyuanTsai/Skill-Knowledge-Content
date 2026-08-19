@@ -1,6 +1,6 @@
 ---
 name: capture-private-course-knowledge
-description: Analyze and export authorized educational material into an evidence-linked research archive. Use when the user needs to search, review, or convert videos, PDFs, slides, code, and attachments into durable notes, NotebookLM-ready sources, or evidence-based articles while preserving source anchors.
+description: Analyze and archive authorized course or lecture materials with evidence links. Use when the user wants to transcribe authenticated videos, relate PDFs, slides, code, or attachments, or export durable notes, NotebookLM sources, articles, and retrievable anchors from public or restricted courses.
 ---
 
 # Capture Private Course Knowledge
