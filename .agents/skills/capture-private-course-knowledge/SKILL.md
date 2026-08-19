@@ -1,6 +1,6 @@
 ---
 name: capture-private-course-knowledge
-description: Capture authorized course or lecture material into an evidence-linked knowledge base. Use when an agent must inventory public or private lessons and reconstruct teaching context across videos and PDFs plus slides, code and attachments. Preserve precise source anchors and produce durable notes and NotebookLM-ready sources or evidence-based articles without bypassing access controls.
+description: Analyze and export authorized educational material into an evidence-linked research archive. Use when the user needs to search, review, or convert videos, PDFs, slides, code, and attachments into durable notes, NotebookLM-ready sources, or evidence-based articles while preserving source anchors.
 ---
 
 # Capture Private Course Knowledge
@@ -95,6 +95,15 @@ Expected workflow:
 4. Export the verified notes without publishing private source material.
 ```
 
+Example evidence record:
+
+```text
+material: module-2-video-1
+anchor: 00:12:40-00:14:05
+claim: The demonstrated configuration requires the preceding initialization step.
+confidence: directly observed
+```
+
 ## Answer future questions from the notes
 
 1. Search the manifest, material records, lesson notes, events, code, and evidence.
@@ -109,6 +118,14 @@ Do not answer from conversational memory when durable notes exist. Do not imply 
 ## Produce the result
 
 Write in the user's language unless requested otherwise. Report scope, inventory and coverage, executive summary, lesson map, key concepts and procedures, cross-source relationships, verified code or configuration, demonstrated operations, and caveats. For durable capture, provide the course index, manifest, lesson notes, events, code, evidence, and material records. For NotebookLM or an article, provide the corresponding export manifest or draft, privacy review, validation, and external-action status.
+
+## Error Handling
+
+- If authentication, MFA, or CAPTCHA blocks access, stop and request only the minimum user action needed to restore the authorized session.
+- If every authorized route to a required material fails, report the exact material and access gap instead of substituting public or inferred content.
+- If a no-caption video, scanned PDF, or protected document cannot be processed with available authorized tools, mark the affected range inaccessible and preserve partial coverage accurately.
+- If private material would leave the current environment through transcription, OCR, vision, storage, or another external service, obtain explicit approval before sending it.
+- If durable recall has no approved destination or public output cannot avoid private or unlicensed material, stop before persistence or publication and explain the blocker.
 
 ## Stop or ask for help when necessary
 
