@@ -1,6 +1,6 @@
 ---
 name: capture-private-course-knowledge
-description: Capture, integrate, summarize, export, publish, and later retrieve authorized course and lecture materials from arbitrary public or private websites and files, including authenticated videos without captions, PDFs, slides, attachments, and code. Use when an agent must inventory a course, extract spoken, visual, and document content, link video timestamps to PDF pages or other sources, preserve code and demonstrations with evidence, create durable notes, NotebookLM-ready sources, or evidence-based Jekyll articles, or reconstruct teaching context without bypassing access controls or claiming analysis of inaccessible material.
+description: Analyze and archive authorized course or lecture materials with evidence links. Use when the user wants to transcribe authenticated videos, relate PDFs, slides, code, or attachments, export notes, NotebookLM sources, or articles, and reconstruct teaching context without bypassing access controls.
 ---
 
 # Capture Private Course Knowledge
@@ -82,6 +82,28 @@ For long courses, checkpoint by lesson and material, write durable artifacts inc
 
 Generate NotebookLM or article exports from the verified durable notes. Keep exports replaceable and keep private source anchors, raw evidence, and proprietary course artifacts out of public repositories.
 
+## Example
+
+```text
+User request:
+"Capture modules 1–3 from this authorized course, including videos and PDFs, and prepare private NotebookLM-ready notes."
+
+Expected workflow:
+1. Inventory every lesson and attachment in modules 1–3.
+2. Record timestamps, PDF pages, code paths, and access gaps as source anchors.
+3. Build cross-source lesson events and verify coverage by material type.
+4. Export the verified notes without publishing private source material.
+```
+
+Example evidence record:
+
+```text
+material: module-2-video-1
+anchor: 00:12:40-00:14:05
+claim: The demonstrated configuration requires the preceding initialization step.
+confidence: directly observed
+```
+
 ## Answer future questions from the notes
 
 1. Search the manifest, material records, lesson notes, events, code, and evidence.
@@ -96,6 +118,14 @@ Do not answer from conversational memory when durable notes exist. Do not imply 
 ## Produce the result
 
 Write in the user's language unless requested otherwise. Report scope, inventory and coverage, executive summary, lesson map, key concepts and procedures, cross-source relationships, verified code or configuration, demonstrated operations, and caveats. For durable capture, provide the course index, manifest, lesson notes, events, code, evidence, and material records. For NotebookLM or an article, provide the corresponding export manifest or draft, privacy review, validation, and external-action status.
+
+## Error Handling
+
+- If authentication, MFA, or CAPTCHA blocks access, stop and request only the minimum user action needed to restore the authorized session.
+- If every authorized route to a required material fails, report the exact material and access gap instead of substituting public or inferred content.
+- If a no-caption video, scanned PDF, or protected document cannot be processed with available authorized tools, mark the affected range inaccessible and preserve partial coverage accurately.
+- If private material would leave the current environment through transcription, OCR, vision, storage, or another external service, obtain explicit approval before sending it.
+- If durable recall has no approved destination or public output cannot avoid private or unlicensed material, stop before persistence or publication and explain the blocker.
 
 ## Stop or ask for help when necessary
 
