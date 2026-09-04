@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 SyuanTsai
+SPDX-License-Identifier: Apache-2.0
+-->
 # Video and Audio Capture
 
 Use this reference for course video or audio, including authenticated playback and video without captions. Preserve spoken and on-screen evidence together whenever both are needed to understand the lesson.

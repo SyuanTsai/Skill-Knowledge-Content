@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 SyuanTsai
+SPDX-License-Identifier: Apache-2.0
+-->
 # SyuanTsai.github.io Article Export
 
 Use this reference when durable course notes must become a specific article for [SyuanTsai/SyuanTsai.github.io](https://github.com/SyuanTsai/SyuanTsai.github.io). The article is an original public synthesis, not a transcript, course substitute, or public copy of the private evidence bundle.

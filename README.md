@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 SyuanTsai
+SPDX-License-Identifier: Apache-2.0
+-->
 # Skill-Knowledge-Content
 
 Independent Agent Skills repository for the **Knowledge & Content** domain.
@@ -11,6 +15,14 @@ Independent Agent Skills repository for the **Knowledge & Content** domain.
 - Validation entry point: `scripts/validate.ps1`
 - Contract tests: `tests/repository.Tests.ps1`
 - Release and rollback rules: `RELEASING.md`
+
+## License and content boundary
+
+The Apache-2.0 license in [LICENSE](LICENSE) applies to the repository-authored Skill instructions, agent metadata, procedural references, source metadata, documentation, validation scripts, tests, and workflow configuration. It does not grant rights to course providers, publishers, NotebookLM, GitHub, or other external services.
+
+Course and lecture videos or audio, PDFs, slides,教材, code, attachments, archives, retrieved text, transcripts, OCR, notes, exports, articles, and other user-provided or third-party material are inputs or outputs rather than Apache-2.0 repository content. Processing them with this tool does not automatically relicense them; users must confirm the rights for each input and output.
+
+The repository does not vendor course materials or third-party source code. See [PROVENANCE.md](PROVENANCE.md) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Contributors must have the right to submit their contribution; unless a separate written agreement says otherwise, an intentional contribution to the repository-authored scope is submitted under Apache-2.0 and must preserve existing notices.
 
 ## Skills
 
@@ -70,4 +82,4 @@ See [RELEASING.md](RELEASING.md). Rollback is performed by returning the consume
 
 ## Migration scope
 
-The initial migration is tracked by Jira `SYP-81`. This repository owns the Knowledge & Content Skill source after migration. Cross-repository Catalog/bootstrap cutover is intentionally outside this repository's own baseline and is handled separately.
+This repository owns the Knowledge & Content Skill source after migration. Cross-repository Catalog/bootstrap cutover is intentionally outside this repository's own baseline and is handled separately.

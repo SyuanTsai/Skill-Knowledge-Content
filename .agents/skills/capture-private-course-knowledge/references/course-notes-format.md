@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 SyuanTsai
+SPDX-License-Identifier: Apache-2.0
+-->
 # Durable Course Notes Format
 
 Use this format for persistent notes and later question answering. Preserve stable identifiers and precise source anchors across every material type.

@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 SyuanTsai
+SPDX-License-Identifier: Apache-2.0
+-->
 # NotebookLM Export
 
 Use this reference when NotebookLM is requested. Verify current supported source types and account limits in official Google documentation before producing or uploading a large export because capabilities and quotas can change.
