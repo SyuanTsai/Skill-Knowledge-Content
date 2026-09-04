@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 SyuanTsai
+# SPDX-License-Identifier: Apache-2.0
 interface:
   display_name: "Capture Private Course Knowledge"
   short_description: "Unify videos, PDFs, code, recall, and exports"

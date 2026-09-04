@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: 2026 SyuanTsai
+SPDX-License-Identifier: Apache-2.0
+-->
 # PDF Course Material Capture
 
 Use this reference for course handbooks, slide exports, worksheets, lab guides, reference sheets, scanned documents, and other PDF material. Preserve both searchable content and visual structure when layout conveys meaning.
