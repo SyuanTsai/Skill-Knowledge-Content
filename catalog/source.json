@@ -1,11 +1,9 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "sourceId": "knowledge-content",
   "repository": "https://github.com/SyuanTsai/Skill-Knowledge-Content.git",
+  "skillsRoot": "skills",
   "skills": [
-    {
-      "id": "capture-private-course-knowledge",
-      "path": ".agents/skills/capture-private-course-knowledge"
-    }
+    "capture-private-course-knowledge"
   ]
 }

@@ -10,9 +10,9 @@ Independent Agent Skills repository for the **Knowledge & Content** domain.
 
 - Stable source ID: `knowledge-content`
 - Repository: `SyuanTsai/Skill-Knowledge-Content`
-- Skill layout: `.agents/skills/<skill-id>/**`
+- Skill layout: `skills/<skill-id>/**`
 - Source inventory: `catalog/source.json`
-- Validation entry point: `scripts/validate.ps1`
+- Validation entry point: `scripts/Validate.ps1`
 - Contract tests: `tests/repository.Tests.ps1`
 - Release and rollback rules: `RELEASING.md`
 
@@ -33,7 +33,7 @@ Captures and integrates authorized course and lecture material across video/audi
 Path:
 
 ```text
-.agents/skills/capture-private-course-knowledge/
+skills/capture-private-course-knowledge/
 ├─ SKILL.md
 ├─ agents/
 │  └─ openai.yaml
@@ -50,13 +50,13 @@ Path:
 Run from the repository root:
 
 ```powershell
-./scripts/validate.ps1
+./scripts/Validate.ps1
 ```
 
 The validator checks:
 
 - the stable `knowledge-content` source metadata;
-- source inventory against actual `.agents/skills/*` directories;
+- source inventory against actual `skills/*` directories;
 - lowercase stable Skill IDs and flat source paths;
 - required `SKILL.md` and `agents/openai.yaml` files;
 - `SKILL.md` name matching the stable Skill ID;
@@ -74,7 +74,7 @@ GitHub Actions executes both checks for pushes and pull requests.
 
 Consumers should pin this repository to a full commit SHA or an immutable release tag resolving to that commit. Skill content hashes are deterministic and are emitted by the validation script for use by external catalog locks.
 
-Do not repurpose stable Skill IDs or move a Skill away from `.agents/skills/<skill-id>` without coordinating the consuming Catalog lifecycle contract.
+Do not repurpose stable Skill IDs or move a Skill away from `skills/<skill-id>` without coordinating the consuming Catalog lifecycle contract.
 
 ## Release, update, rename, removal, and rollback
 
