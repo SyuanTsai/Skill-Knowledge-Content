@@ -6,11 +6,11 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Release contract
 
-The stable source ID is `knowledge-content`. Skill IDs and their `.agents/skills/<skill-id>` paths are stable API and must not be repurposed.
+The stable source ID is `knowledge-content`. Skill IDs and their `skills/<skill-id>` source paths are stable API and must not be repurposed.
 
 Before release:
 
-1. Run `./scripts/validate.ps1`.
+1. Run `./scripts/Test-Repository.ps1` for the repository contract and `./scripts/Validate.ps1` for the complete Standard v1 gate.
 2. Run `Invoke-Pester ./tests -CI` with Pester 5+.
 3. Confirm the validation workflow passes on the release commit.
 4. Pin consumers to the full 40-character commit SHA or to a tag that resolves to that commit.
@@ -24,7 +24,7 @@ Keep the stable Skill ID and directory path. Update `SKILL.md`, `agents/openai.y
 
 ## Adding a Skill
 
-Add the Skill under `.agents/skills/<skill-id>/` and add exactly one matching entry to `catalog/source.json`. The validator rejects undeclared or missing Skill directories.
+Add the Skill under `skills/<skill-id>/` and add exactly one matching string to `catalog/source.json`. The validators reject undeclared or missing Skill directories.
 
 ## Rename or removal
 

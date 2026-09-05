@@ -37,7 +37,7 @@ Read references only when applicable:
 - If the course contains video or audio, read [references/video-capture.md](references/video-capture.md).
 - If the course contains PDF material, read [references/pdf-material-capture.md](references/pdf-material-capture.md).
 - For NotebookLM output, read [references/notebooklm-export.md](references/notebooklm-export.md).
-- For `SyuanTsai/SyuanTsai.github.io`, read [references/syuantsai-github-article.md](references/syuantsai-github-article.md) and reinspect the target repository before generating an article.
+- For the SyuanTsai GitHub Pages repository, read [references/syuantsai-github-article.md](references/syuantsai-github-article.md) and reinspect the target repository before generating an article.
 
 ## Follow the capture workflow
 
@@ -133,6 +133,6 @@ Write in the user's language unless requested otherwise. Report scope, inventory
 
 ## Stop or ask for help when necessary
 
-Stop and explain the exact blocker when the user must sign in or complete verification; every authorized route to a required material fails; the only remaining route would bypass protections; a no-caption video requires unavailable audio; a scanned or protected PDF cannot be read with available authorized tools; private material would leave the current environment without approval; durable recall has no safe destination; public output cannot avoid private or unlicensed material; target publishing conventions cannot be inspected; or the scope cannot support honest coverage.
+Stop and explain the exact blocker when the user must sign in or complete verification; every authorized route to a required material fails; the only remaining route would bypass protections; a no-caption video requires unavailable audio; a scanned or protected PDF cannot be read with available authorized tools; private material would leave the current environment before explicit user approval is obtained; durable recall has no safe destination; public output cannot avoid private or unlicensed material; target publishing conventions cannot be inspected; or the scope cannot support honest coverage.
 
 State what was inspected, what remains inaccessible, and the smallest user action or artifact needed to continue.

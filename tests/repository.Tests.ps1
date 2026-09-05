@@ -8,13 +8,13 @@ BeforeAll {
 
 Describe 'Knowledge & Content repository contract' {
     It 'validates the repository' {
-        { & (Join-Path $script:repoRoot 'scripts/validate.ps1') } | Should -Not -Throw
+        { & (Join-Path $script:repoRoot 'scripts/Test-Repository.ps1') } | Should -Not -Throw
     }
 
     It 'contains only declared top-level Skill directories' {
         $source = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $script:repoRoot 'catalog/source.json') | ConvertFrom-Json
-        $declared = @($source.skills.id | Sort-Object)
-        $actual = @(Get-ChildItem -LiteralPath (Join-Path $script:repoRoot '.agents/skills') -Directory | ForEach-Object Name | Sort-Object)
+        $declared = @($source.skills | Sort-Object)
+        $actual = @(Get-ChildItem -LiteralPath (Join-Path $script:repoRoot 'skills') -Directory | ForEach-Object Name | Sort-Object)
         ($actual -join "`n") | Should -BeExactly ($declared -join "`n")
     }
 
