@@ -37,7 +37,7 @@ Read references only when applicable:
 - If the course contains video or audio, read [references/video-capture.md](references/video-capture.md).
 - If the course contains PDF material, read [references/pdf-material-capture.md](references/pdf-material-capture.md).
 - For NotebookLM output, read [references/notebooklm-export.md](references/notebooklm-export.md).
-- For the target public website repository, read [references/syuantsai-github-article.md](references/syuantsai-github-article.md) and reinspect the target repository before generating an article.
+- For `SyuanTsai/SyuanTsai.github.io`, read [references/syuantsai-github-article.md](references/syuantsai-github-article.md) and reinspect the target repository before generating an article.
 
 ## Follow the capture workflow
 

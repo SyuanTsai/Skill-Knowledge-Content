@@ -389,7 +389,10 @@ function Invoke-NativeChecked {
 
 function Test-SecurityRelevantSkillChange {
     param([string] $GitPath, [string] $RepositoryRoot, [string] $BaseCommit)
-    if ([string]::IsNullOrWhiteSpace($BaseCommit)) { return $false }
+    if ([string]::IsNullOrWhiteSpace($BaseCommit)) {
+        # Without an immutable comparison base, fail closed instead of skipping the semantic scan.
+        return $true
+    }
     $lines = @(& $GitPath -C $RepositoryRoot diff --find-renames=100% --name-status "$BaseCommit...HEAD")
     if ($LASTEXITCODE -ne 0) { throw "Could not compare candidate with base commit '$BaseCommit'." }
     foreach ($line in $lines) {

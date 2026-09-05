@@ -116,4 +116,20 @@ Describe 'Canonical Standard v1 validation adapter' {
         $script:Validator | Should -Match 'Triggered SkillSpector semantic scan did not complete'
         $script:Validator | Should -Not -Match 'semantic.*continue|continue.*semantic'
     }
+
+    It 'triggers semantic scan when no comparison base is available' {
+        $functionStart = $script:Validator.IndexOf('function Test-SecurityRelevantSkillChange')
+        $functionEnd = $script:Validator.IndexOf('$repoRoot =', $functionStart)
+        $detector = $script:Validator.Substring($functionStart, $functionEnd - $functionStart)
+
+        $detector | Should -Match 'IsNullOrWhiteSpace\(\$BaseCommit\)'
+        $detector | Should -Match 'return \$true'
+    }
+
+    It 'keeps the site-specific article reference scoped to its repository' {
+        $skill = Get-Content -LiteralPath (Join-Path $script:RepositoryRoot 'skills/capture-private-course-knowledge/SKILL.md') -Raw
+
+        $skill | Should -Match 'For `SyuanTsai/SyuanTsai\.github\.io`'
+        $skill | Should -Not -Match 'For the target public website repository'
+    }
 }
