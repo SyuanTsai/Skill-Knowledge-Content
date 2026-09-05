@@ -570,4 +570,3 @@ if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
 }
 Write-Host "Knowledge & Content repository validation passed: $($skillIds.Count) active Skills."
 $json
-

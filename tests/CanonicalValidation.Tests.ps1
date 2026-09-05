@@ -117,4 +117,3 @@ Describe 'Canonical Standard v1 validation adapter' {
         $script:Validator | Should -Not -Match 'semantic.*continue|continue.*semantic'
     }
 }
-
