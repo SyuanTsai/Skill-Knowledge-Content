@@ -62,13 +62,7 @@ The validator checks:
 - `SKILL.md` name matching the stable Skill ID;
 - deterministic `contentSha256` using repository-relative paths and raw file SHA-256 values.
 
-Run contract tests with Pester 5+:
-
-```powershell
-Invoke-Pester ./tests -CI
-```
-
-GitHub Actions executes both checks for pushes and pull requests.
+The canonical validator invokes the repository contract and Pester components. They are not additional public validation commands. GitHub Actions uses the same canonical entry point for pushes and pull requests.
 
 ## Versioning
 
