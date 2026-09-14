@@ -72,7 +72,7 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         # Scenario: the central runner executes repository regression in a candidate without .git metadata.
         # Purpose: keep the smoke test on the read-only snapshot path instead of requiring a local Git index.
         $repositoryTests = Get-Content -LiteralPath (Join-Path $script:RepositoryRoot 'tests/repository.Tests.ps1') -Raw
-        $repositoryTests | Should -Match 'Test-Repository\.ps1\)\s+-ReadOnlySnapshot'
+        $repositoryTests | Should -Match 'Test-Repository\.ps1''\)\s+-ReadOnlySnapshot'
     }
 
     It 'routes CI through the canonical validator without a second installer policy' {
