@@ -614,7 +614,7 @@ try {
                         [string]$_.ErrorRecord.Exception.Message
                     }
                     else { '' }
-                    if ([string]::IsNullOrWhiteSpace($message)) { $name } else { "$name: $message" }
+                    if ([string]::IsNullOrWhiteSpace($message)) { $name } else { "${name}: $message" }
                 })
             }
             if ($null -eq $result -or [int64]$result.TotalCount -le 0 -or [int64]$result.FailedCount -ne 0 -or
