@@ -805,8 +805,24 @@ try {
         '-TrustedToolRoot', $trustedRoot,
         '-DevelopmentHarness'
     )
-    & $pwshPath -NoProfile -NonInteractive -File $centralRunnerPath @centralRunnerArgs
+    $centralOutput = @(& $pwshPath -NoProfile -NonInteractive -File $centralRunnerPath @centralRunnerArgs 2>&1)
     $centralExitCode = $LASTEXITCODE
+    $centralOutput | Out-Host
+    if ($centralExitCode -ne 0 -and (Test-Path -LiteralPath $outputFull -PathType Leaf)) {
+        try {
+            $finalReport = Get-Content -LiteralPath $outputFull -Raw -Encoding UTF8 | ConvertFrom-Json -Depth 100
+            foreach ($event in @($finalReport.stages | ForEach-Object { $_.events } | Where-Object { $_.status -ne 'passed' })) {
+                $eventPath = [string]$event.outputPath
+                if (-not [string]::IsNullOrWhiteSpace($eventPath) -and (Test-Path -LiteralPath $eventPath -PathType Leaf)) {
+                    Write-Host "Canonical child diagnostic: $($event.stageId)/$($event.toolId)"
+                    Get-Content -LiteralPath $eventPath -Raw -Encoding UTF8 | Out-Host
+                }
+            }
+        }
+        catch {
+            Write-Warning "Could not print canonical child diagnostics: $($_.Exception.Message)"
+        }
+    }
     exit $centralExitCode
 }
 catch {
