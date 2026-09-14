@@ -8,7 +8,7 @@ BeforeAll {
 
 Describe 'Knowledge & Content repository contract' {
     It 'validates the repository' {
-        { & (Join-Path $script:repoRoot 'scripts/Test-Repository.ps1') } | Should -Not -Throw
+        { & (Join-Path $script:repoRoot 'scripts/Test-Repository.ps1') -ReadOnlySnapshot } | Should -Not -Throw
     }
 
     It 'contains only declared top-level Skill directories' {

@@ -11,7 +11,7 @@ The stable source ID is `knowledge-content`. Skill IDs and their `skills/<skill-
 Before release:
 
 1. Run `./scripts/Validate.ps1` as the single public entry point for the complete Standard v1 gate.
-2. `Test-Repository.ps1` and Pester are internal validation components, not additional release commands.
+2. The repository contract diagnostic and regression suite are internal validation components, not additional release commands.
 3. Confirm the validation workflow passes on the release commit.
 4. Pin consumers to the full 40-character commit SHA or to a tag that resolves to that commit.
 5. Record the emitted `contentSha256` for each released Skill when producing an external catalog lock.
