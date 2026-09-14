@@ -24,6 +24,17 @@ Describe 'Knowledge & Content Standard v1 repository contract' {
         { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } | Should -Not -Throw
     }
 
+    It 'accepts an immutable source snapshot without Git metadata' {
+        # Scenario: the central runner validates an extracted candidate snapshot.
+        # Purpose: keep domain inventory and package checks independent of .git metadata.
+        $snapshotRoot = Join-Path $TestDrive "snapshot-$([guid]::NewGuid().ToString('N'))"
+        New-Item -ItemType Directory -Path $snapshotRoot | Out-Null
+        Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'catalog') -Destination $snapshotRoot -Recurse
+        Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'skills') -Destination $snapshotRoot -Recurse
+
+        { & $script:ValidatorPath -RepositoryRoot $snapshotRoot -ReadOnlySnapshot } | Should -Not -Throw
+    }
+
     It 'produces a deterministic per-Skill content hash' {
         $first = & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot | Select-Object -Last 1 | ConvertFrom-Json
         $second = & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot | Select-Object -Last 1 | ConvertFrom-Json
@@ -63,12 +74,13 @@ Describe 'Knowledge & Content Standard v1 repository contract' {
         { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } | Should -Throw '*duplicate JSON property*'
     }
 
-    It 'rejects a repository-local security policy fork' {
-        $adapterPath = Join-Path $script:FixtureRoot 'config/standard-v1.json'
-        $adapter = Get-Content -LiteralPath $adapterPath -Raw | ConvertFrom-Json
-        $adapter | Add-Member -NotePropertyName security -NotePropertyValue ([pscustomobject]@{ blockSeverities = @('critical', 'high') })
-        $adapter | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $adapterPath -Encoding utf8NoBOM
-        { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } | Should -Throw '*invalid property set*'
+    It 'keeps authority and security policy outside the domain inventory diagnostic' {
+        # Scenario: shared policy is owned by the verified central authority.
+        # Purpose: prevent a repository-specific domain validator from becoming a parallel policy gate.
+        $validator = Get-Content -LiteralPath $script:ValidatorPath -Raw
+        $validator | Should -Not -Match 'standard-v1\.json'
+        $validator | Should -Not -Match 'deviations'
+        $validator | Should -Not -Match 'security\.blockSeverities|Get-ValidationSecurityAction'
     }
 
     It 'rejects an unsorted source inventory' {
