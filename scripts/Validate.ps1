@@ -591,7 +591,12 @@ try {
             $validatorPath = Join-Path $candidateRoot 'scripts/Test-Repository.ps1'
             if (-not (Test-Path -LiteralPath $validatorPath -PathType Leaf)) { throw 'Test-Repository.ps1 is missing from the candidate snapshot.' }
             $reportPath = Join-Path (Get-Location) 'repository-knowledge-report.json'
-            & $validatorPath -RepositoryRoot $candidateRoot -OutputPath $reportPath -ReadOnlySnapshot *> $null
+            $validatorOutput = @(& $validatorPath -RepositoryRoot $candidateRoot -OutputPath $reportPath -ReadOnlySnapshot 2>&1)
+            if (-not (Test-Path -LiteralPath $reportPath -PathType Leaf)) {
+                $diagnostic = (@($validatorOutput | ForEach-Object { [string]$_ }) -join ' | ')
+                if ($diagnostic.Length -gt 4000) { $diagnostic = $diagnostic.Substring(0, 4000) }
+                throw "Test-Repository did not produce its report. Output='$diagnostic'"
+            }
             $report = Read-Json -Path $reportPath -Context 'Test-Repository report'
             if ([string]$report.result -cne 'passed' -or [int]$report.activeSkillCount -ne $activeSkills.Count) { throw 'Test-Repository did not pass the complete active Skill inventory.' }
             $reportedSkills = @($report.skills | ForEach-Object { [string]$_.skillId })
