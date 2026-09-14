@@ -79,6 +79,12 @@ Describe 'Canonical Standard v1 validation adapter' {
         $script:Validator | Should -Match '\$result = Invoke-Pester -Path \$testRoot -Output None -PassThru 6>\$null'
     }
 
+    It 'keeps repository domain child output JSON-only' {
+        # Scenario: the domain validator writes a human-readable success line as well as its JSON report.
+        # Purpose: prevent non-JSON child output from corrupting the central runner envelope.
+        $script:Validator | Should -Match '& \$validatorPath -RepositoryRoot \$candidateRoot -OutputPath \$reportPath -ReadOnlySnapshot \*> \$null'
+    }
+
     It 'normalizes a singleton active Skill inventory before child comparisons' {
         # Scenario: a source repository contains exactly one active Skill.
         # Purpose: keep cross-platform PowerShell child validation from treating the Skill ID as a scalar string.
