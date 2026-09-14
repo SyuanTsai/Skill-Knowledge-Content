@@ -79,6 +79,12 @@ Describe 'Canonical Standard v1 validation adapter' {
         $script:Validator | Should -Match '\$result = Invoke-Pester -Path \$testRoot -Output None -PassThru 6>\$null'
     }
 
+    It 'normalizes a singleton active Skill inventory before child comparisons' {
+        # Scenario: a source repository contains exactly one active Skill.
+        # Purpose: keep cross-platform PowerShell child validation from treating the Skill ID as a scalar string.
+        $script:Validator | Should -Match '\$activeSkills = @\(Get-ActiveSkills\)'
+    }
+
     It 'uses the P02 central runner as the only stage and severity orchestrator' {
         $script:Validator | Should -Match 'Invoke-StandardValidation\.ps1'
         $script:Validator | Should -Match '-DevelopmentHarness'

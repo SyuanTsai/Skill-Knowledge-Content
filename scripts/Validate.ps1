@@ -538,7 +538,7 @@ try {
     $toolchain = Read-Json -Path $ToolchainPath -Context 'run-owned validation toolchain'
     Assert-FileIdentity -Path $ToolchainPath -Sha256 $ToolchainSha256 -Context 'run-owned validation toolchain'
     $candidateRoot = [IO.Path]::GetFullPath([string]$env:STANDARD_VALIDATION_CANDIDATE_ROOT)
-    $activeSkills = Get-ActiveSkills
+    $activeSkills = @(Get-ActiveSkills)
     $candidateId = [string]$env:STANDARD_VALIDATION_CANDIDATE_ID
     if ([string]::IsNullOrWhiteSpace($candidateId)) { throw 'Central runner did not provide a candidate identity.' }
 
