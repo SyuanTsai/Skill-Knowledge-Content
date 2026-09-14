@@ -13,7 +13,7 @@ Independent Agent Skills repository for the **Knowledge & Content** domain.
 - Skill layout: `skills/<skill-id>/**`
 - Source inventory: `catalog/source.json`
 - Validation entry point: `scripts/Validate.ps1`
-- Contract tests: `tests/repository.Tests.ps1`
+- Contract tests: the repository regression suite
 - Release and rollback rules: `RELEASING.md`
 
 ## License and content boundary

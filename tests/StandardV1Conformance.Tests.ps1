@@ -92,6 +92,7 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $readme = Get-Content -LiteralPath (Join-Path $script:RepositoryRoot 'README.md') -Raw
         $readme | Should -Match 'scripts/Validate\.ps1'
         $readme | Should -Not -Match 'scripts/(?:Invoke-StandardValidation|Test-Repository)\.ps1'
+        $readme | Should -Not -Match 'tests/repository\.Tests\.ps1'
         $readme | Should -Not -Match '(?i)\b(?:Invoke-Pester|pytest|skill-validator|skill-tools|skillspector)\b'
     }
 }
