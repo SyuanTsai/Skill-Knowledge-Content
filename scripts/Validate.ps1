@@ -606,8 +606,23 @@ try {
             if ($null -eq $loaded -or [string]$loaded.Version -cne [string]$toolchain.pesterVersion) { throw 'The resolved Pester module identity was not loaded.' }
             $testRoot = Join-Path $candidateRoot 'tests'
             $result = Invoke-Pester -Path $testRoot -Output None -PassThru 6>$null
+            $failedTests = @()
+            if ($null -ne $result -and $null -ne $result.PSObject.Properties['Tests']) {
+                $failedTests = @($result.Tests | Where-Object { [string]$_.Result -eq 'Failed' } | ForEach-Object {
+                    $name = if ($null -ne $_.PSObject.Properties['ExpandedName']) { [string]$_.ExpandedName } else { [string]$_.Name }
+                    $message = if ($null -ne $_.PSObject.Properties['ErrorRecord'] -and $null -ne $_.ErrorRecord) {
+                        [string]$_.ErrorRecord.Exception.Message
+                    }
+                    else { '' }
+                    if ([string]::IsNullOrWhiteSpace($message)) { $name } else { "$name: $message" }
+                })
+            }
             if ($null -eq $result -or [int64]$result.TotalCount -le 0 -or [int64]$result.FailedCount -ne 0 -or
-                [int64]$result.PassedCount + [int64]$result.SkippedCount -ne [int64]$result.TotalCount) { throw 'Pester repository regression did not complete successfully.' }
+                [int64]$result.PassedCount + [int64]$result.SkippedCount -ne [int64]$result.TotalCount) {
+                $detail = if ($failedTests.Count -gt 0) { $failedTests -join ' | ' } else { 'Pester did not expose failed test details.' }
+                [Console]::Error.WriteLine("Pester failure details: $detail")
+                throw 'Pester repository regression did not complete successfully.'
+            }
             $testInventory = @(
                 Get-ChildItem -LiteralPath $testRoot -Recurse -File -Force |
                     ForEach-Object { [IO.Path]::GetRelativePath($candidateRoot, $_.FullName).Replace([IO.Path]::DirectorySeparatorChar, '/') }
