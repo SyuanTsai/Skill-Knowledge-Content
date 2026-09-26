@@ -799,8 +799,8 @@ try {
         skillTools = [ordered]@{ command = $pwshPath; arguments = @($commonArguments + @('-Mode', 'skill-tools')) }
         staticAnalyzer = [ordered]@{ command = $pwshPath; arguments = @($commonArguments + @('-Mode', 'static', '-SemanticRequired', $semanticRequired.ToString().ToLowerInvariant())) }
         repositoryTests = @(
-            [ordered]@{ id = 'repository-test-knowledge'; command = $pwshPath; arguments = @($commonArguments + @('-Mode', 'repository-knowledge')) }
-            [ordered]@{ id = 'repository-test-pester'; command = $pwshPath; arguments = @($commonArguments + @('-Mode', 'repository-pester')) }
+            [ordered]@{ id = 'repository-test-knowledge'; kind = 'general'; command = $pwshPath; arguments = @($commonArguments + @('-Mode', 'repository-knowledge')) }
+            [ordered]@{ id = 'repository-test-pester'; kind = 'pester'; command = $pwshPath; arguments = @($commonArguments + @('-Mode', 'repository-pester')) }
         )
     }
     $adapterPath = Join-Path $trustedRoot 'standard-validation-adapter.json'

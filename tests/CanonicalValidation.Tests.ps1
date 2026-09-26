@@ -122,6 +122,13 @@ Describe 'Canonical Standard v1 validation adapter' {
         $centralIndex | Should -BeGreaterThan -1
     }
 
+    # Scenario: the Knowledge source builds a repository-test adapter for the e69 central runner.
+    # Purpose: keep each repository-test ID paired with a schema-valid kind before Stage 1 starts.
+    It 'UnitT20_declares_exact_repository_test_kinds' {
+        $script:Validator | Should -Match "id = 'repository-test-knowledge'; kind = 'general';"
+        $script:Validator | Should -Match "id = 'repository-test-pester'; kind = 'pester';"
+    }
+
     It 'binds an immutable distinct base ancestor before invoking the central runner' {
         $script:Validator | Should -Match 'rev-parse --verify --end-of-options'
         $script:Validator | Should -Match 'merge-base --is-ancestor'
