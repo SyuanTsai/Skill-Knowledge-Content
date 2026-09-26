@@ -26,15 +26,17 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         )
     }
 
-    It 'pins one immutable authority snapshot and required file inventory' {
+    # Scenario: The Knowledge config is read from the extracted candidate.
+    # Purpose: Keep one immutable authority snapshot and its complete required inventory.
+    It 'UnitT10_pins_immutable_authority_and_required_inventory' {
         Test-Path -LiteralPath $script:AdapterPath -PathType Leaf | Should -BeTrue
         $adapter = Get-Content -LiteralPath $script:AdapterPath -Raw | ConvertFrom-Json
 
         $adapter.schemaVersion | Should -Be 1
         $adapter.standardVersion | Should -Be 'v1'
         $adapter.authority.repository | Should -Be 'https://github.com/SyuanTsai/SyuanTsai-AI-Instructions.git'
-        $adapter.authority.commit | Should -Be 'a403abdf038a3346d775431a6908a71cc3d35a5b'
-        $adapter.authority.archiveSha256 | Should -Be '17154929fadfa63487263db1efcb78f4948195af9c11c25a66432eff3411b2d3'
+        $adapter.authority.commit | Should -Be 'e69c453888db93e2d2697ea7f0b11df13cd1b8d2'
+        $adapter.authority.archiveSha256 | Should -Be '5d2cbab098b86c4310b713cbc17ce00e5b08a53cffe37ce98f16a9f2244c29f5'
         @($adapter.PSObject.Properties.Name) | Should -Not -Contain 'security'
         @($adapter.authority.files.path) | Should -Contain 'docs/standards/README.md'
         @($adapter.authority.files.path) | Should -Contain 'docs/standards/managed-skill-lifecycle.md'
