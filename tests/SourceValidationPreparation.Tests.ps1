@@ -10,6 +10,7 @@ BeforeAll {
         return (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant()
     }
     . $script:sourceDriverPath
+    $script:SourceRepository = 'https://github.com/SyuanTsai/SyuanTsai-AI-Instructions.git'
 
     function New-PreparedAuthorityCandidate {
         $pin = Get-KnowledgeContentPreparedAuthorityPin
@@ -25,6 +26,124 @@ BeforeAll {
             archiveSha256 = [string]$pin.archiveSha256
             files = $files
         }
+    }
+
+    function Assert-NoReparseAncestors {
+        param([Parameter(Mandatory = $true)][string] $Path, [Parameter(Mandatory = $true)][string] $Context)
+
+        $current = [IO.Path]::GetFullPath($Path)
+        while (-not [string]::IsNullOrWhiteSpace($current)) {
+            if (Test-Path -LiteralPath $current) {
+                $item = Get-Item -LiteralPath $current -Force -ErrorAction Stop
+                if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "$Context contains a reparse point: $current" }
+            }
+            $parent = Split-Path -Parent $current
+            if ([string]::IsNullOrWhiteSpace($parent) -or $parent -ceq $current) { break }
+            $current = $parent
+        }
+    }
+
+    function Assert-OutsideRoot {
+        param([Parameter(Mandatory = $true)][string] $Path, [Parameter(Mandatory = $true)][string] $Root, [Parameter(Mandatory = $true)][string] $Context)
+
+        $fullPath = [IO.Path]::GetFullPath($Path)
+        $fullRoot = [IO.Path]::GetFullPath($Root)
+        $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+        $prefix = $fullRoot.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+        if ($fullPath.Equals($fullRoot, $comparison) -or $fullPath.StartsWith($prefix, $comparison)) { throw "$Context is inside a protected root." }
+    }
+
+    function Assert-PathWithinRoot {
+        param([Parameter(Mandatory = $true)][string] $Path, [Parameter(Mandatory = $true)][string] $Root, [Parameter(Mandatory = $true)][string] $Context)
+
+        $fullPath = [IO.Path]::GetFullPath($Path)
+        $fullRoot = [IO.Path]::GetFullPath($Root)
+        $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+        $prefix = $fullRoot.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+        if (-not $fullPath.Equals($fullRoot, $comparison) -and -not $fullPath.StartsWith($prefix, $comparison)) { throw "$Context escaped its root." }
+        return $fullPath
+    }
+
+    function Get-ResolvedGitPath {
+        $git = Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1
+        return [IO.Path]::GetFullPath($git.Source)
+    }
+
+    function Get-ResolvedPowerShellPath {
+        return [IO.Path]::GetFullPath([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+    }
+
+    function Resolve-GitRevision {
+        param([Parameter(Mandatory = $true)][string] $GitPath, [Parameter(Mandatory = $true)][string] $Root,
+            [Parameter(Mandatory = $true)][string] $Revision, [Parameter(Mandatory = $true)][string] $Context)
+
+        $resolved = @(& $GitPath -C $Root rev-parse --verify --end-of-options "$Revision^{commit}" 2>&1)
+        if ($LASTEXITCODE -ne 0 -or $resolved.Count -ne 1 -or [string]$resolved[0] -cnotmatch '^[0-9a-f]{40}$') { throw "$Context did not resolve to one commit." }
+        return ([string]$resolved[0]).Trim()
+    }
+
+    function Get-EventName { return 'pull_request' }
+    function Get-ActiveSkillIds { param([string] $Root); return @('source-validation-preparation-fixture') }
+
+    function New-SourceValidationImportProbeRunner {
+        param([Parameter(Mandatory = $true)][string] $AuthorityRoot)
+
+        $runnerDirectory = Join-Path $AuthorityRoot 'scripts'
+        [void](New-Item -ItemType Directory -Path $runnerDirectory -Force)
+        $runnerPath = Join-Path $runnerDirectory 'Invoke-StandardValidation.ps1'
+        $runnerText = @'
+[CmdletBinding()]
+param(
+    [switch] $DefineFunctionsOnly,
+    [string] $CandidateRoot,
+    [string] $AdapterPath,
+    [string] $ArtifactsRoot,
+    [string] $SourceRepository,
+    [string] $SourceRevision,
+    [string] $BaseRevision,
+    [string] $EventName = 'local',
+    [string] $AuthorityRevision,
+    [int] $TimeoutSeconds = 300,
+    [string] $RunId = ''
+)
+$sourceCheckout = Get-Variable -Name SourceCheckoutRoot -Scope 0 -ValueOnly -ErrorAction SilentlyContinue
+$candidate = Get-Variable -Name CandidateRoot -Scope 0 -ValueOnly -ErrorAction SilentlyContinue
+$probe = [ordered]@{
+    candidateRoot = if ($null -eq $candidate) { $null } else { [string]$candidate }
+    sourceCheckoutRoot = if ($null -eq $sourceCheckout) { $null } else { [string]$sourceCheckout }
+    runId = [string]$RunId
+    eventName = [string]$EventName
+    timeoutSeconds = [int]$TimeoutSeconds
+}
+[IO.File]::WriteAllText($env:KCC_SOURCE_IMPORT_PROBE_PATH, ($probe | ConvertTo-Json -Compress), [Text.UTF8Encoding]::new($false))
+throw 'source-import-probe-stop'
+'@
+        [IO.File]::WriteAllText($runnerPath, $runnerText, [Text.UTF8Encoding]::new($false))
+        return $runnerPath
+    }
+
+    function New-SourceValidationTestCandidate {
+        param([Parameter(Mandatory = $true)][string] $Path)
+
+        [void](New-Item -ItemType Directory -Path $Path -Force)
+        $git = Get-ResolvedGitPath
+        & $git -C $Path init --quiet
+        if ($LASTEXITCODE -ne 0) { throw 'Could not initialize source-validation fixture repository.' }
+        & $git -C $Path config --local core.autocrlf false
+        & $git -C $Path config --local user.name 'Source Validation Test'
+        & $git -C $Path config --local user.email 'source-validation-test@example.invalid'
+        & $git -C $Path config --local commit.gpgsign false
+        [IO.File]::WriteAllText((Join-Path $Path 'README.md'), "base`n", [Text.UTF8Encoding]::new($false))
+        & $git -C $Path add --all
+        & $git -C $Path commit --quiet -m 'base'
+        if ($LASTEXITCODE -ne 0) { throw 'Could not create source-validation fixture base commit.' }
+        $base = Resolve-GitRevision -GitPath $git -Root $Path -Revision 'HEAD' -Context 'Fixture base revision'
+        [IO.File]::WriteAllText((Join-Path $Path 'README.md'), "candidate`n", [Text.UTF8Encoding]::new($false))
+        & $git -C $Path add --all
+        & $git -C $Path commit --quiet -m 'candidate'
+        if ($LASTEXITCODE -ne 0) { throw 'Could not create source-validation fixture candidate commit.' }
+        $head = Resolve-GitRevision -GitPath $git -Root $Path -Revision 'HEAD' -Context 'Fixture candidate revision'
+        return [pscustomobject]@{ root = [IO.Path]::GetFullPath($Path); git = $git; base = $base; head = $head }
     }
 
     function Invoke-KnowledgeContentSourceRouteWithActualParameters {
@@ -230,6 +349,103 @@ Describe 'Knowledge Content protected source driver preparation' {
     # Purpose: keep source acquisition and protected execution as distinct operator actions.
     It 'UnitT50_rejects_mixed_setup_and_execution_modes' {
         { Assert-KnowledgeContentSourceRequest -PrepareSourceTools -SourceValidation -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' } | Should -Throw '*separate setup and execution*'
+    }
+
+    # Scenario: the real setup function imports the pinned runner with its AuthorityRoot in the runner's CandidateRoot parameter.
+    # Purpose: keep the original source checkout binding distinct and unchanged until archive creation.
+    It 'UnitT51_setup_runner_import_preserves_the_actual_source_checkout_binding' {
+        $authorityRoot = Join-Path $TestDrive 'setup-import-authority'
+        $candidate = New-SourceValidationTestCandidate -Path (Join-Path $TestDrive 'setup-import-candidate')
+        $null = New-SourceValidationImportProbeRunner -AuthorityRoot $authorityRoot
+        $probePath = Join-Path $TestDrive 'setup-import-probe.json'
+        $probeName = 'KCC_SOURCE_IMPORT_PROBE_PATH'
+        $priorProbePath = [Environment]::GetEnvironmentVariable($probeName, 'Process')
+        [Environment]::SetEnvironmentVariable($probeName, $probePath, 'Process')
+        $candidateHeadBefore = Resolve-GitRevision -GitPath $candidate.git -Root $candidate.root -Revision 'HEAD' -Context 'Candidate before setup import'
+        $candidateBytesBefore = Get-FileSha256 -Path (Join-Path $candidate.root 'README.md')
+
+        try {
+            $setupCommand = Get-Command New-KnowledgeContentSourceToolSetup -ErrorAction Stop
+            $sourceCheckoutParameter = if ($setupCommand.Parameters.ContainsKey('SourceCheckoutRoot')) { 'SourceCheckoutRoot' } else { 'CandidateRoot' }
+            $setupArguments = @{
+                Root = Join-Path $TestDrive 'setup-import-artifacts'
+                AuthorityRoot = $authorityRoot
+                AuthorityPin = Get-KnowledgeContentPreparedAuthorityPin
+                PowerShell = (Get-ResolvedPowerShellPath)
+                CandidateRevision = $candidate.head
+                Git = $candidate.git
+                PreparedPath = Join-Path $TestDrive 'setup-import-artifacts/source-tools.json'
+                GoVersion = '1.25.0'
+                LimitSeconds = 30
+            }
+            $setupArguments[$sourceCheckoutParameter] = $candidate.root
+            [void](New-Item -ItemType Directory -Path $setupArguments.Root -Force)
+
+            { New-KnowledgeContentSourceToolSetup @setupArguments } | Should -Throw '*source-import-probe-stop*'
+            $probe = Get-Content -LiteralPath $probePath -Raw | ConvertFrom-Json
+            $probe.candidateRoot | Should -BeExactly ([IO.Path]::GetFullPath($authorityRoot))
+            $actualSourceCheckout = if ($sourceCheckoutParameter -ceq 'SourceCheckoutRoot') { [string]$probe.sourceCheckoutRoot } else { [string]$probe.candidateRoot }
+            $actualSourceCheckout | Should -BeExactly $candidate.root
+
+            (Resolve-GitRevision -GitPath $candidate.git -Root $candidate.root -Revision 'HEAD' -Context 'Candidate after setup import') | Should -BeExactly $candidateHeadBefore
+            (Get-FileSha256 -Path (Join-Path $candidate.root 'README.md')) | Should -BeExactly $candidateBytesBefore
+            @(& $candidate.git -C $candidate.root status --porcelain=v1 --untracked-files=all).Count | Should -Be 0
+        }
+        finally {
+            [Environment]::SetEnvironmentVariable($probeName, $priorProbePath, 'Process')
+        }
+    }
+
+    # Scenario: execution dot-sources the pinned runner after reading prepared tools and computing the invocation identity.
+    # Purpose: preserve the run, event, timeout, candidate, and prepared input values across the actual import boundary.
+    It 'UnitT52_execution_runner_import_preserves_bound_identity_and_leaves_source_inputs_unchanged' {
+        $candidate = New-SourceValidationTestCandidate -Path (Join-Path $TestDrive 'execution-import-candidate')
+        $authorityRoot = Join-Path $TestDrive 'execution-import-authority'
+        $runnerPath = New-SourceValidationImportProbeRunner -AuthorityRoot $authorityRoot
+        $sourceToolsPath = Join-Path $TestDrive 'execution-source-tools.json'
+        $sourceToolsText = 'immutable prepared source tools fixture'
+        [IO.File]::WriteAllText($sourceToolsPath, $sourceToolsText, [Text.UTF8Encoding]::new($false))
+        $sourceToolsHashBefore = Get-FileSha256 -Path $sourceToolsPath
+        $probePath = Join-Path $TestDrive 'execution-import-probe.json'
+        $probeName = 'KCC_SOURCE_IMPORT_PROBE_PATH'
+        $priorProbePath = [Environment]::GetEnvironmentVariable($probeName, 'Process')
+        [Environment]::SetEnvironmentVariable($probeName, $probePath, 'Process')
+        $runId = 'a1234567890b1234567890c123456789'
+        $script:sourceValidationTestAuthorityRoot = $authorityRoot
+        $script:sourceValidationTestRunnerPath = $runnerPath
+        $script:sourceValidationTestPrepared = [pscustomobject]@{
+            runId = $runId
+            sourceValidation = [pscustomobject]@{ mode = 'actual-import-probe' }
+        }
+
+        Mock Assert-KnowledgeContentPreparedAuthorityCheckout {
+            return [pscustomobject]@{ root = $script:sourceValidationTestAuthorityRoot; revision = 'fixture'; runnerPath = $script:sourceValidationTestRunnerPath }
+        }
+        Mock Read-KnowledgeContentSourceToolSetup { return $script:sourceValidationTestPrepared }
+        Mock New-KnowledgeContentCoreAuthoritySnapshot { return [pscustomobject]@{ runnerPath = $script:sourceValidationTestRunnerPath } }
+        Mock Remove-KnowledgeContentOwnedCoreAdapterRoot { }
+
+        try {
+            {
+                Invoke-KnowledgeContentSourcePurpose -Mode source-validation -RepositoryRoot $candidate.root `
+                    -ArtifactsRoot (Join-Path $TestDrive 'execution-import-artifacts') -SourceToolsPath $sourceToolsPath `
+                    -AuthorityRepositoryRoot $authorityRoot -TrustedToolRoot $PSHOME -AuthorityPin (Get-KnowledgeContentPreparedAuthorityPin) `
+                    -CandidateAuthority (New-PreparedAuthorityCandidate) -BaseCommit 'HEAD^' -TimeoutSeconds 1800
+            } | Should -Throw '*source-import-probe-stop*'
+
+            $probe = Get-Content -LiteralPath $probePath -Raw | ConvertFrom-Json
+            $probe.candidateRoot | Should -BeExactly $candidate.root
+            $probe.runId | Should -BeExactly $runId
+            $probe.eventName | Should -BeExactly 'pull_request'
+            $probe.timeoutSeconds | Should -Be 1800
+            (Get-FileSha256 -Path $sourceToolsPath) | Should -BeExactly $sourceToolsHashBefore
+            (Resolve-GitRevision -GitPath $candidate.git -Root $candidate.root -Revision 'HEAD' -Context 'Candidate after execution import') | Should -BeExactly $candidate.head
+            @(& $candidate.git -C $candidate.root status --porcelain=v1 --untracked-files=all).Count | Should -Be 0
+        }
+        finally {
+            [Environment]::SetEnvironmentVariable($probeName, $priorProbePath, 'Process')
+            Remove-Variable -Name sourceValidationTestAuthorityRoot, sourceValidationTestRunnerPath, sourceValidationTestPrepared -Scope Script -ErrorAction SilentlyContinue
+        }
     }
 
     # Scenario: source validation is attempted with the active stage-A 8a config or with missing setup locations.
