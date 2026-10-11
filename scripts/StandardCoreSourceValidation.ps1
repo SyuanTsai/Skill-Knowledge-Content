@@ -153,7 +153,7 @@ function Assert-KnowledgeContentSourceRequest {
         return
     }
     if (-not [string]::IsNullOrWhiteSpace($AuthorityArchivePath) -or
-        ($null -ne $BoundParameters -and $BoundParameters.Contains('AuthorityArchivePath'))) {
+        ($null -ne $BoundParameters -and $BoundParameters.Keys -contains 'AuthorityArchivePath')) {
         throw 'Explicit source setup or validation does not accept AuthorityArchivePath.'
     }
     if ([string]::IsNullOrWhiteSpace($SourceToolsPath)) { throw 'Explicit source setup or validation requires SourceToolsPath.' }
