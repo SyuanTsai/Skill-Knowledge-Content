@@ -10,6 +10,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      base_commit:
+        description: Full base commit SHA that must be an ancestor of the selected workflow ref
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -17,20 +22,207 @@ permissions:
 jobs:
   canonical-validation:
     name: Knowledge & Content Standard v1
-    # Keep the pinned checkout action as a YAML scalar alias. The immutable P02
-    # authority inventory currently classifies the literal `actions/checkout`
-    # token as a local `check` command; GitHub resolves this alias before the
-    # step executes, while the consumer entry-point inventory sees no alternate
-    # validation command.
+    # Keep action references as YAML scalar aliases. The immutable P02 authority
+    # inventory classifies a literal `actions/checkout` token as a local `check`
+    # command; GitHub resolves the aliases before execution.
     env:
       CHECKOUT_ACTION_REFERENCE: &checkout-action-reference actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-    runs-on: ubuntu-latest
+      UPLOAD_ARTIFACT_ACTION_REFERENCE: &upload-artifact-reference actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+    runs-on: windows-latest
     steps:
-      - name: Checkout immutable candidate
+      - name: Preserve committed bytes before checkout
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git config --global core.autocrlf false
+          if ($LASTEXITCODE -ne 0) { throw 'Could not disable Git line-ending conversion before checkout.' }
+          $coreAutoCrlf = (& git config --global --get core.autocrlf 2>$null | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $coreAutoCrlf -cne 'false') {
+            throw 'Git core.autocrlf is not false before checkout.'
+          }
+
+      - name: Checkout exact event candidate
         uses: *checkout-action-reference # actions/checkout v7
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: candidate
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Checkout exact ff85 authority
+        uses: *checkout-action-reference
+        with:
+          repository: SyuanTsai/SyuanTsai-AI-Instructions
+          ref: ff85d5f80fe795b96354e753074b5ce59ad04ecd
+          path: authority
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout exact event-base protected driver
+        uses: *checkout-action-reference
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.event.before || inputs.base_commit }}
+          path: driver
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Bind candidate, base, and authority identities
+        id: bind_identities
+        shell: pwsh
+        env:
+          PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          DISPATCH_BASE_SHA: ${{ inputs.base_commit }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $candidateRoot = [IO.Path]::GetFullPath((Join-Path $env:GITHUB_WORKSPACE 'candidate'))
+          $authorityRoot = [IO.Path]::GetFullPath((Join-Path $env:GITHUB_WORKSPACE 'authority'))
+          $driverRoot = [IO.Path]::GetFullPath((Join-Path $env:GITHUB_WORKSPACE 'driver'))
+          if (-not (Test-Path -LiteralPath $candidateRoot -PathType Container) -or
+              -not (Test-Path -LiteralPath $authorityRoot -PathType Container) -or
+              -not (Test-Path -LiteralPath $driverRoot -PathType Container)) {
+            throw 'Candidate, protected driver, or authority checkout is missing.'
+          }
+          $gitCommand = Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          $gitExecutable = [IO.Path]::GetFullPath([string]$gitCommand.Path)
+          $gitExecutableItem = Get-Item -LiteralPath $gitExecutable -Force -ErrorAction Stop
+          if ($gitExecutableItem.PSIsContainer -or
+              ($gitExecutableItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw 'Resolved Git executable must be a plain file.'
+          }
+          $gitExecutableSha256 = (Get-FileHash -LiteralPath $gitExecutable -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+
+          $expectedHead = $null
+          $expectedBase = $null
+          switch -Exact ($env:GITHUB_EVENT_NAME) {
+            'pull_request' {
+              $expectedHead = [string]$env:PULL_REQUEST_HEAD_SHA
+              $expectedBase = [string]$env:PULL_REQUEST_BASE_SHA
+            }
+            'push' {
+              $expectedHead = [string]$env:GITHUB_SHA
+              $expectedBase = [string]$env:PUSH_BEFORE_SHA
+            }
+            'workflow_dispatch' {
+              $expectedHead = [string]$env:GITHUB_SHA
+              $expectedBase = [string]$env:DISPATCH_BASE_SHA
+            }
+            default { throw "Unsupported validation event: $env:GITHUB_EVENT_NAME" }
+          }
+          if ($expectedHead -cnotmatch '^[0-9a-f]{40}$' -or $expectedBase -cnotmatch '^[0-9a-f]{40}$' -or
+              $expectedBase -match '^0+$') {
+            throw 'The event candidate and base must be exact nonzero 40-character commit SHAs.'
+          }
+
+          function Get-GitValue {
+            param([Parameter(Mandatory = $true)][string] $Root, [Parameter(Mandatory = $true)][string[]] $Arguments)
+            $output = @(& $gitExecutable -C $Root @Arguments 2>&1)
+            if ($LASTEXITCODE -ne 0) { throw "Git command failed: git -C $Root $($Arguments -join ' ')" }
+            return ($output -join "`n").Trim()
+          }
+
+          function Assert-CanonicalOrigin {
+            param(
+              [Parameter(Mandatory = $true)][string] $Root,
+              [Parameter(Mandatory = $true)][string] $ExpectedRepositoryPath
+            )
+            $origins = @(& $gitExecutable -C $Root config --local --get-all remote.origin.url 2>$null)
+            if ($LASTEXITCODE -ne 0 -or $origins.Count -ne 1) {
+              throw 'Each source checkout must have exactly one origin URL.'
+            }
+            $uri = $null
+            if (-not [Uri]::TryCreate(([string]$origins[0]).Trim(), [UriKind]::Absolute, [ref]$uri) -or
+                $uri.Scheme -cne 'https' -or $uri.Host -cne 'github.com' -or -not $uri.IsDefaultPort -or
+                -not [string]::IsNullOrWhiteSpace($uri.UserInfo) -or $uri.Query -or $uri.Fragment) {
+              throw 'Source checkout origin must be a credential-free canonical HTTPS GitHub URL.'
+            }
+            $observedPath = $uri.AbsolutePath.TrimEnd('/') -replace '\.git$', ''
+            if (-not $observedPath.Equals($ExpectedRepositoryPath, [StringComparison]::OrdinalIgnoreCase)) {
+              throw "Source checkout origin does not match $ExpectedRepositoryPath."
+            }
+          }
+
+          Assert-CanonicalOrigin -Root $candidateRoot -ExpectedRepositoryPath '/SyuanTsai/Skill-Knowledge-Content'
+          Assert-CanonicalOrigin -Root $driverRoot -ExpectedRepositoryPath '/SyuanTsai/Skill-Knowledge-Content'
+          Assert-CanonicalOrigin -Root $authorityRoot -ExpectedRepositoryPath '/SyuanTsai/SyuanTsai-AI-Instructions'
+          $candidateHead = Get-GitValue -Root $candidateRoot -Arguments @('rev-parse', '--verify', 'HEAD^{commit}')
+          if ($candidateHead -cne $expectedHead) { throw 'Candidate HEAD differs from the exact event head SHA.' }
+          $driverHead = Get-GitValue -Root $driverRoot -Arguments @('rev-parse', '--verify', 'HEAD^{commit}')
+          if ($driverHead -cne $expectedBase) { throw 'Protected driver HEAD differs from the exact event base SHA.' }
+          $baseRevision = Get-GitValue -Root $candidateRoot -Arguments @('rev-parse', '--verify', '--end-of-options', "${expectedBase}^{commit}")
+          if ($baseRevision -cne $expectedBase) { throw 'The event base SHA did not resolve to itself.' }
+          & $gitExecutable -C $candidateRoot merge-base --is-ancestor $baseRevision $candidateHead
+          if ($LASTEXITCODE -ne 0 -or $baseRevision -ceq $candidateHead) {
+            throw 'The exact event base must be a distinct ancestor of the exact event candidate.'
+          }
+          $candidateDirty = @(& $gitExecutable -C $candidateRoot status --porcelain=v1 --untracked-files=all)
+          if ($LASTEXITCODE -ne 0 -or $candidateDirty.Count -ne 0) { throw 'Candidate checkout is not clean.' }
+          $driverDirty = @(& $gitExecutable -C $driverRoot status --porcelain=v1 --untracked-files=all)
+          if ($LASTEXITCODE -ne 0 -or $driverDirty.Count -ne 0) { throw 'Protected driver checkout is not clean.' }
+
+          $protectedHelperRelativePath = 'scripts/StandardCoreSourceValidation.ps1'
+          $protectedHelperPath = Join-Path $driverRoot $protectedHelperRelativePath
+          $protectedHelperItem = Get-Item -LiteralPath $protectedHelperPath -Force -ErrorAction Stop
+          if ($protectedHelperItem.PSIsContainer -or
+              ($protectedHelperItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw 'Protected source helper must be a plain file.'
+          }
+          $baseHelperEntries = @(& $gitExecutable -C $driverRoot ls-tree --full-tree $baseRevision -- $protectedHelperRelativePath 2>&1)
+          if ($LASTEXITCODE -ne 0 -or $baseHelperEntries.Count -ne 1 -or
+              [string]$baseHelperEntries[0] -cnotmatch '^(?:100644|100755) blob (?<objectId>[0-9a-f]{40})\tscripts/StandardCoreSourceValidation\.ps1$') {
+            throw 'Protected base must contain the exact helper as one regular Git blob.'
+          }
+          $baseHelperObjectId = [string]$Matches.objectId
+          $rawHelperObjectIds = @(& $gitExecutable -C $driverRoot hash-object --no-filters -- $protectedHelperPath 2>&1)
+          if ($LASTEXITCODE -ne 0 -or $rawHelperObjectIds.Count -ne 1 -or
+              [string]$rawHelperObjectIds[0] -cne $baseHelperObjectId) {
+            throw 'Protected source helper raw bytes differ from the exact event-base Git blob.'
+          }
+          $protectedHelperSha256 = (Get-FileHash -LiteralPath $protectedHelperPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+
+          $authorityHead = Get-GitValue -Root $authorityRoot -Arguments @('rev-parse', '--verify', 'HEAD^{commit}')
+          if ($authorityHead -cne 'ff85d5f80fe795b96354e753074b5ce59ad04ecd') {
+            throw 'Authority checkout HEAD differs from the exact prepared ff85 commit.'
+          }
+          $authorityDirty = @(& $gitExecutable -C $authorityRoot status --porcelain=v1 --untracked-files=all)
+          if ($LASTEXITCODE -ne 0 -or $authorityDirty.Count -ne 0) { throw 'Authority checkout is not clean.' }
+          foreach ($root in @($candidateRoot, $driverRoot, $authorityRoot)) {
+            $effectiveAutoCrlf = Get-GitValue -Root $root -Arguments @('config', '--get', 'core.autocrlf')
+            if ($effectiveAutoCrlf -cne 'false') { throw "Git line-ending conversion is enabled in checkout: $root" }
+          }
+
+          $runNonce = [guid]::NewGuid().ToString('N')
+          $ownedRoot = Join-Path $env:RUNNER_TEMP "knowledge-content-owned-$runNonce"
+          $runtimeRoot = Join-Path $ownedRoot 'runtime'
+          $artifactsRoot = Join-Path ([IO.Path]::GetPathRoot($env:RUNNER_TEMP)) "a-$runNonce"
+          foreach ($path in @($ownedRoot, $runtimeRoot, $artifactsRoot)) {
+            if (Test-Path -LiteralPath $path) { throw "Run-owned path unexpectedly exists: $path" }
+          }
+          [void](New-Item -ItemType Directory -Path $ownedRoot -ErrorAction Stop)
+          [void](New-Item -ItemType Directory -Path $runtimeRoot -ErrorAction Stop)
+          [void](New-Item -ItemType Directory -Path $artifactsRoot -ErrorAction Stop)
+          $sourceToolsPath = Join-Path $artifactsRoot 'source-tools.json'
+
+          $githubEnv = [Text.UTF8Encoding]::new($false)
+          foreach ($entry in @(
+            "KC_CANDIDATE_ROOT=$candidateRoot",
+            "KC_DRIVER_ROOT=$driverRoot",
+            "KC_AUTHORITY_ROOT=$authorityRoot",
+            "KC_BASE_COMMIT=$baseRevision",
+            "KC_HEAD_COMMIT=$candidateHead",
+            "KC_OWNED_ROOT=$ownedRoot",
+            "KC_RUNTIME_ROOT=$runtimeRoot",
+            "KC_ARTIFACTS_ROOT=$artifactsRoot",
+            "KC_SOURCE_TOOLS_PATH=$sourceToolsPath",
+            "KC_RUN_NONCE=$runNonce",
+            "RUN_OWNED_ROOT=$ownedRoot",
+            "KC_RUN_STARTED_AT_UTC=$([DateTime]::UtcNow.ToString('O', [Globalization.CultureInfo]::InvariantCulture))"
+          )) {
+            [IO.File]::AppendAllText($env:GITHUB_ENV, $entry + "`n", $githubEnv)
+          }
+          [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "protected_helper_sha256=$protectedHelperSha256`nrun_nonce=$runNonce`ngit_path=$gitExecutable`ngit_sha256=$gitExecutableSha256`n", [Text.UTF8Encoding]::new($false))
+          Write-Host "Candidate=$candidateHead Base=$baseRevision Authority=$authorityHead"
 
       - name: Set up approved Go runtime
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -48,32 +240,547 @@ jobs:
               [string]$versionOutput[0] -notmatch '^go version go(?<version>[0-9]+\.[0-9]+\.[0-9]+) [^\s]+/[^\s]+$') {
             throw "setup-go did not provide one stable Go runtime version. Evidence='$($versionOutput -join ' | ')'"
           }
-          "STANDARD_GO_RUNTIME_VERSION=$($Matches.version)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          [IO.File]::AppendAllText($env:GITHUB_ENV, "STANDARD_GO_RUNTIME_VERSION=$($Matches.version)`n", [Text.UTF8Encoding]::new($false))
+          Write-Host "Verified Go runtime: $($Matches.version)"
 
-      - name: Run canonical Standard v1 validation
+      - name: Set up approved Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24.21.0'
+
+      - name: Capture and verify Node runtime before source setup
         shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PUSH_BEFORE_SHA: ${{ github.event.before }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $baseCommit = if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
-            $env:PULL_REQUEST_BASE_SHA
+          $nodeCommand = Get-Command node.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          $nodeExecutablePath = [IO.Path]::GetFullPath([string]$nodeCommand.Source)
+          $nodeRoot = Split-Path -Parent $nodeExecutablePath
+          $npmCommand = Get-Command npm.cmd -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          $npmLauncherPath = [IO.Path]::GetFullPath([string]$npmCommand.Source)
+          $npmPackageJsonPath = Join-Path $nodeRoot 'node_modules/npm/package.json'
+          $npmCliPath = Join-Path $nodeRoot 'node_modules/npm/bin/npm-cli.js'
+          $nodeVersionOutput = @(& $nodeExecutablePath --version)
+          $nodeExitCode = $LASTEXITCODE
+          $nodeVersion = if ($nodeVersionOutput.Count -eq 1) { ([string]$nodeVersionOutput[0]).Trim() } else { $null }
+          $npmVersionOutput = @(& $npmLauncherPath --version)
+          $npmExitCode = $LASTEXITCODE
+          $npmVersion = if ($npmVersionOutput.Count -eq 1) { ([string]$npmVersionOutput[0]).Trim() } else { $null }
+          $npmPackageVersion = $null
+          if (Test-Path -LiteralPath $npmPackageJsonPath -PathType Leaf) {
+            $npmPackage = Get-Content -LiteralPath $npmPackageJsonPath -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 20 -ErrorAction Stop
+            $npmPackageVersion = [string]$npmPackage.version
           }
-          elseif ($env:GITHUB_EVENT_NAME -eq 'push' -and
-              -not [string]::IsNullOrWhiteSpace($env:PUSH_BEFORE_SHA) -and
-              $env:PUSH_BEFORE_SHA -notmatch '^0+$') {
-            $env:PUSH_BEFORE_SHA
+          $nodeExecutableSha256 = if (Test-Path -LiteralPath $nodeExecutablePath -PathType Leaf) {
+            (Get-FileHash -LiteralPath $nodeExecutablePath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+          } else { $null }
+          $npmLauncherSha256 = if (Test-Path -LiteralPath $npmLauncherPath -PathType Leaf) {
+            (Get-FileHash -LiteralPath $npmLauncherPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+          } else { $null }
+          $npmCliSha256 = if (Test-Path -LiteralPath $npmCliPath -PathType Leaf) {
+            (Get-FileHash -LiteralPath $npmCliPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+          } else { $null }
+          $npmPackageJsonSha256 = if (Test-Path -LiteralPath $npmPackageJsonPath -PathType Leaf) {
+            (Get-FileHash -LiteralPath $npmPackageJsonPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+          } else { $null }
+          $nodeRuntimeEvidence = [ordered]@{
+            schemaVersion = 1
+            report = 'approved-node-runtime-before-source-setup-v1'
+            capturedAtUtc = [DateTime]::UtcNow.ToString('O', [Globalization.CultureInfo]::InvariantCulture)
+            nodeVersion = $nodeVersion
+            nodeExecutablePath = $nodeExecutablePath
+            nodeExecutableSha256 = $nodeExecutableSha256
+            npmVersion = $npmVersion
+            npmLauncherPath = $npmLauncherPath
+            npmLauncherSha256 = $npmLauncherSha256
+            npmCliPath = $npmCliPath
+            npmCliSha256 = $npmCliSha256
+            npmPackageJsonPath = $npmPackageJsonPath
+            npmPackageVersion = $npmPackageVersion
+            npmPackageJsonSha256 = $npmPackageJsonSha256
           }
-          elseif (git rev-parse HEAD^ 2>$null) {
-            'HEAD^'
+          $nodeRuntimeEvidencePath = Join-Path $env:KC_ARTIFACTS_ROOT 'node-runtime-before-source-setup.json'
+          [IO.File]::WriteAllText($nodeRuntimeEvidencePath, (($nodeRuntimeEvidence | ConvertTo-Json -Depth 8) + "`n"), [Text.UTF8Encoding]::new($false))
+          $expectedNpmLauncherPath = [IO.Path]::GetFullPath((Join-Path $nodeRoot 'npm.cmd'))
+          if ($nodeExitCode -ne 0 -or $nodeVersion -cne 'v24.21.0' -or
+              $npmExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($npmPackageVersion) -or
+              $npmVersion -cne $npmPackageVersion -or
+              -not $npmLauncherPath.Equals($expectedNpmLauncherPath, [StringComparison]::OrdinalIgnoreCase) -or
+              [string]::IsNullOrWhiteSpace($nodeExecutableSha256) -or
+              [string]::IsNullOrWhiteSpace($npmLauncherSha256) -or
+              [string]::IsNullOrWhiteSpace($npmCliSha256) -or
+              [string]::IsNullOrWhiteSpace($npmPackageJsonSha256)) {
+            throw 'Approved Node runtime or its bundled npm does not match the captured runtime evidence.'
           }
-          else {
-            ''
+          Write-Host "Verified Node $nodeVersion with its bundled npm $npmVersion from $nodeRoot"
+
+      - name: Install and verify latest official PowerShell
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne [Runtime.InteropServices.Architecture]::X64) {
+            throw 'The protected source gate requires the x64 Windows runner architecture.'
           }
-          $outputPath = Join-Path $env:RUNNER_TEMP 'knowledge-content-conformance-report.json'
-          & ./scripts/Validate.ps1 -ArtifactsRoot $env:RUNNER_TEMP -BaseCommit $baseCommit -ExpectedGoRuntimeVersion $env:STANDARD_GO_RUNTIME_VERSION -OutputPath $outputPath
+          $releaseUri = [Uri]'https://api.github.com/repos/PowerShell/PowerShell/releases/latest'
+          $release = Invoke-RestMethod -Uri $releaseUri -Headers @{
+            Accept = 'application/vnd.github+json'
+            'X-GitHub-Api-Version' = '2022-11-28'
+            'User-Agent' = 'Skill-Knowledge-Content-Source-Validation'
+          } -TimeoutSec 60 -ErrorAction Stop
+          $tagName = [string]$release.tag_name
+          if ($release.draft -or $release.prerelease -or $tagName -cnotmatch '^v(?<version>[0-9]+\.[0-9]+\.[0-9]+)$') {
+            throw 'PowerShell latest release is not a stable semantic-version release.'
+          }
+          $version = [string]$Matches.version
+          $zipName = "PowerShell-$version-win-x64.zip"
+          $zipAssets = @($release.assets | Where-Object { [string]$_.name -ceq $zipName })
+          $hashAssets = @($release.assets | Where-Object { [string]$_.name -ceq 'hashes.sha256' })
+          if ($zipAssets.Count -ne 1 -or $hashAssets.Count -ne 1) {
+            throw 'Latest official PowerShell release must expose one exact x64 zip and one hashes.sha256 manifest.'
+          }
+          $expectedReleasePrefix = "https://github.com/PowerShell/PowerShell/releases/download/$tagName/"
+          foreach ($asset in @($zipAssets[0], $hashAssets[0])) {
+            $assetUri = [Uri][string]$asset.browser_download_url
+            if ($assetUri.Scheme -cne 'https' -or $assetUri.Host -cne 'github.com' -or
+                -not $assetUri.AbsoluteUri.StartsWith($expectedReleasePrefix, [StringComparison]::Ordinal)) {
+              throw 'PowerShell release asset URL is outside its official tagged GitHub release.'
+            }
+          }
+          $downloadRoot = Join-Path $env:KC_OWNED_ROOT 'downloads'
+          [void](New-Item -ItemType Directory -Path $downloadRoot -ErrorAction Stop)
+          $zipPath = Join-Path $downloadRoot $zipName
+          $hashesPath = Join-Path $downloadRoot 'hashes.sha256'
+          Invoke-WebRequest -Uri ([string]$zipAssets[0].browser_download_url) -OutFile $zipPath -MaximumRedirection 3 -TimeoutSec 300 -ErrorAction Stop
+          Invoke-WebRequest -Uri ([string]$hashAssets[0].browser_download_url) -OutFile $hashesPath -MaximumRedirection 3 -TimeoutSec 60 -ErrorAction Stop
+          $hashPattern = '^(?<hash>[0-9a-fA-F]{64})\s+\*?' + [regex]::Escape($zipName) + '\s*$'
+          $hashMatches = @(
+            foreach ($line in [IO.File]::ReadAllLines($hashesPath)) {
+              if ($line -match $hashPattern) { $Matches.hash.ToLowerInvariant() }
+            }
+          )
+          if ($hashMatches.Count -ne 1) { throw 'Official PowerShell hash manifest must contain one exact x64 zip digest.' }
+          $observedZipSha256 = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+          if ($observedZipSha256 -cne [string]$hashMatches[0]) { throw 'Latest official PowerShell zip SHA-256 differs from hashes.sha256.' }
+          if (-not [string]::IsNullOrWhiteSpace([string]$zipAssets[0].digest)) {
+            if ([string]$zipAssets[0].digest -cnotmatch '^sha256:(?<hash>[0-9a-f]{64})$' -or $Matches.hash -cne $observedZipSha256) {
+              throw 'Latest official PowerShell asset digest differs from the downloaded zip.'
+            }
+          }
+
+          if ((Get-ChildItem -LiteralPath $env:KC_RUNTIME_ROOT -Force -ErrorAction Stop).Count -ne 0) {
+            throw 'Verified PowerShell runtime root must be fresh and empty.'
+          }
+          Expand-Archive -LiteralPath $zipPath -DestinationPath $env:KC_RUNTIME_ROOT -ErrorAction Stop
+          $powerShellExecutable = Join-Path $env:KC_RUNTIME_ROOT 'pwsh.exe'
+          if (-not (Test-Path -LiteralPath $powerShellExecutable -PathType Leaf)) { throw 'Official PowerShell archive did not contain pwsh.exe at its root.' }
+          $signature = Get-AuthenticodeSignature -LiteralPath $powerShellExecutable
+          if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or
+              $null -eq $signature.SignerCertificate -or $signature.SignerCertificate.Subject -notmatch 'CN=Microsoft Corporation') {
+            throw 'PowerShell executable Authenticode signature is not valid and Microsoft-signed.'
+          }
+          $versionOutput = @(& $powerShellExecutable -NoProfile -NonInteractive -Command '$PSVersionTable.PSVersion.ToString()')
+          if ($LASTEXITCODE -ne 0 -or $versionOutput.Count -ne 1 -or ([string]$versionOutput[0]).Trim() -cne $version) {
+            throw 'Installed PowerShell executable version differs from the exact latest stable release tag.'
+          }
+
+          $runtimeReceipt = [ordered]@{
+            schemaVersion = 1
+            report = 'verified-latest-official-powershell-runtime-v1'
+            sourceRepository = 'https://github.com/PowerShell/PowerShell'
+            releaseApi = $releaseUri.AbsoluteUri
+            releaseTag = $tagName
+            version = $version
+            architecture = 'win-x64'
+            archiveUri = [string]$zipAssets[0].browser_download_url
+            hashesManifestUri = [string]$hashAssets[0].browser_download_url
+            officialArchiveSha256 = [string]$hashMatches[0]
+            observedArchiveSha256 = $observedZipSha256
+            executablePath = [IO.Path]::GetFullPath($powerShellExecutable)
+            executableAuthenticodeStatus = [string]$signature.Status
+            executableSignerSubject = [string]$signature.SignerCertificate.Subject
+            executableSignerThumbprint = [string]$signature.SignerCertificate.Thumbprint
+          }
+          $runtimeReceiptPath = Join-Path $env:KC_OWNED_ROOT 'powershell-runtime-setup.json'
+          [IO.File]::WriteAllText($runtimeReceiptPath, (($runtimeReceipt | ConvertTo-Json -Depth 8) + "`n"), [Text.UTF8Encoding]::new($false))
+          [IO.File]::Copy($runtimeReceiptPath, (Join-Path $env:KC_ARTIFACTS_ROOT 'powershell-runtime-setup.json'), $false)
+          [IO.File]::Copy($hashesPath, (Join-Path $env:KC_ARTIFACTS_ROOT 'powershell-release-hashes.sha256'), $false)
+          [IO.File]::AppendAllText($env:GITHUB_ENV, "KC_POWERSHELL_EXECUTABLE=$([IO.Path]::GetFullPath($powerShellExecutable))`n", [Text.UTF8Encoding]::new($false))
+          [IO.File]::AppendAllText($env:GITHUB_PATH, "$env:KC_RUNTIME_ROOT`n", [Text.UTF8Encoding]::new($false))
+          Write-Host "Verified official PowerShell $version, archive SHA256 $observedZipSha256, signer $($signature.SignerCertificate.Subject)"
+
+      - name: Prepare locked Pester runtime under verified PowerShell
+        id: prepare_pester_runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $actualExecutable = [IO.Path]::GetFullPath([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+          if (-not $actualExecutable.Equals([IO.Path]::GetFullPath($env:KC_POWERSHELL_EXECUTABLE), [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'The Pester setup workflow step is not running under the verified latest PowerShell executable.'
+          }
+          $env:RUN_OWNED_ROOT = $env:KC_OWNED_ROOT
+          & $env:KC_POWERSHELL_EXECUTABLE -NoProfile -NonInteractive -File (Join-Path $env:KC_DRIVER_ROOT 'scripts/Prepare-PesterRuntime.ps1') `
+            -RuntimeExecutable $env:KC_POWERSHELL_EXECUTABLE -OwnedRoot $env:KC_OWNED_ROOT
+          if ($LASTEXITCODE -ne 0) { throw "Locked Pester runtime setup failed with exit code $LASTEXITCODE." }
+          $pesterReceipt = Join-Path $env:KC_OWNED_ROOT 'pester-setup/setup-receipt.json'
+          if (-not (Test-Path -LiteralPath $pesterReceipt -PathType Leaf)) { throw 'Pester setup receipt is missing.' }
+          [IO.File]::Copy($pesterReceipt, (Join-Path $env:KC_ARTIFACTS_ROOT 'pester-runtime-setup-receipt.json'), $false)
+          Write-Host "Verified Pester setup receipt SHA256 $((Get-FileHash -LiteralPath $pesterReceipt -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Prepare source tool receipts through the canonical validator
+        id: prepare_source_tools
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $actualExecutable = [IO.Path]::GetFullPath([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+          if (-not $actualExecutable.Equals([IO.Path]::GetFullPath($env:KC_POWERSHELL_EXECUTABLE), [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Source-tool preparation is not running under the verified PowerShell executable.'
+          }
+          if (Test-Path -LiteralPath $env:KC_SOURCE_TOOLS_PATH) { throw 'Fresh source-tools output path unexpectedly exists before protected preparation.' }
+          & $env:KC_POWERSHELL_EXECUTABLE -NoProfile -NonInteractive -File (Join-Path $env:KC_DRIVER_ROOT 'scripts/Validate.ps1') `
+            -RepositoryRoot $env:KC_CANDIDATE_ROOT -PrepareSourceTools -ArtifactsRoot $env:KC_ARTIFACTS_ROOT `
+            -SourceToolsPath $env:KC_SOURCE_TOOLS_PATH -AuthorityRepositoryRoot $env:KC_AUTHORITY_ROOT `
+            -TrustedToolRoot $env:KC_RUNTIME_ROOT -ExpectedGoRuntimeVersion $env:STANDARD_GO_RUNTIME_VERSION -TimeoutSeconds 1800
+          if ($LASTEXITCODE -ne 0) { throw "Canonical source-tool preparation failed with exit code $LASTEXITCODE." }
+          $preparedTools = Get-Content -LiteralPath $env:KC_SOURCE_TOOLS_PATH -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 50 -ErrorAction Stop
+          $setupRunId = [string]$preparedTools.runId
+          if ($setupRunId -cnotmatch '^[0-9a-f]{32}$' -or
+              [string]$preparedTools.sourceRevision -cne $env:KC_HEAD_COMMIT -or
+              [string]$preparedTools.authorityRevision -cne 'ff85d5f80fe795b96354e753074b5ce59ad04ecd') {
+            throw 'Protected source setup receipt does not bind a fresh run to the exact candidate and ff85 authority.'
+          }
+          $sourceToolsSha256 = (Get-FileHash -LiteralPath $env:KC_SOURCE_TOOLS_PATH -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+          $setupBinding = [ordered]@{
+            schemaVersion = 1
+            report = 'protected-source-setup-binding-v1'
+            runNonce = [string]$env:KC_RUN_NONCE
+            runId = $setupRunId
+            sourceToolsPath = [IO.Path]::GetFullPath($env:KC_SOURCE_TOOLS_PATH)
+            sourceToolsSha256 = $sourceToolsSha256
+            candidateRevision = [string]$env:KC_HEAD_COMMIT
+            authorityRevision = 'ff85d5f80fe795b96354e753074b5ce59ad04ecd'
+          }
+          [IO.File]::WriteAllText((Join-Path $env:KC_ARTIFACTS_ROOT 'source-tools-setup-binding.json'), (($setupBinding | ConvertTo-Json -Depth 5) + "`n"), [Text.UTF8Encoding]::new($false))
+          [IO.File]::AppendAllText($env:GITHUB_ENV, "KC_SOURCE_TOOLS_RUN_ID=$setupRunId`nKC_SOURCE_TOOLS_SHA256=$sourceToolsSha256`n", [Text.UTF8Encoding]::new($false))
+          [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "run_id=$setupRunId`nsource_tools_sha256=$sourceToolsSha256`n", [Text.UTF8Encoding]::new($false))
+
+      - name: Run protected source acceptance through the canonical validator
+        id: source_validation
+        shell: pwsh
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+        run: |
+          $sourceTimer = [Diagnostics.Stopwatch]::StartNew()
+          $sourceStartedAtUtc = [DateTime]::UtcNow
+          $sourceProcessExitCode = $null
+          $sourcePhaseState = 'failed'
+          try {
+            $ErrorActionPreference = 'Stop'
+            $actualExecutable = [IO.Path]::GetFullPath([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+            if (-not $actualExecutable.Equals([IO.Path]::GetFullPath($env:KC_POWERSHELL_EXECUTABLE), [StringComparison]::OrdinalIgnoreCase)) {
+              throw 'Protected source validation is not running under the verified PowerShell executable.'
+            }
+            & $env:KC_POWERSHELL_EXECUTABLE -NoProfile -NonInteractive -File (Join-Path $env:KC_DRIVER_ROOT 'scripts/Validate.ps1') `
+              -RepositoryRoot $env:KC_CANDIDATE_ROOT -SourceValidation -ArtifactsRoot $env:KC_ARTIFACTS_ROOT `
+              -SourceToolsPath $env:KC_SOURCE_TOOLS_PATH -AuthorityRepositoryRoot $env:KC_AUTHORITY_ROOT `
+              -TrustedToolRoot $env:KC_RUNTIME_ROOT -BaseCommit $env:KC_BASE_COMMIT `
+              -ExpectedGoRuntimeVersion $env:STANDARD_GO_RUNTIME_VERSION -TimeoutSeconds 1800
+            $sourceProcessExitCode = $LASTEXITCODE
+            if ($sourceProcessExitCode -ne 0) { throw "Canonical protected source validation failed with exit code $sourceProcessExitCode." }
+            $sourcePhaseState = 'completed'
+          }
+          finally {
+            $sourceTimer.Stop()
+            $sourceCompletedAtUtc = [DateTime]::UtcNow
+            $phaseTiming = [ordered]@{
+              schemaVersion = 1
+              report = 'protected-source-phase-timing-v1'
+              phase = 'source-validation'
+              state = $sourcePhaseState
+              startedAtUtc = $sourceStartedAtUtc.ToString('O', [Globalization.CultureInfo]::InvariantCulture)
+              completedAtUtc = $sourceCompletedAtUtc.ToString('O', [Globalization.CultureInfo]::InvariantCulture)
+              elapsedSeconds = [Math]::Round($sourceTimer.Elapsed.TotalSeconds, 3)
+              candidateRevision = [string]$env:KC_HEAD_COMMIT
+              baseRevision = [string]$env:KC_BASE_COMMIT
+              authorityRevision = 'ff85d5f80fe795b96354e753074b5ce59ad04ecd'
+              observedProcessExitCode = if ($null -ne $sourceProcessExitCode) { [int]$sourceProcessExitCode } else { $null }
+            }
+            [IO.File]::WriteAllText((Join-Path $env:KC_ARTIFACTS_ROOT 'source-phase-timing.json'), (($phaseTiming | ConvertTo-Json -Depth 5) + "`n"), [Text.UTF8Encoding]::new($false))
+          }
+
+      - name: Verify complete source evidence package
+        id: verify_source_evidence
+        if: always()
+        shell: pwsh
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          PROTECTED_GITHUB_WORKSPACE: ${{ github.workspace }}
+          PROTECTED_RUNNER_TEMP: ${{ runner.temp }}
+          EXPECTED_EVENT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          EXPECTED_EVENT_BASE: ${{ github.event.pull_request.base.sha || github.event.before || inputs.base_commit }}
+          EXPECTED_HELPER_SHA256: ${{ steps.bind_identities.outputs.protected_helper_sha256 }}
+          EXPECTED_RUN_NONCE: ${{ steps.bind_identities.outputs.run_nonce }}
+          EXPECTED_GIT_PATH: ${{ steps.bind_identities.outputs.git_path }}
+          EXPECTED_GIT_SHA256: ${{ steps.bind_identities.outputs.git_sha256 }}
+          EXPECTED_SOURCE_TOOLS_RUN_ID: ${{ steps.prepare_source_tools.outputs.run_id }}
+          EXPECTED_SOURCE_TOOLS_SHA256: ${{ steps.prepare_source_tools.outputs.source_tools_sha256 }}
+          PREPARE_PESTER_OUTCOME: ${{ steps.prepare_pester_runtime.outcome }}
+          PREPARE_SOURCE_TOOLS_OUTCOME: ${{ steps.prepare_source_tools.outcome }}
+          SOURCE_VALIDATION_OUTCOME: ${{ steps.source_validation.outcome }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function Get-FileSha256 {
+            param([Parameter(Mandatory = $true)][string] $Path)
+            return (Get-FileHash -LiteralPath $Path -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+          }
+          function Test-PathWithinOrEqual {
+            param([Parameter(Mandatory = $true)][string] $Path, [Parameter(Mandatory = $true)][string] $Root)
+            $fullPath = [IO.Path]::GetFullPath($Path)
+            $fullRoot = [IO.Path]::GetFullPath($Root).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+            $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+            return $fullPath.Equals($fullRoot, $comparison) -or $fullPath.StartsWith($fullRoot + [IO.Path]::DirectorySeparatorChar, $comparison)
+          }
+          function Assert-NoReparseAncestors {
+            param([Parameter(Mandatory = $true)][string] $Path, [Parameter(Mandatory = $true)][string] $Context)
+            $current = [IO.Path]::GetFullPath($Path)
+            while (-not [string]::IsNullOrWhiteSpace($current)) {
+              $item = Get-Item -LiteralPath $current -Force -ErrorAction Stop
+              if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "$Context is backed by a reparse point: $current" }
+              $parent = Split-Path -Parent $current
+              if ([string]::IsNullOrWhiteSpace($parent) -or $parent -ceq $current) { break }
+              $current = $parent
+            }
+          }
+          # PROTECTED_SOURCE_BINDING_GUARD_BEGIN
+          function Assert-WorkflowPathBinding {
+            param([Parameter(Mandatory = $true)][string] $Observed, [Parameter(Mandatory = $true)][string] $Expected, [Parameter(Mandatory = $true)][string] $Name)
+            if ([string]::IsNullOrWhiteSpace($Observed) -or
+                -not [IO.Path]::GetFullPath($Observed).Equals([IO.Path]::GetFullPath($Expected), [StringComparison]::OrdinalIgnoreCase)) {
+              throw "$Name differs from its immutable workflow binding."
+            }
+          }
+          function Assert-WorkflowPlainFile {
+            param([Parameter(Mandatory = $true)][string] $Path, [Parameter(Mandatory = $true)][string] $Name)
+            $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+            if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+              throw "$Name must be a plain, non-reparse file."
+            }
+          }
+          $expectedWorkspaceRoot = [IO.Path]::GetFullPath([string]$env:PROTECTED_GITHUB_WORKSPACE)
+          $expectedCandidateRoot = Join-Path $expectedWorkspaceRoot 'candidate'
+          $expectedDriverRoot = Join-Path $expectedWorkspaceRoot 'driver'
+          $expectedAuthorityRoot = Join-Path $expectedWorkspaceRoot 'authority'
+          $expectedBaseCommit = [string]$env:EXPECTED_EVENT_BASE
+          $expectedHeadCommit = [string]$env:EXPECTED_EVENT_HEAD
+          $expectedRunNonce = [string]$env:EXPECTED_RUN_NONCE
+          if ($expectedBaseCommit -cnotmatch '^[0-9a-f]{40}$' -or $expectedBaseCommit -match '^0+$' -or
+              $expectedHeadCommit -cnotmatch '^[0-9a-f]{40}$' -or
+              $expectedRunNonce -cnotmatch '^[0-9a-f]{32}$' -or
+              [string]$env:EXPECTED_HELPER_SHA256 -cnotmatch '^[0-9a-f]{64}$' -or
+              [string]$env:EXPECTED_GIT_SHA256 -cnotmatch '^[0-9a-f]{64}$' -or
+              [string]$env:EXPECTED_SOURCE_TOOLS_RUN_ID -cnotmatch '^[0-9a-f]{32}$' -or
+              [string]$env:EXPECTED_SOURCE_TOOLS_SHA256 -cnotmatch '^[0-9a-f]{64}$') {
+            throw 'Immutable protected workflow identity outputs are missing or malformed.'
+          }
+          $expectedOwnedRoot = Join-Path $env:PROTECTED_RUNNER_TEMP "knowledge-content-owned-$expectedRunNonce"
+          $expectedRuntimeRoot = Join-Path $expectedOwnedRoot 'runtime'
+          $expectedArtifactsRoot = Join-Path ([IO.Path]::GetPathRoot($env:PROTECTED_RUNNER_TEMP)) "a-$expectedRunNonce"
+          $expectedSourceToolsPath = Join-Path $expectedArtifactsRoot 'source-tools.json'
+          foreach ($binding in @(
+            @{ Name = 'Candidate root'; Observed = [string]$env:KC_CANDIDATE_ROOT; Expected = $expectedCandidateRoot },
+            @{ Name = 'Protected driver root'; Observed = [string]$env:KC_DRIVER_ROOT; Expected = $expectedDriverRoot },
+            @{ Name = 'Authority root'; Observed = [string]$env:KC_AUTHORITY_ROOT; Expected = $expectedAuthorityRoot },
+            @{ Name = 'Owned root'; Observed = [string]$env:KC_OWNED_ROOT; Expected = $expectedOwnedRoot },
+            @{ Name = 'Runtime root'; Observed = [string]$env:KC_RUNTIME_ROOT; Expected = $expectedRuntimeRoot },
+            @{ Name = 'Artifacts root'; Observed = [string]$env:KC_ARTIFACTS_ROOT; Expected = $expectedArtifactsRoot },
+            @{ Name = 'Source tools path'; Observed = [string]$env:KC_SOURCE_TOOLS_PATH; Expected = $expectedSourceToolsPath },
+            @{ Name = 'Owned root alias'; Observed = [string]$env:RUN_OWNED_ROOT; Expected = $expectedOwnedRoot }
+          )) {
+            Assert-WorkflowPathBinding -Observed $binding.Observed -Expected $binding.Expected -Name $binding.Name
+          }
+          if ([string]$env:KC_BASE_COMMIT -cne $expectedBaseCommit -or
+              [string]$env:KC_HEAD_COMMIT -cne $expectedHeadCommit -or
+              [string]$env:KC_RUN_NONCE -cne $expectedRunNonce -or
+              [string]$env:KC_SOURCE_TOOLS_RUN_ID -cne [string]$env:EXPECTED_SOURCE_TOOLS_RUN_ID -or
+              [string]$env:KC_SOURCE_TOOLS_SHA256 -cne [string]$env:EXPECTED_SOURCE_TOOLS_SHA256) {
+            throw 'Protected source environment identity differs from immutable event or setup outputs.'
+          }
+          $gitPath = [IO.Path]::GetFullPath([string]$env:EXPECTED_GIT_PATH)
+          Assert-WorkflowPlainFile -Path $gitPath -Name 'Protected Git executable'
+          if ((Get-FileHash -LiteralPath $gitPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant() -cne [string]$env:EXPECTED_GIT_SHA256) {
+            throw 'Protected Git executable bytes changed after identity binding.'
+          }
+          $protectedDriverRoot = [IO.Path]::GetFullPath($expectedDriverRoot)
+          $driverHead = @(& $gitPath -C $protectedDriverRoot rev-parse --verify 'HEAD^{commit}' 2>&1)
+          if ($LASTEXITCODE -ne 0 -or $driverHead.Count -ne 1 -or [string]$driverHead[0] -cne $expectedBaseCommit) {
+            throw 'Protected driver HEAD differs from the exact immutable event base SHA.'
+          }
+          $driverDirty = @(& $gitPath -C $protectedDriverRoot status --porcelain=v1 --untracked-files=all 2>&1)
+          if ($LASTEXITCODE -ne 0 -or $driverDirty.Count -ne 0) { throw 'Protected driver checkout is not clean at final verification.' }
+          $protectedHelperRelativePath = 'scripts/StandardCoreSourceValidation.ps1'
+          $protectedHelperPath = Join-Path $protectedDriverRoot $protectedHelperRelativePath
+          Assert-WorkflowPlainFile -Path $protectedHelperPath -Name 'Protected source helper'
+          $baseHelperEntries = @(& $gitPath -C $protectedDriverRoot ls-tree --full-tree $expectedBaseCommit -- $protectedHelperRelativePath 2>&1)
+          if ($LASTEXITCODE -ne 0 -or $baseHelperEntries.Count -ne 1 -or
+              [string]$baseHelperEntries[0] -cnotmatch '^(?:100644|100755) blob (?<objectId>[0-9a-f]{40})\tscripts/StandardCoreSourceValidation\.ps1$') {
+            throw 'Immutable event base does not contain the protected helper as one regular Git blob.'
+          }
+          $baseHelperObjectId = [string]$Matches.objectId
+          $rawHelperObjectIds = @(& $gitPath -C $protectedDriverRoot hash-object --no-filters -- $protectedHelperPath 2>&1)
+          if ($LASTEXITCODE -ne 0 -or $rawHelperObjectIds.Count -ne 1 -or
+              [string]$rawHelperObjectIds[0] -cne $baseHelperObjectId) {
+            throw 'Protected source helper raw bytes differ from the immutable event-base Git blob.'
+          }
+          if ((Get-FileHash -LiteralPath $protectedHelperPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant() -cne [string]$env:EXPECTED_HELPER_SHA256) {
+            throw 'Protected source helper SHA256 differs from its immutable identity-binding output.'
+          }
+          # PROTECTED_SOURCE_BINDING_GUARD_END
+          if ([string]::IsNullOrWhiteSpace([string]$env:KC_ARTIFACTS_ROOT) -or
+              -not (Test-Path -LiteralPath $env:KC_ARTIFACTS_ROOT -PathType Container)) {
+            throw 'Protected source artifacts root is unavailable for final verification.'
+          }
+          $runStartedAtUtc = [DateTime]::Parse([string]$env:KC_RUN_STARTED_AT_UTC, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind)
+          $phaseTimingPath = Join-Path $env:KC_ARTIFACTS_ROOT 'source-phase-timing.json'
+          $sourceElapsedSeconds = $null
+          $sourceCompletedAtUtc = [DateTime]::UtcNow
+          if (Test-Path -LiteralPath $phaseTimingPath -PathType Leaf) {
+            $phaseTiming = Get-Content -LiteralPath $phaseTimingPath -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 20 -ErrorAction Stop
+            if ([string]$phaseTiming.phase -cne 'source-validation' -or
+                [string]$phaseTiming.candidateRevision -cne $env:KC_HEAD_COMMIT -or
+                [string]$phaseTiming.baseRevision -cne $env:KC_BASE_COMMIT -or
+                [string]$phaseTiming.authorityRevision -cne 'ff85d5f80fe795b96354e753074b5ce59ad04ecd') {
+              throw 'Source-validation timing record does not bind the exact candidate, base, and authority.'
+            }
+            if ($null -eq $phaseTiming.observedProcessExitCode -or [int]$phaseTiming.observedProcessExitCode -ne 0) {
+              throw 'Source-validation report assertion requires the captured child-process exit code to be zero.'
+            }
+            $observedSourceExitCode = [int]$phaseTiming.observedProcessExitCode
+            $sourceElapsedSeconds = [double]$phaseTiming.elapsedSeconds
+            $sourceCompletedAtUtc = [DateTime]::Parse([string]$phaseTiming.completedAtUtc, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind)
+          }
+          $totalSeconds = [Math]::Round(([DateTime]::UtcNow - $runStartedAtUtc).TotalSeconds, 3)
+          $setupSeconds = if ($null -ne $sourceElapsedSeconds -and (Test-Path -LiteralPath $phaseTimingPath -PathType Leaf)) {
+            [Math]::Round(([DateTime]::Parse([string]$phaseTiming.startedAtUtc, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind) - $runStartedAtUtc).TotalSeconds, 3)
+          } else { $null }
+          $totalTiming = [ordered]@{
+            schemaVersion = 1
+            report = 'protected-source-total-timing-v1'
+            candidateRevision = [string]$env:KC_HEAD_COMMIT
+            baseRevision = [string]$env:KC_BASE_COMMIT
+            authorityRevision = 'ff85d5f80fe795b96354e753074b5ce59ad04ecd'
+            startedAtUtc = $runStartedAtUtc.ToString('O', [Globalization.CultureInfo]::InvariantCulture)
+            sourceValidationCompletedAtUtc = $sourceCompletedAtUtc.ToString('O', [Globalization.CultureInfo]::InvariantCulture)
+            completedAtUtc = [DateTime]::UtcNow.ToString('O', [Globalization.CultureInfo]::InvariantCulture)
+            setupAndInstallSeconds = $setupSeconds
+            sourceValidationSeconds = $sourceElapsedSeconds
+            totalSeconds = $totalSeconds
+            targetSeconds = 1200
+            twentyMinuteTargetMet = $false
+            reportAssertionOutcome = 'pending'
+            pesterSetupOutcome = [string]$env:PREPARE_PESTER_OUTCOME
+            sourceToolsSetupOutcome = [string]$env:PREPARE_SOURCE_TOOLS_OUTCOME
+            sourceValidationOutcome = [string]$env:SOURCE_VALIDATION_OUTCOME
+          }
+          $runKey = if ([string]$env:KC_SOURCE_TOOLS_RUN_ID -match '^[0-9a-f]{32}$') { [string]$env:KC_SOURCE_TOOLS_RUN_ID } else { [string]$env:KC_RUN_NONCE }
+          $totalTimingPath = Join-Path $env:KC_ARTIFACTS_ROOT "source-workflow-timing-$runKey.json"
+          [IO.File]::WriteAllText($totalTimingPath, (($totalTiming | ConvertTo-Json -Depth 10) + "`n"), [Text.UTF8Encoding]::new($false))
+
+          $requiredFiles = @(
+            (Join-Path $env:KC_ARTIFACTS_ROOT 'source-tools.json'),
+            (Join-Path $env:KC_ARTIFACTS_ROOT 'source-tools-setup-binding.json'),
+            (Join-Path $env:KC_ARTIFACTS_ROOT 'node-runtime-before-source-setup.json'),
+            (Join-Path $env:KC_ARTIFACTS_ROOT 'powershell-runtime-setup.json'),
+            (Join-Path $env:KC_ARTIFACTS_ROOT 'powershell-release-hashes.sha256'),
+            (Join-Path $env:KC_ARTIFACTS_ROOT 'pester-runtime-setup-receipt.json')
+          )
+          foreach ($path in $requiredFiles) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -le 0) {
+              throw "Protected source evidence is missing or empty: $path"
+            }
+          }
+          $sourceTools = Get-Content -LiteralPath (Join-Path $env:KC_ARTIFACTS_ROOT 'source-tools.json') -Raw | ConvertFrom-Json -Depth 50
+          $runId = [string]$sourceTools.runId
+          if ($env:SOURCE_VALIDATION_OUTCOME -cne 'success' -or $env:PREPARE_PESTER_OUTCOME -cne 'success' -or
+              $env:PREPARE_SOURCE_TOOLS_OUTCOME -cne 'success') {
+            throw 'Protected setup and source-validation workflow steps must all succeed before report acceptance.'
+          }
+          if ($runId -cnotmatch '^[0-9a-f]{32}$' -or $runId -cne [string]$env:KC_SOURCE_TOOLS_RUN_ID -or
+              [string]$sourceTools.sourceRevision -cne $env:KC_HEAD_COMMIT -or
+              [string]$sourceTools.authorityRevision -cne 'ff85d5f80fe795b96354e753074b5ce59ad04ecd') {
+            throw 'Source tools receipt has no fresh run identity bound to the exact candidate and ff85 authority.'
+          }
+          $sourceToolsPath = Join-Path $env:KC_ARTIFACTS_ROOT 'source-tools.json'
+          $sourceToolsSha256Before = (Get-FileHash -LiteralPath $sourceToolsPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+          if ($sourceToolsSha256Before -cne [string]$env:KC_SOURCE_TOOLS_SHA256) {
+            throw 'Source tools bytes differ from the fresh setup receipt captured before source validation.'
+          }
+          $setupBinding = Get-Content -LiteralPath (Join-Path $env:KC_ARTIFACTS_ROOT 'source-tools-setup-binding.json') -Raw | ConvertFrom-Json -Depth 20
+          if ([string]$setupBinding.runNonce -cne [string]$env:KC_RUN_NONCE -or
+              [string]$setupBinding.runId -cne $runId -or
+              [string]$setupBinding.sourceToolsSha256 -cne $sourceToolsSha256Before -or
+              [string]$setupBinding.candidateRevision -cne $env:KC_HEAD_COMMIT -or
+              [string]$setupBinding.authorityRevision -cne 'ff85d5f80fe795b96354e753074b5ce59ad04ecd') {
+            throw 'Protected source setup binding differs from the fresh prepared receipt.'
+          }
+          $sourceValidationRoot = Join-Path $env:KC_ARTIFACTS_ROOT "source-validation-$runId"
+          $sourceReport = Join-Path $sourceValidationRoot 'knowledge-content-source-validation.json'
+          $timingSidecar = Join-Path $env:KC_ARTIFACTS_ROOT "source-validation-timing-$runId.json"
+          foreach ($path in @($sourceReport, $timingSidecar, $phaseTimingPath, $totalTimingPath)) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -le 0) {
+              throw "Protected source report or timing sidecar is missing or empty: $path"
+            }
+          }
+          $sourceReportSha256Before = (Get-FileHash -LiteralPath $sourceReport -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+          $report = Get-Content -LiteralPath $sourceReport -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 100 -ErrorAction Stop
+          if ([string]$report.runId -cne $runId) {
+            throw 'Canonical source report runId differs from the fresh prepared source-tools runId.'
+          }
+          $adapterSnapshotPath = [string]$report.sourceValidation.adapterSnapshot.path
+          if ([string]::IsNullOrWhiteSpace($adapterSnapshotPath) -or -not (Test-Path -LiteralPath $adapterSnapshotPath -PathType Leaf)) {
+            throw 'Source report is missing its retained canonical adapter snapshot path.'
+          }
+
+          . $protectedHelperPath
+          $authorityPin = Get-KnowledgeContentPreparedAuthorityPin
+          $verifiedAuthority = Assert-KnowledgeContentPreparedAuthorityCheckout -GitPath $gitPath -AuthorityRoot $env:KC_AUTHORITY_ROOT -AuthorityPin $authorityPin
+          if ([string]$verifiedAuthority.revision -cne 'ff85d5f80fe795b96354e753074b5ce59ad04ecd') {
+            throw 'Raw 32-file authority verification did not retain the exact ff85 revision.'
+          }
+          $authorityRunnerPath = [string]$verifiedAuthority.runnerPath
+          . $authorityRunnerPath -DefineFunctionsOnly -CandidateRoot $env:KC_CANDIDATE_ROOT `
+            -AdapterPath $adapterSnapshotPath -ArtifactsRoot $sourceValidationRoot `
+            -SourceRepository 'https://github.com/SyuanTsai/Skill-Knowledge-Content.git' `
+            -SourceRevision $env:KC_HEAD_COMMIT -BaseRevision $env:KC_BASE_COMMIT `
+            -AuthorityRevision 'ff85d5f80fe795b96354e753074b5ce59ad04ecd'
+          [void](Assert-StandardCoreSourceCheckReport -Report $report `
+            -ExpectedSourceRevision $env:KC_HEAD_COMMIT -ExpectedBaseRevision $env:KC_BASE_COMMIT `
+            -ExpectedAuthorityRevision 'ff85d5f80fe795b96354e753074b5ce59ad04ecd' `
+            -ExpectedEventName $env:GITHUB_EVENT_NAME -ArtifactsRoot $sourceValidationRoot `
+            -OutputPath $sourceReport -ProcessExitCode $observedSourceExitCode)
+          $sourceReportSha256After = (Get-FileHash -LiteralPath $sourceReport -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+          if ($sourceReportSha256After -cne $sourceReportSha256Before) {
+            throw 'Canonical source report bytes changed during final protected authority assertion.'
+          }
+          $sourceToolsSha256After = (Get-FileHash -LiteralPath $sourceToolsPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+          if ($sourceToolsSha256After -cne $sourceToolsSha256Before) {
+            throw 'Fresh prepared source-tools receipt bytes changed during protected validation.'
+          }
+          $totalTiming.totalSeconds = [Math]::Round(([DateTime]::UtcNow - $runStartedAtUtc).TotalSeconds, 3)
+          $totalTiming.completedAtUtc = [DateTime]::UtcNow.ToString('O', [Globalization.CultureInfo]::InvariantCulture)
+          $totalTiming.twentyMinuteTargetMet = ($totalTiming.totalSeconds -le 1200)
+          $totalTiming.reportAssertionOutcome = 'passed'
+          [IO.File]::WriteAllText($totalTimingPath, (($totalTiming | ConvertTo-Json -Depth 10) + "`n"), [Text.UTF8Encoding]::new($false))
+          Write-Host "Final ff85 source report assertion passed; report SHA256 $sourceReportSha256After"
+          Write-Host "Fresh source-tools receipt SHA256 remained $sourceToolsSha256After"
+          Write-Host "Source inventory timing SHA256 $((Get-FileHash -LiteralPath $timingSidecar -Algorithm SHA256).Hash.ToLowerInvariant())"
+          Write-Host "Setup/source/total timing sidecar: $totalTimingPath"
+
+      - name: Upload complete protected source evidence
+        if: always()
+        uses: *upload-artifact-reference # actions/upload-artifact v7.0.2
+        with:
+          name: standard-v1-source-validation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.KC_ARTIFACTS_ROOT }}
+          if-no-files-found: warn
+          include-hidden-files: true
 
   # These jobs preserve the repository's existing required status contexts while
   # keeping the canonical Standard v1 gate as the only validation policy.
