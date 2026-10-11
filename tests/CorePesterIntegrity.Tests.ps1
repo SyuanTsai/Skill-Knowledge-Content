@@ -3,6 +3,7 @@
 
 BeforeAll {
     $script:repositoryRoot = Split-Path -Parent $PSScriptRoot
+    $script:verifiedPowerShellExecutable = [IO.Path]::GetFullPath([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
     Import-Module -Name (Join-Path $script:repositoryRoot 'scripts/CorePesterIntegrity.psm1') -Force
     $script:closureLockPath = Join-Path $script:repositoryRoot 'config/pester-6.2.0-closure.lock.json'
     $script:closureLock = Read-CorePesterClosureLock -LiteralPath $script:closureLockPath
@@ -16,10 +17,16 @@ BeforeAll {
         try {
             $zip = [IO.Compression.ZipArchive]::new($stream, [IO.Compression.ZipArchiveMode]::Create, $true)
             try {
+                $unixRegularFileAttributes = [BitConverter]::ToInt32([BitConverter]::GetBytes([uint32]::Parse('81A40000', [Globalization.NumberStyles]::HexNumber)), 0) # S_IFREG | 0644
+                $unixSymbolicLinkAttributes = [BitConverter]::ToInt32([BitConverter]::GetBytes([uint32]::Parse('A1FF0000', [Globalization.NumberStyles]::HexNumber)), 0) # S_IFLNK | 0777
                 foreach ($payload in $script:closureLock.Value.modulePayload) {
                     $entryName = [string]$payload.path
                     if ($Variant -eq 'case-mismatch' -and $entryName -ceq 'Pester.psd1') { $entryName = 'pester.psd1' }
                     $entry = $zip.CreateEntry($entryName)
+                    $entry.ExternalAttributes = if ($Variant -eq 'unix-symlink' -and [string]$payload.path -ceq 'Pester.psm1') {
+                        $unixSymbolicLinkAttributes
+                    }
+                    else { $unixRegularFileAttributes }
                     $target = $entry.Open()
                     try {
                         if ($Variant -eq 'hash-mismatch' -and [string]$payload.path -ceq 'Pester.psm1') {
@@ -36,11 +43,13 @@ BeforeAll {
                 }
                 foreach ($name in @('_rels/.rels', '[Content_Types].xml', 'package/services/metadata/core-properties/nuget.psmdcp')) {
                     $entry = $zip.CreateEntry($name)
+                    $entry.ExternalAttributes = $unixRegularFileAttributes
                     $target = $entry.Open()
                     try { $target.WriteByte(0x20) } finally { $target.Dispose() }
                 }
                 $nuspec = '<package><metadata><id>Pester</id><version>6.2.0</version></metadata></package>'
                 $entry = $zip.CreateEntry('Pester.nuspec')
+                $entry.ExternalAttributes = $unixRegularFileAttributes
                 $target = $entry.Open()
                 try {
                     $bytes = [Text.Encoding]::UTF8.GetBytes($nuspec)
@@ -80,7 +89,7 @@ Describe 'Consumed Core process bootstrap signal' {
         $signal = Join-Path $root 'b-22222222222222222222222222222222.sig'
         [IO.File]::WriteAllText($signal, ('release' + [Environment]::NewLine), [Text.UTF8Encoding]::new($false))
         (Get-CorePesterTreeSnapshot -Root $root).Sha256 | Should -Not -Be $before.Sha256
-        Remove-CorePesterConsumedBootstrapSignal -CandidateRoot $root -ReleasePath $signal -BootstrapCommand 'C:/verified/pwsh.exe' -VerifiedPowerShellExecutable 'C:/verified/pwsh.exe'
+        Remove-CorePesterConsumedBootstrapSignal -CandidateRoot $root -ReleasePath $signal -BootstrapCommand $script:verifiedPowerShellExecutable -VerifiedPowerShellExecutable $script:verifiedPowerShellExecutable
         Test-Path -LiteralPath $signal | Should -BeFalse
         (Get-CorePesterTreeSnapshot -Root $root).Sha256 | Should -Be $before.Sha256
         [IO.File]::ReadAllText($source) | Should -Be 'tracked source bytes'
@@ -100,8 +109,16 @@ Describe 'Consumed Core process bootstrap signal' {
         $bytes = if ($Variant -eq 'bytes') { 'wrong' } else { 'release' + [Environment]::NewLine }
         if ($Variant -eq 'directory') { [void](New-Item -ItemType Directory -Path $signal) }
         elseif ($Variant -ne 'missing') { [IO.File]::WriteAllText($signal, $bytes, [Text.UTF8Encoding]::new($false)) }
-        $command = if ($Variant -eq 'command') { 'C:/unverified/pwsh.exe' } else { 'C:/verified/pwsh.exe' }
-        { Remove-CorePesterConsumedBootstrapSignal -CandidateRoot $root -ReleasePath $signal -BootstrapCommand $command -VerifiedPowerShellExecutable 'C:/verified/pwsh.exe' } | Should -Throw '*Core Pester bootstrap*'
+        $command = if ($Variant -eq 'command') { Join-Path $TestDrive 'unverified-pwsh' } else { $script:verifiedPowerShellExecutable }
+        $expectedError = switch ($Variant) {
+            'outside' { '*not the exact candidate-root transport file*' }
+            'name' { '*not the exact candidate-root transport file*' }
+            'bytes' { '*bytes differ from the consumed release payload*' }
+            'command' { '*command differs from the verified PowerShell executable*' }
+            'missing' { '*signal or its ancestry is missing*' }
+            'directory' { '*regular file with non-reparse ancestry*' }
+        }
+        { Remove-CorePesterConsumedBootstrapSignal -CandidateRoot $root -ReleasePath $signal -BootstrapCommand $command -VerifiedPowerShellExecutable $script:verifiedPowerShellExecutable } | Should -Throw $expectedError
         if ($Variant -ne 'missing') { Test-Path -LiteralPath $signal | Should -BeTrue }
     }
 
@@ -115,7 +132,7 @@ Describe 'Consumed Core process bootstrap signal' {
         $signal = Join-Path $link 'b-22222222222222222222222222222222.sig'
         [IO.File]::WriteAllText($signal, ('release' + [Environment]::NewLine), [Text.UTF8Encoding]::new($false))
         try {
-            { Remove-CorePesterConsumedBootstrapSignal -CandidateRoot $link -ReleasePath $signal -BootstrapCommand 'C:/verified/pwsh.exe' -VerifiedPowerShellExecutable 'C:/verified/pwsh.exe' } | Should -Throw '*Core Pester bootstrap*'
+            { Remove-CorePesterConsumedBootstrapSignal -CandidateRoot $link -ReleasePath $signal -BootstrapCommand $script:verifiedPowerShellExecutable -VerifiedPowerShellExecutable $script:verifiedPowerShellExecutable } | Should -Throw '*regular file with non-reparse ancestry*'
             Test-Path -LiteralPath $signal | Should -BeTrue
             Test-Path -LiteralPath (Join-Path $outside 'b-22222222222222222222222222222222.sig') | Should -BeTrue
         }
@@ -308,19 +325,22 @@ Describe 'Verified Pester 6.2.0 module closure' {
         (ConvertFrom-CorePesterProgressLine -Line 'unrelated diagnostic' -ActiveCaseStarts 0).IsRecognized | Should -BeFalse
     }
 
-    # Scenario: Official package entries are classified and bound to the exact module payload lock.
-    # Purpose: Reject extra, duplicate, unsafe, or byte-mismatched archive contents before runtime staging.
+    # Scenario: The exact payload carries signed Unix regular-file mode bits, with a paired symbolic-link variant.
+    # Purpose: Accept the complete regular-file hash inventory and reject symlink, extra, duplicate, unsafe, or byte-mismatched entries.
     It 'UnitT50_accepts_exact_package_inventory_and_rejects_unclassified_archive_entries' {
         $validPath = Join-Path $TestDrive 'pester-valid.nupkg'
         New-IntegrityPackageFixture -Path $validPath
         (Test-CorePesterPackageArchive -ArchivePath $validPath -Lock $script:closureLock.Value).IsValid | Should -BeTrue
 
-        foreach ($variant in @('extra', 'duplicate', 'unsafe', 'hash-mismatch', 'case-mismatch')) {
+        foreach ($variant in @('extra', 'duplicate', 'unsafe', 'hash-mismatch', 'case-mismatch', 'unix-symlink')) {
             $badPath = Join-Path $TestDrive "pester-$variant.nupkg"
             New-IntegrityPackageFixture -Path $badPath -Variant $variant
             $result = Test-CorePesterPackageArchive -ArchivePath $badPath -Lock $script:closureLock.Value
             $result.IsValid | Should -BeFalse -Because "variant $variant must fail closed"
             $result.Errors.Count | Should -BeGreaterThan 0
+            if ($variant -eq 'unix-symlink') {
+                $result.Errors | Should -Contain 'Pester package archive contains a symbolic link: Pester.psm1'
+            }
         }
     }
 

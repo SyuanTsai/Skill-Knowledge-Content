@@ -142,6 +142,52 @@ function Get-CorePesterRuntimeModuleRoot {
     return [IO.Path]::GetFullPath((Join-Path $runtimeRoot 'Modules/Pester/6.2.0'))
 }
 
+function Get-VerifiedCoreAuthoritySnapshotPath {
+    param([Parameter(Mandatory = $true)][string] $OuterAdapterRunId)
+
+    if ($OuterAdapterRunId -cnotmatch '^[0-9a-f]{32}$') {
+        throw 'Core Pester requires the canonical outer adapter run identity.'
+    }
+    $coreRunId = [Environment]::GetEnvironmentVariable('STANDARD_VALIDATION_CORE_RUN_ID', 'Process')
+    $checkId = [Environment]::GetEnvironmentVariable('STANDARD_VALIDATION_CORE_CHECK_ID', 'Process')
+    if ($coreRunId -cnotmatch '^[0-9a-f]{32}$' -or $checkId -cne 'repository-pester') {
+        throw 'Core Pester requires the trusted repository-pester run identity.'
+    }
+    $candidateSnapshot = [IO.Path]::GetFullPath((Get-Location).Path)
+    if ([IO.Path]::GetFileName($candidateSnapshot) -cne 'candidate') {
+        throw 'Core Pester working directory is not the immutable candidate snapshot.'
+    }
+    $runRoot = Split-Path -Parent $candidateSnapshot
+    if ([IO.Path]::GetFileName($runRoot) -cne $coreRunId) {
+        throw 'Core Pester candidate snapshot does not match the trusted run identity.'
+    }
+    $runsRoot = Split-Path -Parent $runRoot
+    if ([IO.Path]::GetFileName($runsRoot) -cne 'runs') {
+        throw 'Core Pester candidate snapshot is outside the canonical runs directory.'
+    }
+    $coreArtifactsRoot = Split-Path -Parent $runsRoot
+    $adapterParent = Split-Path -Parent $coreArtifactsRoot
+    $adapterRoot = [IO.Path]::GetFullPath((Join-Path $adapterParent ".core-v2-adapter-$OuterAdapterRunId"))
+    if (-not (Test-Path -LiteralPath (Join-Path $adapterRoot 'standard-core-adapter-v2.json') -PathType Leaf)) {
+        throw 'Core Pester outer adapter identity does not select the run-owned adapter snapshot.'
+    }
+    $authorityRoot = [IO.Path]::GetFullPath((Join-Path $adapterRoot 'authority'))
+    if (-not (Test-Path -LiteralPath $authorityRoot -PathType Container)) {
+        throw 'Core Pester run-owned authority snapshot is missing.'
+    }
+    $cursor = $authorityRoot
+    while (-not [string]::IsNullOrWhiteSpace($cursor)) {
+        $entry = Get-Item -LiteralPath $cursor -Force -ErrorAction Stop
+        if ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            throw 'Core Pester run-owned authority snapshot contains a reparse ancestor.'
+        }
+        $parent = Split-Path -Parent $cursor
+        if ($parent -ceq $cursor) { break }
+        $cursor = $parent
+    }
+    return $authorityRoot
+}
+
 function Test-CorePesterPathBoundary {
     [CmdletBinding()]
     param(
@@ -614,7 +660,10 @@ function Test-CorePesterPackageArchive {
             try { Assert-CorePesterSafeRelativePath -Path $name -Context 'Pester package archive entry' }
             catch { $errors.Add($_.Exception.Message); continue }
             if (-not $entrySet.Add($name)) { $errors.Add("Pester package archive has duplicate or case-ambiguous entry: $name"); continue }
-            $unixType = ([uint32]$entry.ExternalAttributes -shr 16) -band 0xF000
+            # ZipArchive exposes the 32-bit external-attribute field as a signed Int32.
+            # Reinterpret its bits so Unix mode values with the sign bit set remain valid.
+            $externalAttributes = [BitConverter]::ToUInt32([BitConverter]::GetBytes([int]$entry.ExternalAttributes), 0)
+            $unixType = ($externalAttributes -shr 16) -band [uint32]0xF000
             if ($unixType -eq 0xA000) { $errors.Add("Pester package archive contains a symbolic link: $name"); continue }
             if (-not $expectedEntries.Contains($name) -or -not $expectedEntriesExact.Contains($name)) { $errors.Add("Pester package archive contains an unclassified or case-mismatched entry: $name"); continue }
             if ($name -ceq 'Pester.nuspec') {
@@ -666,4 +715,4 @@ function Test-CorePesterPackageArchive {
     }
 }
 
-Export-ModuleMember -Function Read-CorePesterClosureLock, Get-CorePesterRuntimeModuleRoot, Test-CorePesterPathBoundary, Test-CorePesterClosure, Test-CorePesterModuleCandidates, Get-CorePesterExpectedLoadedModulePath, Test-CorePesterLoadedModuleIdentity, Get-CorePesterCaseIdentity, ConvertFrom-CorePesterProgressLine, Test-CorePesterCaseIdentityPartition, Test-CorePesterShardUnion, Remove-CorePesterConsumedBootstrapSignal, Get-CorePesterTreeSnapshot, Test-CorePesterPackageArchive
+Export-ModuleMember -Function Read-CorePesterClosureLock, Get-CorePesterRuntimeModuleRoot, Get-VerifiedCoreAuthoritySnapshotPath, Test-CorePesterPathBoundary, Test-CorePesterClosure, Test-CorePesterModuleCandidates, Get-CorePesterExpectedLoadedModulePath, Test-CorePesterLoadedModuleIdentity, Get-CorePesterCaseIdentity, ConvertFrom-CorePesterProgressLine, Test-CorePesterCaseIdentityPartition, Test-CorePesterShardUnion, Remove-CorePesterConsumedBootstrapSignal, Get-CorePesterTreeSnapshot, Test-CorePesterPackageArchive

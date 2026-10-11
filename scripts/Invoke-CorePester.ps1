@@ -36,52 +36,6 @@ if (-not $postImportClosure.IsValid -or $postImportClosure.ClosureSha256 -cne $p
     throw ('Core Pester runtime closure changed during import: ' + (@($postImportClosure.Errors) -join '; '))
 }
 
-function Get-VerifiedCoreAuthoritySnapshotPath {
-    param([Parameter(Mandatory = $true)][string] $OuterAdapterRunId)
-
-    if ($OuterAdapterRunId -cnotmatch '^[0-9a-f]{32}$') {
-        throw 'Core Pester requires the canonical outer adapter run identity.'
-    }
-    $coreRunId = [Environment]::GetEnvironmentVariable('STANDARD_VALIDATION_CORE_RUN_ID', 'Process')
-    $checkId = [Environment]::GetEnvironmentVariable('STANDARD_VALIDATION_CORE_CHECK_ID', 'Process')
-    if ($coreRunId -cnotmatch '^[0-9a-f]{32}$' -or $checkId -cne 'repository-pester') {
-        throw 'Core Pester requires the trusted repository-pester run identity.'
-    }
-    $candidateSnapshot = [IO.Path]::GetFullPath((Get-Location).Path)
-    if ([IO.Path]::GetFileName($candidateSnapshot) -cne 'candidate') {
-        throw 'Core Pester working directory is not the immutable candidate snapshot.'
-    }
-    $runRoot = Split-Path -Parent $candidateSnapshot
-    if ([IO.Path]::GetFileName($runRoot) -cne $coreRunId) {
-        throw 'Core Pester candidate snapshot does not match the trusted run identity.'
-    }
-    $runsRoot = Split-Path -Parent $runRoot
-    if ([IO.Path]::GetFileName($runsRoot) -cne 'runs') {
-        throw 'Core Pester candidate snapshot is outside the canonical runs directory.'
-    }
-    $coreArtifactsRoot = Split-Path -Parent $runsRoot
-    $adapterParent = Split-Path -Parent $coreArtifactsRoot
-    $adapterRoot = [IO.Path]::GetFullPath((Join-Path $adapterParent ".core-v2-adapter-$OuterAdapterRunId"))
-    if (-not (Test-Path -LiteralPath (Join-Path $adapterRoot 'standard-core-adapter-v2.json') -PathType Leaf)) {
-        throw 'Core Pester outer adapter identity does not select the run-owned adapter snapshot.'
-    }
-    $authorityRoot = [IO.Path]::GetFullPath((Join-Path $adapterRoot 'authority'))
-    if (-not (Test-Path -LiteralPath $authorityRoot -PathType Container)) {
-        throw 'Core Pester run-owned authority snapshot is missing.'
-    }
-    $cursor = $authorityRoot
-    while (-not [string]::IsNullOrWhiteSpace($cursor)) {
-        $entry = Get-Item -LiteralPath $cursor -Force -ErrorAction Stop
-        if ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) {
-            throw 'Core Pester run-owned authority snapshot contains a reparse ancestor.'
-        }
-        $parent = Split-Path -Parent $cursor
-        if ($parent -ceq $cursor) { break }
-        $cursor = $parent
-    }
-    return $authorityRoot
-}
-
 $verifiedAuthoritySnapshotRoot = Get-VerifiedCoreAuthoritySnapshotPath -OuterAdapterRunId $CandidateAuthorityAdapterRunId
 $previousCandidateAuthorityRoot = [Environment]::GetEnvironmentVariable('SYP154_CANDIDATE_AUTHORITY_ROOT', 'Process')
 $testRoot = Join-Path ([IO.Path]::GetFullPath((Get-Location).Path)) 'tests'

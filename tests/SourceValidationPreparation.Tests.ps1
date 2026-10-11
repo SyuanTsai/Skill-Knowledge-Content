@@ -4,6 +4,7 @@
 BeforeAll {
     $script:repositoryRoot = Split-Path -Parent $PSScriptRoot
     $script:sourceDriverPath = Join-Path $script:repositoryRoot 'scripts/StandardCoreSourceValidation.ps1'
+    Import-Module -Name (Join-Path $script:repositoryRoot 'scripts/CorePesterIntegrity.psm1') -Force -ErrorAction Stop
     function Get-FileSha256 {
         param([Parameter(Mandatory = $true)][string] $Path)
         return (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant()
@@ -26,32 +27,34 @@ BeforeAll {
         }
     }
 
+    function New-SourceTestDirectoryReparsePoint {
+        param([Parameter(Mandatory = $true)][string] $Path, [Parameter(Mandatory = $true)][string] $Target)
+
+        if ($IsWindows) {
+            New-Item -ItemType Junction -Path $Path -Target $Target -ErrorAction Stop | Out-Null
+        }
+        else {
+            New-Item -ItemType SymbolicLink -Path $Path -Target $Target -ErrorAction Stop | Out-Null
+        }
+    }
+
     function Invoke-CorePesterAuthorityDependency {
         param(
             [Parameter(Mandatory = $true)][string] $CandidateRoot,
             [Parameter(Mandatory = $true)][string] $CoreRunId,
             [Parameter(Mandatory = $true)][string] $OuterRunId,
-            [Parameter(Mandatory = $true)][string] $ExpectedAuthorityRoot
+            [string] $CheckId = 'repository-pester'
         )
 
-        $names = @('STANDARD_VALIDATION_CORE_RUN_ID', 'STANDARD_VALIDATION_CORE_CHECK_ID', 'KNOWLEDGE_CONTENT_EXPECTED_AUTHORITY_ROOT', 'STANDARD_VALIDATION_BOOTSTRAP_RELEASE_PATH', 'STANDARD_VALIDATION_BOOTSTRAP_COMMAND')
+        $names = @('STANDARD_VALIDATION_CORE_RUN_ID', 'STANDARD_VALIDATION_CORE_CHECK_ID')
         $prior = @{}
         foreach ($name in $names) { $prior[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
         $previousLocation = Get-Location
         try {
             [Environment]::SetEnvironmentVariable('STANDARD_VALIDATION_CORE_RUN_ID', $CoreRunId, 'Process')
-            [Environment]::SetEnvironmentVariable('STANDARD_VALIDATION_CORE_CHECK_ID', 'repository-pester', 'Process')
-            [Environment]::SetEnvironmentVariable('KNOWLEDGE_CONTENT_EXPECTED_AUTHORITY_ROOT', $ExpectedAuthorityRoot, 'Process')
+            [Environment]::SetEnvironmentVariable('STANDARD_VALIDATION_CORE_CHECK_ID', $CheckId, 'Process')
             Set-Location -LiteralPath $CandidateRoot
-            $powerShell = [IO.Path]::GetFullPath([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
-            $signalPath = Join-Path $CandidateRoot ("b-$([guid]::NewGuid().ToString('N')).sig")
-            [IO.File]::WriteAllText($signalPath, 'release' + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
-            [Environment]::SetEnvironmentVariable('STANDARD_VALIDATION_BOOTSTRAP_RELEASE_PATH', $signalPath, 'Process')
-            [Environment]::SetEnvironmentVariable('STANDARD_VALIDATION_BOOTSTRAP_COMMAND', $powerShell, 'Process')
-            $output = @(& $powerShell -NoProfile -NonInteractive -File (Join-Path $script:repositoryRoot 'scripts/Invoke-CorePester.ps1') `
-                -CandidateAuthorityAdapterRunId $OuterRunId 2>&1)
-            $exitCode = $LASTEXITCODE
-            return [pscustomobject]@{ exitCode = $exitCode; output = ($output -join "`n") }
+            return Get-VerifiedCoreAuthoritySnapshotPath -OuterAdapterRunId $OuterRunId
         }
         finally {
             Set-Location -LiteralPath $previousLocation
@@ -218,9 +221,9 @@ Describe 'Knowledge Content protected source driver preparation' {
         $route | Should -BeLessThan $activeGate
     }
 
-    # Scenario: source Core Pester runs from its real immutable candidate snapshot and resolves its authority root using the outer adapter RunId.
-    # Purpose: bind the created parent adapter/authority layout to Invoke-CorePester's actual run-identity path dependency.
-    It 'UnitT80_core_pester_uses_the_exact_run_owned_authority_snapshot_selected_by_parent_adapter' {
+    # Scenario: the production Core Pester authority resolver receives a canonical candidate snapshot and parent adapter layout.
+    # Purpose: verify run/check identity binding, adapter-file selection, and reparse rejection on every supported test host.
+    It 'UnitT80_production_authority_resolver_binds_the_exact_run_owned_snapshot_and_rejects_mismatches' {
         $outerRunId = [guid]::NewGuid().ToString('N')
         $coreRunId = [guid]::NewGuid().ToString('N')
         $artifacts = Join-Path $TestDrive 'core-pester-parent-dependency'
@@ -229,25 +232,40 @@ Describe 'Knowledge Content protected source driver preparation' {
         $authorityRoot = [string]$layout.authorityRoot
         $candidateRoot = Join-Path $artifacts "source-validation-$outerRunId/runs/$coreRunId/candidate"
         [void](New-Item -ItemType Directory -Path $authorityRoot -Force)
-        [void](New-Item -ItemType Directory -Path (Join-Path $candidateRoot 'tests') -Force)
+        [void](New-Item -ItemType Directory -Path $candidateRoot -Force)
         $powerShell = [IO.Path]::GetFullPath([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
         $adapter = New-KnowledgeContentSourceCoreAdapter -PowerShell $powerShell -RunId $outerRunId `
             -ActiveSkillIds @('authority-binding') -SourceValidation ([pscustomobject]@{ mode = 'test-source-validation' })
-        [IO.File]::WriteAllText([string]$layout.adapterPath, ($adapter | ConvertTo-Json -Depth 10 -Compress), [Text.UTF8Encoding]::new($false))
+        $adapterPath = [string]$layout.adapterPath
+        [IO.File]::WriteAllText($adapterPath, ($adapter | ConvertTo-Json -Depth 10 -Compress), [Text.UTF8Encoding]::new($false))
         @($adapter.checks | Where-Object { [string]$_.id -ceq 'repository-pester' })[0].arguments[-1] | Should -BeExactly $outerRunId
-        $pesterTest = @'
-Describe 'source Pester authority root binding' {
-    It 'receives the authority directory selected by the outer adapter RunId' {
-        [IO.Path]::GetFullPath($env:SYP154_CANDIDATE_AUTHORITY_ROOT) | Should -BeExactly ([IO.Path]::GetFullPath($env:KNOWLEDGE_CONTENT_EXPECTED_AUTHORITY_ROOT))
-    }
-}
-'@
-        [IO.File]::WriteAllText((Join-Path $candidateRoot 'tests/AuthorityRoot.Tests.ps1'), $pesterTest, [Text.UTF8Encoding]::new($false))
+        $resolvedAuthorityRoot = Invoke-CorePesterAuthorityDependency -CandidateRoot $candidateRoot -CoreRunId $coreRunId -OuterRunId $outerRunId
+        $resolvedAuthorityRoot | Should -BeExactly ([IO.Path]::GetFullPath($authorityRoot))
 
-        $result = Invoke-CorePesterAuthorityDependency -CandidateRoot $candidateRoot -CoreRunId $coreRunId -OuterRunId $outerRunId -ExpectedAuthorityRoot $authorityRoot
-        $result.exitCode | Should -Be 0 -Because $result.output
-        $result.output | Should -Match '"report":"standard-core-pester-result-v1"'
-        $result.output | Should -Match '"passed":1'
+        $wrongCoreRunId = [guid]::NewGuid().ToString('N')
+        { Invoke-CorePesterAuthorityDependency -CandidateRoot $candidateRoot -CoreRunId $wrongCoreRunId -OuterRunId $outerRunId } |
+            Should -Throw '*candidate snapshot does not match the trusted run identity*'
+        { Invoke-CorePesterAuthorityDependency -CandidateRoot $candidateRoot -CoreRunId $coreRunId -OuterRunId ([guid]::NewGuid().ToString('N')) } |
+            Should -Throw '*outer adapter identity does not select the run-owned adapter snapshot*'
+        { Invoke-CorePesterAuthorityDependency -CandidateRoot $candidateRoot -CoreRunId $coreRunId -OuterRunId $outerRunId -CheckId 'repository-knowledge' } |
+            Should -Throw '*trusted repository-pester run identity*'
+
+        Remove-Item -LiteralPath $adapterPath -Force
+        { Invoke-CorePesterAuthorityDependency -CandidateRoot $candidateRoot -CoreRunId $coreRunId -OuterRunId $outerRunId } |
+            Should -Throw '*outer adapter identity does not select the run-owned adapter snapshot*'
+        [IO.File]::WriteAllText($adapterPath, ($adapter | ConvertTo-Json -Depth 10 -Compress), [Text.UTF8Encoding]::new($false))
+
+        $reparseTarget = Join-Path $artifacts 'reparse-authority-target'
+        [void](New-Item -ItemType Directory -Path $reparseTarget -Force)
+        Remove-Item -LiteralPath $authorityRoot -Force
+        try {
+            New-SourceTestDirectoryReparsePoint -Path $authorityRoot -Target $reparseTarget
+            { Invoke-CorePesterAuthorityDependency -CandidateRoot $candidateRoot -CoreRunId $coreRunId -OuterRunId $outerRunId } |
+                Should -Throw '*authority snapshot contains a reparse ancestor*'
+        }
+        finally {
+            if (Test-Path -LiteralPath $authorityRoot) { Remove-Item -LiteralPath $authorityRoot -Force }
+        }
     }
 
     # Scenario: the source adapter and its Pester child are generated from the exact source wrapper and resolver receipt identities.
