@@ -6,6 +6,31 @@ Describe 'Knowledge child uses central package tool report rules' {
         $script:validationSource = Get-Content -LiteralPath $validationPath -Raw
         $script:childMatch = [regex]::Match($script:validationSource, '(?ms)^\$childRunnerText = @''\r?\n(?<body>.*?)^''@')
         if (-not $script:childMatch.Success) { throw 'Knowledge child runner source was not found.' }
+        $script:candidateRoot = Split-Path -Parent $PSScriptRoot
+        function Get-KnowledgeCandidateBytesFingerprint {
+            param([Parameter(Mandatory = $true)][string] $Root)
+            $rows = @(
+                Get-ChildItem -LiteralPath $Root -File -Recurse -Force -ErrorAction Stop |
+                    Where-Object { ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0 } |
+                    Sort-Object -Property FullName -CaseSensitive |
+                    ForEach-Object {
+                        $relative = [IO.Path]::GetRelativePath($Root, $_.FullName).Replace([IO.Path]::DirectorySeparatorChar, '/')
+                        "$relative=$((Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant())"
+                    }
+            )
+            return $rows -join "`n"
+        }
+        function Invoke-KnowledgeTestChild {
+            param([Parameter(Mandatory = $true)][string[]] $Arguments)
+            $previousLocation = Get-Location
+            try {
+                Set-Location -LiteralPath $script:testRoot
+                $output = @(& $script:pwshPath @Arguments 2>&1)
+                $exitCode = $LASTEXITCODE
+                return [pscustomobject]@{ exitCode = $exitCode; output = @($output) }
+            }
+            finally { Set-Location -LiteralPath $previousLocation }
+        }
         $script:testRoot = Join-Path ([IO.Path]::GetTempPath()) ('syp154-report-' + [guid]::NewGuid().ToString('N'))
         $script:skillRoot = Join-Path $script:testRoot 'skills/demo'
         [void](New-Item -ItemType Directory -Path $script:skillRoot -Force)
@@ -58,6 +83,7 @@ Describe 'Knowledge child uses central package tool report rules' {
         $script:toolchainPath = Join-Path $script:testRoot 'toolchain.json'
         [IO.File]::WriteAllText($script:toolchainPath, ($toolchain | ConvertTo-Json -Compress))
         $script:toolchainHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $script:toolchainPath).Hash.ToLowerInvariant()
+        $script:candidateFingerprintBefore = Get-KnowledgeCandidateBytesFingerprint -Root $script:candidateRoot
     }
 
     BeforeEach {
@@ -78,7 +104,9 @@ Describe 'Knowledge child uses central package tool report rules' {
         if ($actualParent -cne $expectedParent -or (Split-Path -Leaf $script:testRoot) -cnotmatch '^syp154-report-[0-9a-f]{32}$') {
             throw 'Integration test cleanup root is not the allocated temporary directory.'
         }
+        $candidateRootChanged = (Get-KnowledgeCandidateBytesFingerprint -Root $script:candidateRoot) -cne $script:candidateFingerprintBefore
         Remove-Item -LiteralPath $script:testRoot -Recurse -Force
+        if ($candidateRootChanged) { throw 'Native report integration tests changed candidate-root file bytes or inventory.' }
     }
 
     # Scenario: a package tool emits a success report with a string error count.
@@ -87,9 +115,10 @@ Describe 'Knowledge child uses central package tool report rules' {
         $reportPath = Join-Path $script:testRoot 'report.json'
         [IO.File]::WriteAllText($reportPath, (@{ skill_dir = $script:skillRoot; passed = $true; errors = '0'; warnings = 0; results = @(@{ level = 'pass'; file = 'SKILL.md' }) } | ConvertTo-Json -Depth 10 -Compress))
         $env:SYP154_TEST_TOOL_REPORT = $reportPath
-        $output = & $script:pwshPath -NoProfile -NonInteractive -File $script:childPath -Mode skill-validator -ToolchainPath $script:toolchainPath -ToolchainSha256 $script:toolchainHash 2>&1
-        $LASTEXITCODE | Should -Be 1
-        ($output -join "`n") | Should -Match 'typed nonnegative integer'
+        $child = Invoke-KnowledgeTestChild -Arguments @('-NoProfile', '-NonInteractive', '-File', $script:childPath, '-Mode', 'skill-validator', '-ToolchainPath', $script:toolchainPath, '-ToolchainSha256', $script:toolchainHash)
+        $child.exitCode | Should -Be 1
+        ($child.output -join "`n") | Should -Match 'typed nonnegative integer'
+        Test-Path -LiteralPath (Join-Path $script:testRoot 'native-skill-validator-demo.json') | Should -BeTrue
     }
 
     # Scenario: the same candidate-bound tool returns typed zero counts.
@@ -98,11 +127,12 @@ Describe 'Knowledge child uses central package tool report rules' {
         $reportPath = Join-Path $script:testRoot 'report.json'
         [IO.File]::WriteAllText($reportPath, (@{ skill_dir = $script:skillRoot; passed = $true; errors = 0; warnings = 0; results = @(@{ level = 'pass'; file = 'SKILL.md' }) } | ConvertTo-Json -Depth 10 -Compress))
         $env:SYP154_TEST_TOOL_REPORT = $reportPath
-        $output = & $script:pwshPath -NoProfile -NonInteractive -File $script:childPath -Mode skill-validator -ToolchainPath $script:toolchainPath -ToolchainSha256 $script:toolchainHash 2>&1
-        $LASTEXITCODE | Should -Be 0 -Because ($output -join "`n")
-        $envelope = ($output -join "`n") | ConvertFrom-Json -Depth 10
+        $child = Invoke-KnowledgeTestChild -Arguments @('-NoProfile', '-NonInteractive', '-File', $script:childPath, '-Mode', 'skill-validator', '-ToolchainPath', $script:toolchainPath, '-ToolchainSha256', $script:toolchainHash)
+        $child.exitCode | Should -Be 0 -Because ($child.output -join "`n")
+        $envelope = ($child.output -join "`n") | ConvertFrom-Json -Depth 10
         $envelope.decision | Should -Be 'PASS'
         $envelope.candidateIdentity | Should -Be ('a' * 64)
+        Test-Path -LiteralPath (Join-Path $script:testRoot 'native-skill-validator-demo.json') | Should -BeTrue
     }
 
     # Scenario: a clean report belongs to a neighboring candidate root.
@@ -113,9 +143,10 @@ Describe 'Knowledge child uses central package tool report rules' {
         $reportPath = Join-Path $script:testRoot 'report.json'
         [IO.File]::WriteAllText($reportPath, (@{ skill_dir = $wrongRoot; passed = $true; errors = 0; warnings = 0; results = @(@{ level = 'pass'; file = 'SKILL.md' }) } | ConvertTo-Json -Depth 10 -Compress))
         $env:SYP154_TEST_TOOL_REPORT = $reportPath
-        $output = & $script:pwshPath -NoProfile -NonInteractive -File $script:childPath -Mode skill-validator -ToolchainPath $script:toolchainPath -ToolchainSha256 $script:toolchainHash 2>&1
-        $LASTEXITCODE | Should -Be 1
-        ($output -join "`n") | Should -Match 'report root does not match candidate Skill'
+        $child = Invoke-KnowledgeTestChild -Arguments @('-NoProfile', '-NonInteractive', '-File', $script:childPath, '-Mode', 'skill-validator', '-ToolchainPath', $script:toolchainPath, '-ToolchainSha256', $script:toolchainHash)
+        $child.exitCode | Should -Be 1
+        ($child.output -join "`n") | Should -Match 'report root does not match candidate Skill'
+        Test-Path -LiteralPath (Join-Path $script:testRoot 'native-skill-validator-demo.json') | Should -BeTrue
     }
 
     # Scenario: the same report is supplied with a forged central runner digest.
@@ -128,9 +159,9 @@ Describe 'Knowledge child uses central package tool report rules' {
         $toolchain.centralRunnerSha256 = '0' * 64
         [IO.File]::WriteAllText($script:toolchainPath, ($toolchain | ConvertTo-Json -Compress))
         $forgedToolchainHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $script:toolchainPath).Hash.ToLowerInvariant()
-        $output = & $script:pwshPath -NoProfile -NonInteractive -File $script:childPath -Mode skill-validator -ToolchainPath $script:toolchainPath -ToolchainSha256 $forgedToolchainHash 2>&1
-        $LASTEXITCODE | Should -Be 1
-        ($output -join "`n") | Should -Match 'central validation runner changed or is missing'
+        $child = Invoke-KnowledgeTestChild -Arguments @('-NoProfile', '-NonInteractive', '-File', $script:childPath, '-Mode', 'skill-validator', '-ToolchainPath', $script:toolchainPath, '-ToolchainSha256', $forgedToolchainHash)
+        $child.exitCode | Should -Be 1
+        ($child.output -join "`n") | Should -Match 'central validation runner changed or is missing'
     }
     # Scenario: the reviewed new authority input is supplied to the actual candidate driver guard.
     # Purpose: prove the extracted real driver guard accepts a valid pin before

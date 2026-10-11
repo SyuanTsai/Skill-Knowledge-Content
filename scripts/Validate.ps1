@@ -10,6 +10,11 @@ param(
         else { [IO.Path]::GetTempPath() }
     ),
     [string] $AuthorityArchivePath,
+    [string] $AuthorityRepositoryRoot,
+    [string] $TrustedToolRoot,
+    [switch] $PrepareSourceTools,
+    [switch] $SourceValidation,
+    [string] $SourceToolsPath,
     [string] $BaseCommit,
     [string] $ExpectedGoRuntimeVersion = $env:STANDARD_GO_RUNTIME_VERSION,
     [string] $OutputPath,
@@ -421,11 +426,29 @@ function New-Envelope {
         activeSkills = @($ActiveSkills)
         findings = @($Findings)
     }
+    if ($Mode -cin @('skill-validator', 'skill-tools', 'static')) { $value.nativeReports = @($script:NativeReports) }
     if ($null -ne $Additional) {
         foreach ($key in $Additional.Keys) { $value[$key] = $Additional[$key] }
     }
     [Console]::Out.WriteLine(($value | ConvertTo-Json -Depth 100 -Compress))
     exit 0
+}
+$script:NativeReports = @()
+function Add-NativeReport {
+    param([Parameter(Mandatory = $true)][string] $Command, [Parameter(Mandatory = $true)][string[]] $Arguments,
+        [Parameter(Mandatory = $true)][int] $ExitCode, [Parameter(Mandatory = $true)][string] $Path,
+        [Parameter(Mandatory = $true)][string] $SkillId)
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) { throw 'Native tool did not create its raw report file.' }
+    $script:NativeReports += [pscustomobject][ordered]@{
+        skillId = $SkillId
+        command = [IO.Path]::GetFullPath($Command)
+        commandSha256 = Get-FileSha256 -Path $Command
+        arguments = @($Arguments)
+        exitCode = $ExitCode
+        path = $fullPath
+        sha256 = Get-FileSha256 -Path $fullPath
+    }
 }
 function Invoke-NativeJson {
     param([Parameter(Mandatory = $true)][string] $Command, [Parameter(Mandatory = $true)][string[]] $Arguments, [Parameter(Mandatory = $true)][string] $Context)
@@ -434,8 +457,11 @@ function Invoke-NativeJson {
         $lines = @(& $Command @Arguments 2> $stderrPath)
         $exitCode = $LASTEXITCODE
         $stderr = if (Test-Path -LiteralPath $stderrPath) { Get-Content -LiteralPath $stderrPath -Raw } else { '' }
-        if ($exitCode -ne 0) { throw "$Context returned exit code $exitCode. $stderr" }
         $json = ($lines -join "`n").Trim()
+        $nativePath = Join-Path (Get-Location) ("native-$Mode-$($env:STANDARD_VALIDATION_SKILL_ID).json")
+        [IO.File]::WriteAllText($nativePath, $json, [Text.UTF8Encoding]::new($false))
+        Add-NativeReport -Command $Command -Arguments $Arguments -ExitCode $exitCode -Path $nativePath -SkillId ([string]$env:STANDARD_VALIDATION_SKILL_ID)
+        if ($exitCode -ne 0) { throw "$Context returned exit code $exitCode. $stderr" }
         if ([string]::IsNullOrWhiteSpace($json)) { throw "$Context produced no JSON output." }
         return ($json | ConvertFrom-Json -Depth 100)
     }
@@ -593,12 +619,18 @@ try {
         }
         'static' {
             Assert-FileIdentity -Path ([string]$toolchain.skillSpectorPath) -Sha256 ([string]$toolchain.skillSpectorSha256) -Context 'SkillSpector executable'
+            # Keep Python import caches outside the frozen installed tool closure.
+            $env:PYTHONDONTWRITEBYTECODE = '1'
             $findings = @()
             foreach ($skillId in $activeSkills) {
                 $skillRoot = Get-SkillRoot -SkillId $skillId
                 $inventory = Get-InventoryPaths -SkillRoot $skillRoot
                 $reportPath = Join-Path (Get-Location) ("skillspector-$skillId.json")
-                & ([string]$toolchain.skillSpectorPath) scan $skillRoot --no-llm --format json --output $reportPath | Out-Null
+                $nativeArguments = @('scan', $skillRoot, '--no-llm', '--format', 'json', '--output', $reportPath)
+                & ([string]$toolchain.skillSpectorPath) @nativeArguments | Out-Null
+                $nativeExit = $LASTEXITCODE
+                Add-NativeReport -Command ([string]$toolchain.skillSpectorPath) -Arguments $nativeArguments -ExitCode $nativeExit -Path $reportPath -SkillId $skillId
+                if ($nativeExit -ne 0) { throw "SkillSpector returned exit code $nativeExit for '$skillId'." }
                 $report = Read-Json -Path $reportPath -Context "SkillSpector report for '$skillId'"
                 $findings += Assert-SkillSpectorReport -Report $report -SkillRoot $skillRoot -SkillId $skillId -Inventory $inventory
             }
@@ -662,6 +694,24 @@ try {
     }
     else { [IO.Path]::GetFullPath($RepositoryRoot) }
     if (-not (Test-Path -LiteralPath $repoRoot -PathType Container)) { throw "RepositoryRoot does not exist: $repoRoot" }
+
+    . (Join-Path $PSScriptRoot 'StandardCoreSourceValidation.ps1')
+    $candidateAuthority = $null
+    if ($SourceValidation) {
+        $candidateConfig = Read-JsonFile -Path (Join-Path $repoRoot 'config/standard-v1.json') -Context 'candidate config/standard-v1.json'
+        $candidateAuthority = $candidateConfig.authority
+    }
+    $sourceRoute = Resolve-KnowledgeContentSourceRoute -PrepareSourceTools:$PrepareSourceTools -SourceValidation:$SourceValidation `
+        -SourceToolsPath $SourceToolsPath -AuthorityRepositoryRoot $AuthorityRepositoryRoot -TrustedToolRoot $TrustedToolRoot `
+        -AuthorityArchivePath $AuthorityArchivePath -CandidateAuthority $candidateAuthority -BoundParameters $PSBoundParameters
+    if ([string]$sourceRoute.mode -cne 'ordinary') {
+        $sourceExitCode = Invoke-KnowledgeContentSourcePurpose -Mode ([string]$sourceRoute.mode) -RepositoryRoot $repoRoot `
+            -ArtifactsRoot $ArtifactsRoot -SourceToolsPath $SourceToolsPath -AuthorityRepositoryRoot $AuthorityRepositoryRoot `
+            -TrustedToolRoot $TrustedToolRoot -AuthorityPin $sourceRoute.authority -CandidateAuthority $candidateAuthority `
+            -BaseCommit $BaseCommit -ExpectedGoRuntimeVersion $ExpectedGoRuntimeVersion -OutputPath $OutputPath -TimeoutSeconds $TimeoutSeconds
+        exit [int]$sourceExitCode
+    }
+
     $gitPath = Get-ResolvedGitPath
     $pwshPath = Get-ResolvedPowerShellPath
     $candidateCommit = Resolve-GitRevision -GitPath $gitPath -Root $repoRoot -Revision 'HEAD' -Context 'Candidate revision'
