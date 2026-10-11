@@ -35,9 +35,16 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $adapter.schemaVersion | Should -Be 1
         $adapter.standardVersion | Should -Be 'v1'
         $adapter.authority.repository | Should -Be 'https://github.com/SyuanTsai/SyuanTsai-AI-Instructions.git'
-        $adapter.authority.commit | Should -Be '8aabd22694a05771f98639f6d726cc9a620eb94b'
-        $adapter.authority.archiveSha256 | Should -Be 'd92df1a8f0aa342970dc9c66a77b6211955b4708de12119cb7f9a360fd265311'
+        $adapter.authority.commit | Should -Be 'ff85d5f80fe795b96354e753074b5ce59ad04ecd'
+        $adapter.authority.archiveSha256 | Should -Be '3dc38613f2e2316ad8fcc79d4bf48d0b03fd8398f8dacc72d156abcbce95ea9d'
         @($adapter.PSObject.Properties.Name) | Should -Not -Contain 'security'
+        @($adapter.authority.files).Count | Should -Be 32
+        @($adapter.authority.files.path) | Should -Contain 'docs/standards/standard-core-validation-v2.json'
+        @($adapter.authority.files.path) | Should -Contain 'docs/standards/schemas/standard-core-adapter-v2.schema.json'
+        @($adapter.authority.files.path) | Should -Contain 'docs/standards/schemas/standard-core-evidence-v2.schema.json'
+        @($adapter.authority.files.path) | Should -Contain 'docs/standards/third-party-raw-skill-sources.md'
+        @($adapter.authority.files.path) | Should -Contain 'docs/standards/schemas/third-party-raw-skill-source-v1.schema.json'
+        @($adapter.authority.files.path) | Should -Contain 'docs/standards/examples/third-party-raw-skill-source-v1.json'
         @($adapter.authority.files.path) | Should -Contain 'docs/standards/README.md'
         @($adapter.authority.files.path) | Should -Contain 'docs/standards/managed-skill-lifecycle.md'
         @($adapter.authority.files.path) | Should -Contain 'docs/standards/schemas/managed-skill-lifecycle-v1.schema.json'
@@ -77,7 +84,9 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $repositoryTests | Should -Match 'Test-Repository\.ps1''\)\s+-ReadOnlySnapshot'
     }
 
-    It 'routes CI through the canonical validator without a second installer policy' {
+    # Scenario: the protected Windows workflow receives PR, push, or manual-dispatch events.
+    # Purpose: bind one canonical validator to exact event revisions, raw checkout bytes, verified runtimes, and existing status contexts.
+    It 'UnitT50_routes_protected_source_CI_through_the_canonical_validator' {
         $workflowPath = Join-Path $script:RepositoryRoot '.github/workflows/validate.yml'
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
         $workflow | Should -Match 'scripts/Validate\.ps1'
@@ -85,6 +94,42 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $workflow | Should -Match 'actions/checkout@[0-9a-f]{40}'
         $workflow | Should -Match 'uses:\s*\*checkout-action-reference'
         $workflow | Should -Match 'actions/setup-go@[0-9a-f]{40}'
+        $workflow | Should -Match 'runs-on:\s+windows-latest'
+        $workflow | Should -Match '(?s)Preserve committed bytes before checkout.*?core\.autocrlf false.*?Checkout exact event candidate'
+        $workflow | Should -Match 'github\.event\.pull_request\.head\.sha\s*\|\|\s*github\.sha'
+        $workflow | Should -Match 'PULL_REQUEST_BASE_SHA:\s*\$\{\{\s*github\.event\.pull_request\.base\.sha\s*\}\}'
+        $workflow | Should -Match 'PUSH_BEFORE_SHA:\s*\$\{\{\s*github\.event\.before\s*\}\}'
+        $workflow | Should -Match 'DISPATCH_BASE_SHA:\s*\$\{\{\s*inputs\.base_commit\s*\}\}'
+        $workflow | Should -Match 'Checkout exact event-base protected driver'
+        $workflow | Should -Match 'ref:\s+\$\{\{\s*github\.event\.pull_request\.base\.sha\s*\|\|\s*github\.event\.before\s*\|\|\s*inputs\.base_commit\s*\}\}'
+        $workflow | Should -Match 'KC_DRIVER_ROOT'
+        $workflow | Should -Match 'Protected driver HEAD differs from the exact event base SHA'
+        $workflow | Should -Match 'Protected driver checkout is not clean'
+        $workflow | Should -Match 'foreach \(\$root in @\(\$candidateRoot, \$driverRoot, \$authorityRoot\)\)'
+        $workflow | Should -Match 'ref:\s+ff85d5f80fe795b96354e753074b5ce59ad04ecd'
+        $workflow | Should -Match 'PowerShell/PowerShell/releases/latest'
+        $workflow | Should -Match 'Get-AuthenticodeSignature'
+        $workflow | Should -Match 'scripts/Prepare-PesterRuntime\.ps1'
+        $workflow | Should -Match '\$env:RUN_OWNED_ROOT\s*=\s*\$env:KC_OWNED_ROOT'
+        $workflow | Should -Match 'PrepareSourceTools'
+        $workflow | Should -Match 'SourceValidation'
+        $workflow | Should -Match 'Join-Path \$env:KC_DRIVER_ROOT ''scripts/Prepare-PesterRuntime\.ps1'''
+        $workflow | Should -Match 'Join-Path \$env:KC_DRIVER_ROOT ''scripts/Validate\.ps1'''
+        $workflow | Should -Not -Match 'Join-Path \$env:KC_CANDIDATE_ROOT ''scripts/(?:Validate|Prepare-PesterRuntime)\.ps1'''
+        $workflow | Should -Match 'Assert-KnowledgeContentPreparedAuthorityCheckout'
+        $workflow | Should -Match 'Assert-StandardCoreSourceCheckReport -Report \$report'
+        $workflow | Should -Match '\-ExpectedSourceRevision \$env:KC_HEAD_COMMIT -ExpectedBaseRevision \$env:KC_BASE_COMMIT'
+        $workflow | Should -Match '\-ExpectedEventName \$env:GITHUB_EVENT_NAME -ArtifactsRoot \$sourceValidationRoot'
+        $workflow | Should -Match 'observedProcessExitCode -ne 0\)'
+        $workflow | Should -Match '\$observedSourceExitCode = \[int\]\$phaseTiming\.observedProcessExitCode'
+        $workflow | Should -Match '\-OutputPath \$sourceReport -ProcessExitCode \$observedSourceExitCode'
+        $workflow | Should -Match 'sourceToolsSha256Before -cne \[string\]\$env:KC_SOURCE_TOOLS_SHA256'
+        $workflow | Should -Match 'sourceToolsSha256After -cne \$sourceToolsSha256Before'
+        $workflow | Should -Match 'sourceReportSha256After -cne \$sourceReportSha256Before'
+        $workflow | Should -Match 'source-workflow-timing-\$runKey\.json'
+        $workflow | Should -Match 'setupAndInstallSeconds'
+        $workflow | Should -Match 'twentyMinuteTargetMet'
+        $workflow | Should -Match 'actions/upload-artifact@[0-9a-f]{40}'
         $workflow | Should -Not -Match '(?m)^\s*(Install-Module|npm install|go install|pip install)\b'
         Test-Path -LiteralPath (Join-Path $script:RepositoryRoot '.github/workflows/skill-validator.yml') | Should -BeFalse
 
@@ -95,6 +140,34 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
             $workflow | Should -Match $pattern
         }
         $workflow | Should -Not -Match '(?ms)repository-contract:.*?Run .*skill-validator|skill-validator:.*?Run .*skill-tools'
+    }
+
+    # Scenario: the active ff85 pin makes ordinary v1 validation intentionally incomplete.
+    # Purpose: explain the two purposes while keeping the script path as the sole public validation command.
+    It 'UnitT60_documents_both_protected_purposes_under_the_single_canonical_entrypoint' {
+        $readme = Get-Content -LiteralPath (Join-Path $script:RepositoryRoot 'README.md') -Raw
+        $release = Get-Content -LiteralPath (Join-Path $script:RepositoryRoot 'RELEASING.md') -Raw
+        foreach ($document in @($readme, $release)) {
+            $document | Should -Match 'scripts/Validate\.ps1'
+            $document | Should -Match '-PrepareSourceTools'
+            $document | Should -Match '-SourceValidation'
+            $document | Should -Match 'ff85d5f80fe795b96354e753074b5ce59ad04ecd'
+            $document | Should -Match 'releaseEligible=false'
+            $document | Should -Match 'reverts the entire adoption'
+            $document | Should -Match '\.github/workflows/validate\.yml'
+            $document | Should -Match 'config/standard-v1\.json'
+            $document | Should -Match '8aabd22694a05771f98639f6d726cc9a620eb94b'
+            $document | Should -Match 'd92df1a8f0aa342970dc9c66a77b6211955b4708de12119cb7f9a360fd265311'
+            $document | Should -Match '26-file hash inventory'
+        }
+        $readme | Should -Match 'Protected local run'
+        $readme | Should -Match '\$DriverRoot'
+        $readme | Should -Match '\$AuthorityRoot'
+        $readme | Should -Match '\$BaseCommit'
+        $readme | Should -Match '\$env:RUN_OWNED_ROOT'
+        $readme | Should -Match 'Prepare-PesterRuntime\.ps1'
+        $readme | Should -Not -Match 'scripts/(?:Invoke-StandardValidation|Test-Repository)\.ps1'
+        $release | Should -Not -Match 'scripts/(?:Invoke-StandardValidation|Test-Repository)\.ps1'
     }
 
     It 'keeps public validation documentation on the canonical entry point' {

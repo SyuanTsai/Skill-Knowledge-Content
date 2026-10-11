@@ -168,13 +168,6 @@ Describe 'Knowledge child uses central package tool report rules' {
     # counting its rejection cases as coverage.
     It 'UnitT35_accepts_exact_candidate_authority_config' {
         $config = Get-Content -LiteralPath (Join-Path (Split-Path -Parent $PSScriptRoot) 'config/standard-v1.json') -Raw | ConvertFrom-Json
-        $config.authority.commit = '8aabd22694a05771f98639f6d726cc9a620eb94b'
-        $config.authority.archiveUrl = 'https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/8aabd22694a05771f98639f6d726cc9a620eb94b'
-        $config.authority.archiveSha256 = 'd92df1a8f0aa342970dc9c66a77b6211955b4708de12119cb7f9a360fd265311'
-        ($config.authority.files | Where-Object path -CEQ 'scripts/Resolve-PythonWheelClosure.py').sha256 = 'd209c973f331fdbb82a4d546bda18b1d485bcd1e446dd446b6d8bc4360b5ce35'
-        ($config.authority.files | Where-Object path -CEQ 'scripts/Resolve-StandardValidationTool.ps1').sha256 = '86540ff07e1b73177d179ae6a9ee2f0fef8029e27286604d68a9a98d0d205ec2'
-        ($config.authority.files | Where-Object path -CEQ 'docs/standards/standard-validation-contract-v1.json').sha256 = '6fa3233e86ec7918aebf1413d41a6d1712f55eb2d1b09262fe18e53ddfbcb8cf'
-        ($config.authority.files | Where-Object path -CEQ 'scripts/Invoke-StandardValidation.ps1').sha256 = 'c127309958226417291b512d633caa2120bbd12a663c98fff1d63106cf5a2677'
         $prefix = $script:validationSource.Substring(0, $script:childMatch.Index)
         & {
             param($DriverPrefix, $CandidateConfig)

@@ -4,6 +4,7 @@
 BeforeAll {
     $script:repositoryRoot = Split-Path -Parent $PSScriptRoot
     $script:sourceDriverPath = Join-Path $script:repositoryRoot 'scripts/StandardCoreSourceValidation.ps1'
+    $script:verifiedPowerShellExecutable = [IO.Path]::GetFullPath([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
     Import-Module -Name (Join-Path $script:repositoryRoot 'scripts/CorePesterIntegrity.psm1') -Force -ErrorAction Stop
     function Get-FileSha256 {
         param([Parameter(Mandatory = $true)][string] $Path)
@@ -64,18 +65,24 @@ BeforeAll {
 }
 
 Describe 'Knowledge Content protected source driver preparation' {
-    # Scenario: the active public config still names the reviewed 8a authority while the driver stores the merged ff85 contract.
-    # Purpose: preserve the current required gate and expose the exact prepared tuple without changing the active pin.
+    # Scenario: the active public config and the protected source driver select the same reviewed ff85 authority.
+    # Purpose: bind the active Standard v1 pin to the complete 32-file prepared source authority.
     It 'UnitT00_preserves_active_pin_and_returns_exact_32_file_ff85_pin' {
         $config = Get-Content -LiteralPath (Join-Path $script:repositoryRoot 'config/standard-v1.json') -Raw | ConvertFrom-Json -Depth 20
-        $config.authority.commit | Should -Be '8aabd22694a05771f98639f6d726cc9a620eb94b'
-        $config.authority.archiveSha256 | Should -Be 'd92df1a8f0aa342970dc9c66a77b6211955b4708de12119cb7f9a360fd265311'
+        $config.authority.commit | Should -Be 'ff85d5f80fe795b96354e753074b5ce59ad04ecd'
+        $config.authority.archiveSha256 | Should -Be '3dc38613f2e2316ad8fcc79d4bf48d0b03fd8398f8dacc72d156abcbce95ea9d'
 
         $pin = Get-KnowledgeContentPreparedAuthorityPin
         $pin.repository | Should -Be 'https://github.com/SyuanTsai/SyuanTsai-AI-Instructions.git'
         $pin.commit | Should -Be 'ff85d5f80fe795b96354e753074b5ce59ad04ecd'
         $pin.archiveUrl | Should -Be 'https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/ff85d5f80fe795b96354e753074b5ce59ad04ecd'
         $pin.archiveSha256 | Should -Be '3dc38613f2e2316ad8fcc79d4bf48d0b03fd8398f8dacc72d156abcbce95ea9d'
+        @($config.authority.files).Count | Should -Be 32
+        for ($index = 0; $index -lt $pin.files.Count; $index++) {
+            $path = @($pin.files.Keys)[$index]
+            $config.authority.files[$index].path | Should -BeExactly $path
+            $config.authority.files[$index].sha256 | Should -BeExactly $pin.files[$path]
+        }
         @($pin.files.Keys).Count | Should -Be 32
         @($pin.files.Keys | Sort-Object -Unique -CaseSensitive).Count | Should -Be 32
         $pin.files['docs/standards/standard-core-validation-v2.json'] | Should -Be '2ba91aec827a642517fd90d294524e0dfc3fed9ae19c27d867d442d73b4915d6'
@@ -161,7 +168,7 @@ Describe 'Knowledge Content protected source driver preparation' {
     }
 
     # Scenario: setup and execution are requested separately with all required roots and paths.
-    # Purpose: permit setup against the preserved active config and execution only against the complete prepared pin.
+    # Purpose: permit setup and execution against the same complete active ff85 pin.
     It 'UnitT45_accepts_complete_separate_setup_and_execution_requests' {
         { Assert-KnowledgeContentSourceRequest -PrepareSourceTools -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' } | Should -Not -Throw
         $authority = New-PreparedAuthorityCandidate
@@ -174,13 +181,29 @@ Describe 'Knowledge Content protected source driver preparation' {
         { Assert-KnowledgeContentSourceRequest -PrepareSourceTools -SourceValidation -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' } | Should -Throw '*separate setup and execution*'
     }
 
-    # Scenario: source validation is attempted with the active stage-A 8a config or with missing setup locations.
-    # Purpose: prevent prepared ff85 receipts from being replayed while stage A still selects the 8a authority.
-    It 'UnitT55_rejects_stage_a_authority_and_incomplete_requests' {
+    # Scenario: source validation is requested with the active ff85 config, an obsolete 8a config, or incomplete setup locations.
+    # Purpose: accept only the complete active pin while continuing to reject stale receipts and missing trust roots.
+    It 'UnitT55_accepts_active_ff85_and_rejects_obsolete_or_incomplete_requests' {
         $activeAuthority = (Get-Content -LiteralPath (Join-Path $script:repositoryRoot 'config/standard-v1.json') -Raw | ConvertFrom-Json -Depth 20).authority
-        { Assert-KnowledgeContentSourceRequest -SourceValidation -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' -CandidateAuthority $activeAuthority } | Should -Throw '*commit*'
+        { Assert-KnowledgeContentSourceRequest -SourceValidation -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' -CandidateAuthority $activeAuthority } | Should -Not -Throw
+
+        $obsoleteAuthority = New-PreparedAuthorityCandidate
+        $obsoleteAuthority.commit = '8aabd22694a05771f98639f6d726cc9a620eb94b'
+        { Assert-KnowledgeContentSourceRequest -SourceValidation -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' -CandidateAuthority $obsoleteAuthority } | Should -Throw '*commit*'
         { Assert-KnowledgeContentSourceRequest -SourceValidation -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' -CandidateAuthority (New-PreparedAuthorityCandidate) } | Should -Throw '*SourceToolsPath*'
         { Assert-KnowledgeContentSourceRequest -SourceValidation -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -CandidateAuthority (New-PreparedAuthorityCandidate) } | Should -Throw '*TrustedToolRoot*'
+    }
+
+    # Scenario: the public entry point is invoked without a source purpose while the active config is pinned to ff85.
+    # Purpose: fail closed before ordinary validation can acquire tools or report an unprotected v1 pass.
+    It 'UnitT56_rejects_ordinary_validation_while_ff85_is_active' {
+        $validatePath = Join-Path $script:repositoryRoot 'scripts/Validate.ps1'
+        $output = @(& $script:verifiedPowerShellExecutable -NoProfile -NonInteractive -File $validatePath -RepositoryRoot $script:repositoryRoot 2>&1)
+        $exitCode = $LASTEXITCODE
+        $text = $output -join "`n"
+
+        $exitCode | Should -Be 1
+        $text | Should -Match 'Active ff85 authority requires explicit -PrepareSourceTools or -SourceValidation'
     }
 
     # Scenario: an explicit source request includes the legacy archive path or an ordinary call supplies an empty new root.
@@ -191,9 +214,9 @@ Describe 'Knowledge Content protected source driver preparation' {
         { Resolve-KnowledgeContentSourceRoute -BoundParameters @{ TrustedToolRoot = '' } } | Should -Throw '*only valid for explicit source setup or validation*'
     }
 
-    # Scenario: the active candidate config remains on 8a while setup requests the merged ff85 source authority.
-    # Purpose: route the public setup mode to ff85 without changing the active pin or acquiring tools in this test.
-    It 'UnitT70_routes_public_setup_from_active_8a_to_exact_ff85' {
+    # Scenario: setup and source execution are routed from the active ff85 candidate config.
+    # Purpose: bind both explicit public modes to the exact active tuple without acquiring tools in this test.
+    It 'UnitT70_routes_setup_and_validation_from_active_ff85' {
         $activeAuthority = (Get-Content -LiteralPath (Join-Path $script:repositoryRoot 'config/standard-v1.json') -Raw | ConvertFrom-Json -Depth 20).authority
         $route = Resolve-KnowledgeContentSourceRoute -PrepareSourceTools -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' -CandidateAuthority $activeAuthority -BoundParameters @{
             PrepareSourceTools = $true
@@ -204,11 +227,11 @@ Describe 'Knowledge Content protected source driver preparation' {
 
         $route.mode | Should -BeExactly 'prepare-source-tools'
         $route.authority.commit | Should -BeExactly 'ff85d5f80fe795b96354e753074b5ce59ad04ecd'
-        $activeAuthority.commit | Should -BeExactly '8aabd22694a05771f98639f6d726cc9a620eb94b'
-        { Resolve-KnowledgeContentSourceRoute -SourceValidation -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' -CandidateAuthority $activeAuthority } | Should -Throw '*commit*'
+        $activeAuthority.commit | Should -BeExactly $route.authority.commit
+        { Resolve-KnowledgeContentSourceRoute -SourceValidation -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' -CandidateAuthority $activeAuthority } | Should -Not -Throw
     }
 
-    # Scenario: the public Validate entrypoint accepts an explicit source purpose while its active config is still 8a.
+    # Scenario: the public Validate entrypoint accepts explicit source purposes while its active config uses ff85.
     # Purpose: keep source route selection ahead of the ordinary active-authority gate and bind it to the tested route helper.
     It 'UnitT75_public_entrypoint_uses_prepared_source_routing_before_ordinary_authority_gate' {
         $validatePath = Join-Path $script:repositoryRoot 'scripts/Validate.ps1'
