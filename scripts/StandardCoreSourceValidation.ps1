@@ -462,7 +462,7 @@ function New-KnowledgeContentSourceToolSetup {
         [Parameter(Mandatory = $true)][string] $PowerShell,
         [Parameter(Mandatory = $true)][string] $CandidateRevision,
         [Parameter(Mandatory = $true)][string] $Git,
-        [Parameter(Mandatory = $true)][string] $CandidateRoot,
+        [Parameter(Mandatory = $true)][string] $SourceCheckoutRoot,
         [Parameter(Mandatory = $true)][string] $PreparedPath,
         [Parameter(Mandatory = $true)][string] $GoVersion,
         [Parameter(Mandatory = $true)][int] $LimitSeconds
@@ -518,7 +518,7 @@ function New-KnowledgeContentSourceToolSetup {
     $wrapper = Join-Path $owned 'Invoke-KnowledgeContentValidationChild.ps1'
     Write-KnowledgeContentUtf8CreateNew -Path $wrapper -Text $childRunnerText
     $archive = Join-Path $owned 'candidate.zip'
-    & $Git -C $CandidateRoot archive --format=zip "--output=$archive" $CandidateRevision
+    & $Git -C $SourceCheckoutRoot archive --format=zip "--output=$archive" $CandidateRevision
     if ($LASTEXITCODE -ne 0) { throw 'Source setup could not archive the exact candidate.' }
     $arguments = @('-NoProfile', '-NonInteractive', '-File', $wrapper, '-ToolchainPath', $toolchainPath, '-ToolchainSha256', (Get-FileSha256 -Path $toolchainPath), '-SourceRepository', $script:SourceRepository, '-SourceRevision', $CandidateRevision, '-ArchiveSha256', (Get-FileSha256 -Path $archive))
     $frozenPaths = @($PowerShell, $wrapper, $toolchainPath, $runner, $toolchain.upstreamAdapterValidatorPath, $toolchain.upstreamPolicyPath, $toolchain.skillValidatorPath, [string]$receipts.'skill-tools'.executablePath, $toolchain.skillToolsNodePath, $toolchain.skillToolsEntryPointPath, $toolchain.skillSpectorPath) + @($receiptBindings | ForEach-Object { [string]$_.path })
@@ -776,7 +776,7 @@ function Invoke-KnowledgeContentSourcePurpose {
         if (Test-Path -LiteralPath $preparedPath) { throw 'Source tools output already exists.' }
         $goVersion = Resolve-GoRuntimeVersion -Expected $ExpectedGoRuntimeVersion
         New-KnowledgeContentSourceToolSetup -Root $artifactsRootFull -AuthorityRoot $authorityCheckout.root -AuthorityPin $AuthorityPin `
-            -PowerShell $pwshPath -CandidateRevision $candidateCommit -Git $gitPath -CandidateRoot $repoRoot `
+            -PowerShell $pwshPath -CandidateRevision $candidateCommit -Git $gitPath -SourceCheckoutRoot $repoRoot `
             -PreparedPath $preparedPath -GoVersion $goVersion -LimitSeconds $TimeoutSeconds
         return 0
     }
@@ -822,7 +822,7 @@ function Invoke-KnowledgeContentSourcePurpose {
         $centralRunnerPath = [string]$authoritySnapshot.runnerPath
         . $centralRunnerPath -DefineFunctionsOnly -CandidateRoot $repoRoot -AdapterPath $adapterPath -ArtifactsRoot $coreArtifactsRoot `
             -SourceRepository $script:SourceRepository -SourceRevision $candidateCommit -BaseRevision $baseRevision `
-            -AuthorityRevision ([string]$AuthorityPin.commit)
+            -AuthorityRevision ([string]$AuthorityPin.commit) -RunId $runId -EventName $eventName -TimeoutSeconds $TimeoutSeconds
         $arguments = @(
             '-CandidateRoot', $repoRoot,
             '-AdapterPath', $adapterPath,
