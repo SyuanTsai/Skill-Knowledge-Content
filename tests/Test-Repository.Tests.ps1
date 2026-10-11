@@ -83,13 +83,29 @@ Describe 'Knowledge & Content Standard v1 repository contract' {
         $validator | Should -Not -Match 'security\.blockSeverities|Get-ValidationSecurityAction'
     }
 
-    It 'rejects an unsorted source inventory' {
+    # Scenario: a valid isolated fixture contains two active Skills in ordinal order, then its inventory is reversed.
+    # Purpose: exercise the actual ordering failure without skipping when the production repository has one Skill.
+    It 'UnitT50_rejects_an_unsorted_two_skill_source_inventory' {
         $sourcePath = Join-Path $script:FixtureRoot 'catalog/source.json'
         $source = Get-Content -LiteralPath $sourcePath -Raw | ConvertFrom-Json
-        if (@($source.skills).Count -lt 2) {
-            Set-ItResult -Skipped -Because 'The repository has only one active Skill, so no ordering inversion can be represented.'
-            return
-        }
+        $syntheticSkillId = 'synthetic-sort-probe'
+        $syntheticSkillRoot = Join-Path $script:FixtureRoot "skills/$syntheticSkillId"
+        Copy-Item -LiteralPath $script:SkillRoot -Destination $syntheticSkillRoot -Recurse
+        $syntheticSkillPath = Join-Path $syntheticSkillRoot 'SKILL.md'
+        $syntheticSkillText = Get-Content -LiteralPath $syntheticSkillPath -Raw
+        $syntheticSkillText = $syntheticSkillText -replace '(?m)^name: capture-private-course-knowledge\r?$', "name: $syntheticSkillId"
+        Set-Content -LiteralPath $syntheticSkillPath -Value $syntheticSkillText -Encoding utf8NoBOM -NoNewline
+        $syntheticMetadataPath = Join-Path $syntheticSkillRoot 'agents/openai.yaml'
+        $syntheticMetadataText = Get-Content -LiteralPath $syntheticMetadataPath -Raw
+        $syntheticMetadataText = $syntheticMetadataText -replace '(?m)^  display_name: "Capture Private Course Knowledge"\r?$', '  display_name: "Synthetic Sort Probe"'
+        $syntheticMetadataText = $syntheticMetadataText.Replace('$capture-private-course-knowledge', ('$' + $syntheticSkillId))
+        Set-Content -LiteralPath $syntheticMetadataPath -Value $syntheticMetadataText -Encoding utf8NoBOM -NoNewline
+        $source.skills = @($script:SkillId, $syntheticSkillId)
+        $source | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $sourcePath -Encoding utf8NoBOM
+        & $script:GitPath -C $script:FixtureRoot add -- catalog/source.json skills
+        if ($LASTEXITCODE -ne 0) { throw 'Could not stage the two-Skill ordering fixture.' }
+        { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } | Should -Not -Throw
+
         [array]::Reverse($source.skills)
         $source | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $sourcePath -Encoding utf8NoBOM
         { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } | Should -Throw '*ordinal ascending order*'
