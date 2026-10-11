@@ -67,6 +67,7 @@ jobs:
           persist-credentials: false
 
       - name: Bind candidate, base, and authority identities
+        id: bind_identities
         shell: pwsh
         env:
           PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -83,6 +84,14 @@ jobs:
               -not (Test-Path -LiteralPath $driverRoot -PathType Container)) {
             throw 'Candidate, protected driver, or authority checkout is missing.'
           }
+          $gitCommand = Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          $gitExecutable = [IO.Path]::GetFullPath([string]$gitCommand.Path)
+          $gitExecutableItem = Get-Item -LiteralPath $gitExecutable -Force -ErrorAction Stop
+          if ($gitExecutableItem.PSIsContainer -or
+              ($gitExecutableItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw 'Resolved Git executable must be a plain file.'
+          }
+          $gitExecutableSha256 = (Get-FileHash -LiteralPath $gitExecutable -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
 
           $expectedHead = $null
           $expectedBase = $null
@@ -108,7 +117,7 @@ jobs:
 
           function Get-GitValue {
             param([Parameter(Mandatory = $true)][string] $Root, [Parameter(Mandatory = $true)][string[]] $Arguments)
-            $output = @(& git -C $Root @Arguments 2>&1)
+            $output = @(& $gitExecutable -C $Root @Arguments 2>&1)
             if ($LASTEXITCODE -ne 0) { throw "Git command failed: git -C $Root $($Arguments -join ' ')" }
             return ($output -join "`n").Trim()
           }
@@ -118,7 +127,7 @@ jobs:
               [Parameter(Mandatory = $true)][string] $Root,
               [Parameter(Mandatory = $true)][string] $ExpectedRepositoryPath
             )
-            $origins = @(& git -C $Root config --local --get-all remote.origin.url 2>$null)
+            $origins = @(& $gitExecutable -C $Root config --local --get-all remote.origin.url 2>$null)
             if ($LASTEXITCODE -ne 0 -or $origins.Count -ne 1) {
               throw 'Each source checkout must have exactly one origin URL.'
             }
@@ -143,20 +152,40 @@ jobs:
           if ($driverHead -cne $expectedBase) { throw 'Protected driver HEAD differs from the exact event base SHA.' }
           $baseRevision = Get-GitValue -Root $candidateRoot -Arguments @('rev-parse', '--verify', '--end-of-options', "${expectedBase}^{commit}")
           if ($baseRevision -cne $expectedBase) { throw 'The event base SHA did not resolve to itself.' }
-          & git -C $candidateRoot merge-base --is-ancestor $baseRevision $candidateHead
+          & $gitExecutable -C $candidateRoot merge-base --is-ancestor $baseRevision $candidateHead
           if ($LASTEXITCODE -ne 0 -or $baseRevision -ceq $candidateHead) {
             throw 'The exact event base must be a distinct ancestor of the exact event candidate.'
           }
-          $candidateDirty = @(& git -C $candidateRoot status --porcelain=v1 --untracked-files=all)
+          $candidateDirty = @(& $gitExecutable -C $candidateRoot status --porcelain=v1 --untracked-files=all)
           if ($LASTEXITCODE -ne 0 -or $candidateDirty.Count -ne 0) { throw 'Candidate checkout is not clean.' }
-          $driverDirty = @(& git -C $driverRoot status --porcelain=v1 --untracked-files=all)
+          $driverDirty = @(& $gitExecutable -C $driverRoot status --porcelain=v1 --untracked-files=all)
           if ($LASTEXITCODE -ne 0 -or $driverDirty.Count -ne 0) { throw 'Protected driver checkout is not clean.' }
+
+          $protectedHelperRelativePath = 'scripts/StandardCoreSourceValidation.ps1'
+          $protectedHelperPath = Join-Path $driverRoot $protectedHelperRelativePath
+          $protectedHelperItem = Get-Item -LiteralPath $protectedHelperPath -Force -ErrorAction Stop
+          if ($protectedHelperItem.PSIsContainer -or
+              ($protectedHelperItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw 'Protected source helper must be a plain file.'
+          }
+          $baseHelperEntries = @(& $gitExecutable -C $driverRoot ls-tree --full-tree $baseRevision -- $protectedHelperRelativePath 2>&1)
+          if ($LASTEXITCODE -ne 0 -or $baseHelperEntries.Count -ne 1 -or
+              [string]$baseHelperEntries[0] -cnotmatch '^(?:100644|100755) blob (?<objectId>[0-9a-f]{40})\tscripts/StandardCoreSourceValidation\.ps1$') {
+            throw 'Protected base must contain the exact helper as one regular Git blob.'
+          }
+          $baseHelperObjectId = [string]$Matches.objectId
+          $rawHelperObjectIds = @(& $gitExecutable -C $driverRoot hash-object --no-filters -- $protectedHelperPath 2>&1)
+          if ($LASTEXITCODE -ne 0 -or $rawHelperObjectIds.Count -ne 1 -or
+              [string]$rawHelperObjectIds[0] -cne $baseHelperObjectId) {
+            throw 'Protected source helper raw bytes differ from the exact event-base Git blob.'
+          }
+          $protectedHelperSha256 = (Get-FileHash -LiteralPath $protectedHelperPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
 
           $authorityHead = Get-GitValue -Root $authorityRoot -Arguments @('rev-parse', '--verify', 'HEAD^{commit}')
           if ($authorityHead -cne 'ff85d5f80fe795b96354e753074b5ce59ad04ecd') {
             throw 'Authority checkout HEAD differs from the exact prepared ff85 commit.'
           }
-          $authorityDirty = @(& git -C $authorityRoot status --porcelain=v1 --untracked-files=all)
+          $authorityDirty = @(& $gitExecutable -C $authorityRoot status --porcelain=v1 --untracked-files=all)
           if ($LASTEXITCODE -ne 0 -or $authorityDirty.Count -ne 0) { throw 'Authority checkout is not clean.' }
           foreach ($root in @($candidateRoot, $driverRoot, $authorityRoot)) {
             $effectiveAutoCrlf = Get-GitValue -Root $root -Arguments @('config', '--get', 'core.autocrlf')
@@ -192,6 +221,7 @@ jobs:
           )) {
             [IO.File]::AppendAllText($env:GITHUB_ENV, $entry + "`n", $githubEnv)
           }
+          [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "protected_helper_sha256=$protectedHelperSha256`nrun_nonce=$runNonce`ngit_path=$gitExecutable`ngit_sha256=$gitExecutableSha256`n", [Text.UTF8Encoding]::new($false))
           Write-Host "Candidate=$candidateHead Base=$baseRevision Authority=$authorityHead"
 
       - name: Set up approved Go runtime
@@ -430,6 +460,7 @@ jobs:
           }
           [IO.File]::WriteAllText((Join-Path $env:KC_ARTIFACTS_ROOT 'source-tools-setup-binding.json'), (($setupBinding | ConvertTo-Json -Depth 5) + "`n"), [Text.UTF8Encoding]::new($false))
           [IO.File]::AppendAllText($env:GITHUB_ENV, "KC_SOURCE_TOOLS_RUN_ID=$setupRunId`nKC_SOURCE_TOOLS_SHA256=$sourceToolsSha256`n", [Text.UTF8Encoding]::new($false))
+          [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "run_id=$setupRunId`nsource_tools_sha256=$sourceToolsSha256`n", [Text.UTF8Encoding]::new($false))
 
       - name: Run protected source acceptance through the canonical validator
         id: source_validation
@@ -481,6 +512,16 @@ jobs:
         shell: pwsh
         env:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
+          PROTECTED_GITHUB_WORKSPACE: ${{ github.workspace }}
+          PROTECTED_RUNNER_TEMP: ${{ runner.temp }}
+          EXPECTED_EVENT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          EXPECTED_EVENT_BASE: ${{ github.event.pull_request.base.sha || github.event.before || inputs.base_commit }}
+          EXPECTED_HELPER_SHA256: ${{ steps.bind_identities.outputs.protected_helper_sha256 }}
+          EXPECTED_RUN_NONCE: ${{ steps.bind_identities.outputs.run_nonce }}
+          EXPECTED_GIT_PATH: ${{ steps.bind_identities.outputs.git_path }}
+          EXPECTED_GIT_SHA256: ${{ steps.bind_identities.outputs.git_sha256 }}
+          EXPECTED_SOURCE_TOOLS_RUN_ID: ${{ steps.prepare_source_tools.outputs.run_id }}
+          EXPECTED_SOURCE_TOOLS_SHA256: ${{ steps.prepare_source_tools.outputs.source_tools_sha256 }}
           PREPARE_PESTER_OUTCOME: ${{ steps.prepare_pester_runtime.outcome }}
           PREPARE_SOURCE_TOOLS_OUTCOME: ${{ steps.prepare_source_tools.outcome }}
           SOURCE_VALIDATION_OUTCOME: ${{ steps.source_validation.outcome }}
@@ -508,6 +549,90 @@ jobs:
               $current = $parent
             }
           }
+          # PROTECTED_SOURCE_BINDING_GUARD_BEGIN
+          function Assert-WorkflowPathBinding {
+            param([Parameter(Mandatory = $true)][string] $Observed, [Parameter(Mandatory = $true)][string] $Expected, [Parameter(Mandatory = $true)][string] $Name)
+            if ([string]::IsNullOrWhiteSpace($Observed) -or
+                -not [IO.Path]::GetFullPath($Observed).Equals([IO.Path]::GetFullPath($Expected), [StringComparison]::OrdinalIgnoreCase)) {
+              throw "$Name differs from its immutable workflow binding."
+            }
+          }
+          function Assert-WorkflowPlainFile {
+            param([Parameter(Mandatory = $true)][string] $Path, [Parameter(Mandatory = $true)][string] $Name)
+            $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+            if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+              throw "$Name must be a plain, non-reparse file."
+            }
+          }
+          $expectedWorkspaceRoot = [IO.Path]::GetFullPath([string]$env:PROTECTED_GITHUB_WORKSPACE)
+          $expectedCandidateRoot = Join-Path $expectedWorkspaceRoot 'candidate'
+          $expectedDriverRoot = Join-Path $expectedWorkspaceRoot 'driver'
+          $expectedAuthorityRoot = Join-Path $expectedWorkspaceRoot 'authority'
+          $expectedBaseCommit = [string]$env:EXPECTED_EVENT_BASE
+          $expectedHeadCommit = [string]$env:EXPECTED_EVENT_HEAD
+          $expectedRunNonce = [string]$env:EXPECTED_RUN_NONCE
+          if ($expectedBaseCommit -cnotmatch '^[0-9a-f]{40}$' -or $expectedBaseCommit -match '^0+$' -or
+              $expectedHeadCommit -cnotmatch '^[0-9a-f]{40}$' -or
+              $expectedRunNonce -cnotmatch '^[0-9a-f]{32}$' -or
+              [string]$env:EXPECTED_HELPER_SHA256 -cnotmatch '^[0-9a-f]{64}$' -or
+              [string]$env:EXPECTED_GIT_SHA256 -cnotmatch '^[0-9a-f]{64}$' -or
+              [string]$env:EXPECTED_SOURCE_TOOLS_RUN_ID -cnotmatch '^[0-9a-f]{32}$' -or
+              [string]$env:EXPECTED_SOURCE_TOOLS_SHA256 -cnotmatch '^[0-9a-f]{64}$') {
+            throw 'Immutable protected workflow identity outputs are missing or malformed.'
+          }
+          $expectedOwnedRoot = Join-Path $env:PROTECTED_RUNNER_TEMP "knowledge-content-owned-$expectedRunNonce"
+          $expectedRuntimeRoot = Join-Path $expectedOwnedRoot 'runtime'
+          $expectedArtifactsRoot = Join-Path ([IO.Path]::GetPathRoot($env:PROTECTED_RUNNER_TEMP)) "a-$expectedRunNonce"
+          $expectedSourceToolsPath = Join-Path $expectedArtifactsRoot 'source-tools.json'
+          foreach ($binding in @(
+            @{ Name = 'Candidate root'; Observed = [string]$env:KC_CANDIDATE_ROOT; Expected = $expectedCandidateRoot },
+            @{ Name = 'Protected driver root'; Observed = [string]$env:KC_DRIVER_ROOT; Expected = $expectedDriverRoot },
+            @{ Name = 'Authority root'; Observed = [string]$env:KC_AUTHORITY_ROOT; Expected = $expectedAuthorityRoot },
+            @{ Name = 'Owned root'; Observed = [string]$env:KC_OWNED_ROOT; Expected = $expectedOwnedRoot },
+            @{ Name = 'Runtime root'; Observed = [string]$env:KC_RUNTIME_ROOT; Expected = $expectedRuntimeRoot },
+            @{ Name = 'Artifacts root'; Observed = [string]$env:KC_ARTIFACTS_ROOT; Expected = $expectedArtifactsRoot },
+            @{ Name = 'Source tools path'; Observed = [string]$env:KC_SOURCE_TOOLS_PATH; Expected = $expectedSourceToolsPath },
+            @{ Name = 'Owned root alias'; Observed = [string]$env:RUN_OWNED_ROOT; Expected = $expectedOwnedRoot }
+          )) {
+            Assert-WorkflowPathBinding -Observed $binding.Observed -Expected $binding.Expected -Name $binding.Name
+          }
+          if ([string]$env:KC_BASE_COMMIT -cne $expectedBaseCommit -or
+              [string]$env:KC_HEAD_COMMIT -cne $expectedHeadCommit -or
+              [string]$env:KC_RUN_NONCE -cne $expectedRunNonce -or
+              [string]$env:KC_SOURCE_TOOLS_RUN_ID -cne [string]$env:EXPECTED_SOURCE_TOOLS_RUN_ID -or
+              [string]$env:KC_SOURCE_TOOLS_SHA256 -cne [string]$env:EXPECTED_SOURCE_TOOLS_SHA256) {
+            throw 'Protected source environment identity differs from immutable event or setup outputs.'
+          }
+          $gitPath = [IO.Path]::GetFullPath([string]$env:EXPECTED_GIT_PATH)
+          Assert-WorkflowPlainFile -Path $gitPath -Name 'Protected Git executable'
+          if ((Get-FileHash -LiteralPath $gitPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant() -cne [string]$env:EXPECTED_GIT_SHA256) {
+            throw 'Protected Git executable bytes changed after identity binding.'
+          }
+          $protectedDriverRoot = [IO.Path]::GetFullPath($expectedDriverRoot)
+          $driverHead = @(& $gitPath -C $protectedDriverRoot rev-parse --verify 'HEAD^{commit}' 2>&1)
+          if ($LASTEXITCODE -ne 0 -or $driverHead.Count -ne 1 -or [string]$driverHead[0] -cne $expectedBaseCommit) {
+            throw 'Protected driver HEAD differs from the exact immutable event base SHA.'
+          }
+          $driverDirty = @(& $gitPath -C $protectedDriverRoot status --porcelain=v1 --untracked-files=all 2>&1)
+          if ($LASTEXITCODE -ne 0 -or $driverDirty.Count -ne 0) { throw 'Protected driver checkout is not clean at final verification.' }
+          $protectedHelperRelativePath = 'scripts/StandardCoreSourceValidation.ps1'
+          $protectedHelperPath = Join-Path $protectedDriverRoot $protectedHelperRelativePath
+          Assert-WorkflowPlainFile -Path $protectedHelperPath -Name 'Protected source helper'
+          $baseHelperEntries = @(& $gitPath -C $protectedDriverRoot ls-tree --full-tree $expectedBaseCommit -- $protectedHelperRelativePath 2>&1)
+          if ($LASTEXITCODE -ne 0 -or $baseHelperEntries.Count -ne 1 -or
+              [string]$baseHelperEntries[0] -cnotmatch '^(?:100644|100755) blob (?<objectId>[0-9a-f]{40})\tscripts/StandardCoreSourceValidation\.ps1$') {
+            throw 'Immutable event base does not contain the protected helper as one regular Git blob.'
+          }
+          $baseHelperObjectId = [string]$Matches.objectId
+          $rawHelperObjectIds = @(& $gitPath -C $protectedDriverRoot hash-object --no-filters -- $protectedHelperPath 2>&1)
+          if ($LASTEXITCODE -ne 0 -or $rawHelperObjectIds.Count -ne 1 -or
+              [string]$rawHelperObjectIds[0] -cne $baseHelperObjectId) {
+            throw 'Protected source helper raw bytes differ from the immutable event-base Git blob.'
+          }
+          if ((Get-FileHash -LiteralPath $protectedHelperPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant() -cne [string]$env:EXPECTED_HELPER_SHA256) {
+            throw 'Protected source helper SHA256 differs from its immutable identity-binding output.'
+          }
+          # PROTECTED_SOURCE_BINDING_GUARD_END
           if ([string]::IsNullOrWhiteSpace([string]$env:KC_ARTIFACTS_ROOT) -or
               -not (Test-Path -LiteralPath $env:KC_ARTIFACTS_ROOT -PathType Container)) {
             throw 'Protected source artifacts root is unavailable for final verification.'
@@ -613,8 +738,7 @@ jobs:
             throw 'Source report is missing its retained canonical adapter snapshot path.'
           }
 
-          . (Join-Path $env:KC_DRIVER_ROOT 'scripts/StandardCoreSourceValidation.ps1')
-          $gitPath = [IO.Path]::GetFullPath((Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1).Path)
+          . $protectedHelperPath
           $authorityPin = Get-KnowledgeContentPreparedAuthorityPin
           $verifiedAuthority = Assert-KnowledgeContentPreparedAuthorityCheckout -GitPath $gitPath -AuthorityRoot $env:KC_AUTHORITY_ROOT -AuthorityPin $authorityPin
           if ([string]$verifiedAuthority.revision -cne 'ff85d5f80fe795b96354e753074b5ce59ad04ecd') {

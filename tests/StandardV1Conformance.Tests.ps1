@@ -123,6 +123,19 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $workflow | Should -Match 'KC_DRIVER_ROOT'
         $workflow | Should -Match 'Protected driver HEAD differs from the exact event base SHA'
         $workflow | Should -Match 'Protected driver checkout is not clean'
+        $workflow | Should -Match 'id:\s*bind_identities'
+        $workflow | Should -Match 'git_sha256=\$gitExecutableSha256'
+        $workflow | Should -Match 'hash-object --no-filters -- \$protectedHelperPath'
+        $workflow | Should -Match 'EXPECTED_EVENT_BASE:\s*\$\{\{\s*github\.event\.pull_request\.base\.sha\s*\|\|\s*github\.event\.before\s*\|\|\s*inputs\.base_commit\s*\}\}'
+        $workflow | Should -Match 'EXPECTED_SOURCE_TOOLS_RUN_ID:\s*\$\{\{\s*steps\.prepare_source_tools\.outputs\.run_id\s*\}\}'
+        $workflow | Should -Match 'EXPECTED_SOURCE_TOOLS_SHA256:\s*\$\{\{\s*steps\.prepare_source_tools\.outputs\.source_tools_sha256\s*\}\}'
+        $workflow | Should -Match 'EXPECTED_GIT_PATH:\s*\$\{\{\s*steps\.bind_identities\.outputs\.git_path\s*\}\}'
+        $workflow | Should -Match 'EXPECTED_GIT_SHA256:\s*\$\{\{\s*steps\.bind_identities\.outputs\.git_sha256\s*\}\}'
+        $workflow | Should -Match 'Protected source helper raw bytes differ from the immutable event-base Git blob'
+        $sourceBindingGuardEnd = $workflow.IndexOf('# PROTECTED_SOURCE_BINDING_GUARD_END', [StringComparison]::Ordinal)
+        $protectedHelperDotSource = $workflow.IndexOf('. $protectedHelperPath', [StringComparison]::Ordinal)
+        $sourceBindingGuardEnd | Should -BeGreaterThan -1
+        $protectedHelperDotSource | Should -BeGreaterThan $sourceBindingGuardEnd
         $workflow | Should -Match 'foreach \(\$root in @\(\$candidateRoot, \$driverRoot, \$authorityRoot\)\)'
         $workflow | Should -Match 'ref:\s+ff85d5f80fe795b96354e753074b5ce59ad04ecd'
         $workflow | Should -Match 'PowerShell/PowerShell/releases/latest'
@@ -158,6 +171,161 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
             $workflow | Should -Match $pattern
         }
         $workflow | Should -Not -Match '(?ms)repository-contract:.*?Run .*skill-validator|skill-validator:.*?Run .*skill-tools'
+    }
+
+    # Scenario: candidate source steps may rewrite environment state and the driver checkout before final verification.
+    # Purpose: execute the exact final binding guard against a real Git checkout and reject drift before importing its helper.
+    It 'UnitT55_binds_the_final_protected_helper_to_immutable_workflow_outputs' {
+        $workflowPath = Join-Path $script:RepositoryRoot '.github/workflows/validate.yml'
+        $workflow = Get-Content -LiteralPath $workflowPath -Raw
+        $beginMarker = '          # PROTECTED_SOURCE_BINDING_GUARD_BEGIN'
+        $endMarker = '          # PROTECTED_SOURCE_BINDING_GUARD_END'
+        $guardStart = $workflow.IndexOf($beginMarker, [StringComparison]::Ordinal)
+        $guardEnd = $workflow.IndexOf($endMarker, $guardStart, [StringComparison]::Ordinal)
+        $guardStart | Should -BeGreaterThan -1
+        $guardEnd | Should -BeGreaterThan $guardStart
+        $guardText = $workflow.Substring($guardStart, $guardEnd - $guardStart) -replace '(?m)^ {10}', ''
+        $guardScript = [ScriptBlock]::Create($guardText + "`n[IO.Path]::GetFullPath(`$protectedHelperPath)")
+
+        $gitCommand = Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1
+        $gitPath = [IO.Path]::GetFullPath([string]$gitCommand.Path)
+        $fixtureRoot = Join-Path $TestDrive 'protected-source-binding'
+        $workspaceRoot = Join-Path $fixtureRoot 'workspace'
+        $candidateRoot = Join-Path $workspaceRoot 'candidate'
+        $driverRoot = Join-Path $workspaceRoot 'driver'
+        $authorityRoot = Join-Path $workspaceRoot 'authority'
+        $runnerTemp = Join-Path $fixtureRoot 'runner-temp'
+        foreach ($directory in @($candidateRoot, $authorityRoot, $runnerTemp)) {
+            [void](New-Item -ItemType Directory -Path $directory -Force)
+        }
+
+        & $gitPath -C $candidateRoot init --quiet
+        if ($LASTEXITCODE -ne 0) { throw 'Could not initialize the protected source-binding fixture repository.' }
+        & $gitPath -C $candidateRoot config user.name 'Conformance Fixture'
+        if ($LASTEXITCODE -ne 0) { throw 'Could not configure the protected source-binding fixture repository.' }
+        & $gitPath -C $candidateRoot config user.email 'fixture@example.invalid'
+        if ($LASTEXITCODE -ne 0) { throw 'Could not configure the protected source-binding fixture repository.' }
+        & $gitPath -C $candidateRoot config core.autocrlf false
+        if ($LASTEXITCODE -ne 0) { throw 'Could not disable line-ending conversion in the protected source-binding fixture.' }
+        & $gitPath -C $candidateRoot config core.longpaths true
+        if ($LASTEXITCODE -ne 0) { throw 'Could not enable long paths in the protected source-binding fixture.' }
+        $helperRelativePath = 'scripts/StandardCoreSourceValidation.ps1'
+        $helperPath = Join-Path $candidateRoot $helperRelativePath
+        [void](New-Item -ItemType Directory -Path (Split-Path -Parent $helperPath) -Force)
+        $helperBytes = "# protected fixture helper`n"
+        [IO.File]::WriteAllText($helperPath, $helperBytes, [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText((Join-Path $candidateRoot 'README.md'), "base`n", [Text.UTF8Encoding]::new($false))
+        & $gitPath -C $candidateRoot add --all
+        if ($LASTEXITCODE -ne 0) { throw 'Could not stage the protected source-binding fixture base.' }
+        & $gitPath -C $candidateRoot commit --quiet -m 'fixture base'
+        if ($LASTEXITCODE -ne 0) { throw 'Could not create the protected source-binding fixture base.' }
+        $baseCommit = ([string](& $gitPath -C $candidateRoot rev-parse --verify 'HEAD^{commit}')).Trim()
+        if ($LASTEXITCODE -ne 0) { throw 'Could not resolve the protected source-binding fixture base.' }
+        [IO.File]::WriteAllText((Join-Path $candidateRoot 'README.md'), "candidate`n", [Text.UTF8Encoding]::new($false))
+        & $gitPath -C $candidateRoot add --all
+        if ($LASTEXITCODE -ne 0) { throw 'Could not stage the protected source-binding fixture candidate.' }
+        & $gitPath -C $candidateRoot commit --quiet -m 'fixture candidate'
+        if ($LASTEXITCODE -ne 0) { throw 'Could not create the protected source-binding fixture candidate.' }
+        $headCommit = ([string](& $gitPath -C $candidateRoot rev-parse --verify 'HEAD^{commit}')).Trim()
+        if ($LASTEXITCODE -ne 0) { throw 'Could not resolve the protected source-binding fixture candidate.' }
+        & $gitPath -c core.autocrlf=false -c core.longpaths=true clone --quiet $candidateRoot $driverRoot
+        if ($LASTEXITCODE -ne 0) { throw 'Could not clone the protected source-binding fixture driver.' }
+        & $gitPath -C $driverRoot config --local core.longpaths true
+        if ($LASTEXITCODE -ne 0) { throw 'Could not enable long paths in the protected source-binding driver fixture.' }
+        & $gitPath -C $driverRoot checkout --quiet --detach $baseCommit
+        if ($LASTEXITCODE -ne 0) { throw 'Could not check out the exact protected source-binding fixture base.' }
+
+        $environmentNames = @(
+            'PROTECTED_GITHUB_WORKSPACE', 'PROTECTED_RUNNER_TEMP', 'EXPECTED_EVENT_HEAD', 'EXPECTED_EVENT_BASE',
+            'EXPECTED_HELPER_SHA256', 'EXPECTED_RUN_NONCE', 'EXPECTED_GIT_PATH', 'EXPECTED_GIT_SHA256',
+            'EXPECTED_SOURCE_TOOLS_RUN_ID', 'EXPECTED_SOURCE_TOOLS_SHA256', 'KC_CANDIDATE_ROOT', 'KC_DRIVER_ROOT',
+            'KC_AUTHORITY_ROOT', 'KC_BASE_COMMIT', 'KC_HEAD_COMMIT', 'KC_OWNED_ROOT', 'KC_RUNTIME_ROOT',
+            'KC_ARTIFACTS_ROOT', 'KC_SOURCE_TOOLS_PATH', 'KC_RUN_NONCE', 'RUN_OWNED_ROOT',
+            'KC_SOURCE_TOOLS_RUN_ID', 'KC_SOURCE_TOOLS_SHA256'
+        )
+        $savedEnvironment = @{}
+        foreach ($name in $environmentNames) { $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
+        $runNonce = [Guid]::NewGuid().ToString('N')
+        $setupRunId = [Guid]::NewGuid().ToString('N')
+        $setupSha256 = 'a' * 64
+        $helperSha256 = (Get-FileHash -LiteralPath (Join-Path $driverRoot $helperRelativePath) -Algorithm SHA256).Hash.ToLowerInvariant()
+        $gitSha256 = (Get-FileHash -LiteralPath $gitPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $ownedRoot = Join-Path $runnerTemp "knowledge-content-owned-$runNonce"
+        $runtimeRoot = Join-Path $ownedRoot 'runtime'
+        $artifactsRoot = Join-Path ([IO.Path]::GetPathRoot($runnerTemp)) "a-$runNonce"
+        $sourceToolsPath = Join-Path $artifactsRoot 'source-tools.json'
+        try {
+            $env:PROTECTED_GITHUB_WORKSPACE = $workspaceRoot
+            $env:PROTECTED_RUNNER_TEMP = $runnerTemp
+            $env:EXPECTED_EVENT_HEAD = $headCommit
+            $env:EXPECTED_EVENT_BASE = $baseCommit
+            $env:EXPECTED_HELPER_SHA256 = $helperSha256
+            $env:EXPECTED_RUN_NONCE = $runNonce
+            $env:EXPECTED_GIT_PATH = $gitPath
+            $env:EXPECTED_GIT_SHA256 = $gitSha256
+            $env:EXPECTED_SOURCE_TOOLS_RUN_ID = $setupRunId
+            $env:EXPECTED_SOURCE_TOOLS_SHA256 = $setupSha256
+            $env:KC_CANDIDATE_ROOT = $candidateRoot
+            $env:KC_DRIVER_ROOT = $driverRoot
+            $env:KC_AUTHORITY_ROOT = $authorityRoot
+            $env:KC_BASE_COMMIT = $baseCommit
+            $env:KC_HEAD_COMMIT = $headCommit
+            $env:KC_OWNED_ROOT = $ownedRoot
+            $env:KC_RUNTIME_ROOT = $runtimeRoot
+            $env:KC_ARTIFACTS_ROOT = $artifactsRoot
+            $env:KC_SOURCE_TOOLS_PATH = $sourceToolsPath
+            $env:KC_RUN_NONCE = $runNonce
+            $env:RUN_OWNED_ROOT = $ownedRoot
+            $env:KC_SOURCE_TOOLS_RUN_ID = $setupRunId
+            $env:KC_SOURCE_TOOLS_SHA256 = $setupSha256
+
+            $acceptedHelperPath = & $guardScript
+            $acceptedHelperPath | Should -BeExactly ([IO.Path]::GetFullPath((Join-Path $driverRoot $helperRelativePath)))
+
+            $env:KC_DRIVER_ROOT = Join-Path $workspaceRoot 'redirected-driver'
+            { & $guardScript } | Should -Throw '*Protected driver root differs from its immutable workflow binding.*'
+            $env:KC_DRIVER_ROOT = $driverRoot
+
+            $env:KC_BASE_COMMIT = 'a' * 40
+            { & $guardScript } | Should -Throw '*Protected source environment identity differs from immutable event or setup outputs.*'
+            $env:KC_BASE_COMMIT = $baseCommit
+            $env:KC_HEAD_COMMIT = 'b' * 40
+            { & $guardScript } | Should -Throw '*Protected source environment identity differs from immutable event or setup outputs.*'
+            $env:KC_HEAD_COMMIT = $headCommit
+            $env:KC_SOURCE_TOOLS_RUN_ID = 'c' * 32
+            { & $guardScript } | Should -Throw '*Protected source environment identity differs from immutable event or setup outputs.*'
+            $env:KC_SOURCE_TOOLS_RUN_ID = $setupRunId
+            $env:KC_SOURCE_TOOLS_SHA256 = 'd' * 64
+            { & $guardScript } | Should -Throw '*Protected source environment identity differs from immutable event or setup outputs.*'
+            $env:KC_SOURCE_TOOLS_SHA256 = $setupSha256
+
+            $env:EXPECTED_HELPER_SHA256 = 'e' * 64
+            { & $guardScript } | Should -Throw '*Protected source helper SHA256 differs from its immutable identity-binding output.*'
+            $env:EXPECTED_HELPER_SHA256 = $helperSha256
+
+            & $gitPath -C $driverRoot config --local core.autocrlf true
+            if ($LASTEXITCODE -ne 0) { throw 'Could not enable line-ending conversion for the protected helper fixture.' }
+            $savedGitConfigCount = [Environment]::GetEnvironmentVariable('GIT_CONFIG_COUNT', 'Process')
+            try {
+                # Isolate the fixture's local conversion setting from caller-scoped Git overrides.
+                $env:GIT_CONFIG_COUNT = '0'
+                [IO.File]::WriteAllText((Join-Path $driverRoot $helperRelativePath), "# protected fixture helper`r`n", [Text.UTF8Encoding]::new($false))
+                & $gitPath -C $driverRoot add -- $helperRelativePath
+                if ($LASTEXITCODE -ne 0) { throw 'Could not refresh the unchanged normalized helper blob in the fixture index.' }
+                $driverStatus = @(& $gitPath -C $driverRoot status --porcelain=v1 --untracked-files=all)
+                if ($LASTEXITCODE -ne 0 -or $driverStatus.Count -ne 0) { throw 'The CRLF protected helper fixture must remain clean after Git line-ending conversion.' }
+                { & $guardScript } | Should -Throw '*Protected source helper raw bytes differ from the immutable event-base Git blob.*'
+            }
+            finally {
+                [Environment]::SetEnvironmentVariable('GIT_CONFIG_COUNT', $savedGitConfigCount, 'Process')
+                [IO.File]::WriteAllText((Join-Path $driverRoot $helperRelativePath), $helperBytes, [Text.UTF8Encoding]::new($false))
+                & $gitPath -C $driverRoot config --local core.autocrlf false
+                if ($LASTEXITCODE -ne 0) { throw 'Could not restore line-ending configuration for the protected helper fixture.' }
+            }
+        }
+        finally {
+            foreach ($name in $environmentNames) { [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name], 'Process') }
+        }
     }
 
     # Scenario: the active ff85 pin makes ordinary v1 validation intentionally incomplete.
