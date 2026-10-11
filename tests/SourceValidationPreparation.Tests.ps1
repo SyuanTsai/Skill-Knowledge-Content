@@ -28,6 +28,21 @@ BeforeAll {
         }
     }
 
+    function Invoke-KnowledgeContentSourceRouteWithActualParameters {
+        [CmdletBinding()]
+        param(
+            [switch] $PrepareSourceTools,
+            [switch] $SourceValidation,
+            [string] $SourceToolsPath,
+            [string] $AuthorityRepositoryRoot,
+            [string] $TrustedToolRoot,
+            [AllowNull()][AllowEmptyString()][string] $AuthorityArchivePath,
+            $CandidateAuthority
+        )
+
+        return Resolve-KnowledgeContentSourceRoute @PSBoundParameters -BoundParameters $PSBoundParameters
+    }
+
     function New-SourceTestDirectoryReparsePoint {
         param([Parameter(Mandatory = $true)][string] $Path, [Parameter(Mandatory = $true)][string] $Target)
 
@@ -173,6 +188,49 @@ Describe 'Knowledge Content protected source driver preparation' {
         { Assert-KnowledgeContentSourceRequest -PrepareSourceTools -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' } | Should -Not -Throw
         $authority = New-PreparedAuthorityCandidate
         { Assert-KnowledgeContentSourceRequest -SourceValidation -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' -CandidateAuthority $authority } | Should -Not -Throw
+    }
+
+    # Scenario: setup routes through a wrapper's real advanced-function bound-parameter dictionary.
+    # Purpose: accept a complete setup request when the legacy archive path was not bound.
+    It 'UnitT46_routes_setup_using_actual_advanced_function_parameters' {
+        {
+            Invoke-KnowledgeContentSourceRouteWithActualParameters -PrepareSourceTools `
+                -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime'
+        } | Should -Not -Throw
+    }
+
+    # Scenario: execution routes through a wrapper's real advanced-function bound-parameter dictionary.
+    # Purpose: accept a complete source-validation request when the legacy archive path was not bound.
+    It 'UnitT47_routes_execution_using_actual_advanced_function_parameters' {
+        $authority = New-PreparedAuthorityCandidate
+        {
+            Invoke-KnowledgeContentSourceRouteWithActualParameters -SourceValidation `
+                -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' `
+                -CandidateAuthority $authority
+        } | Should -Not -Throw
+    }
+
+    # Scenario: source validation explicitly binds the legacy archive parameter to null.
+    # Purpose: reject the obsolete argument by name even when its value is null.
+    It 'UnitT48_rejects_explicitly_bound_null_archive_path' {
+        $authority = New-PreparedAuthorityCandidate
+        $nullArchivePath = $null
+        {
+            Invoke-KnowledgeContentSourceRouteWithActualParameters -SourceValidation `
+                -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' `
+                -AuthorityArchivePath $nullArchivePath -CandidateAuthority $authority
+        } | Should -Throw '*does not accept AuthorityArchivePath*'
+    }
+
+    # Scenario: source validation explicitly binds the legacy archive parameter to an empty string.
+    # Purpose: reject the obsolete argument by name even when its value is empty.
+    It 'UnitT49_rejects_explicitly_bound_empty_archive_path' {
+        $authority = New-PreparedAuthorityCandidate
+        {
+            Invoke-KnowledgeContentSourceRouteWithActualParameters -SourceValidation `
+                -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' `
+                -AuthorityArchivePath '' -CandidateAuthority $authority
+        } | Should -Throw '*does not accept AuthorityArchivePath*'
     }
 
     # Scenario: both setup and validation are requested in one invocation.
