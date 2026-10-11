@@ -94,6 +94,21 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $workflow | Should -Match 'actions/checkout@[0-9a-f]{40}'
         $workflow | Should -Match 'uses:\s*\*checkout-action-reference'
         $workflow | Should -Match 'actions/setup-go@[0-9a-f]{40}'
+        $workflow | Should -Match 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020'
+        $workflow | Should -Match "node-version:\s+'24\.21\.0'"
+        $workflow | Should -Match 'nodeVersion -cne ''v24\.21\.0'''
+        $workflow | Should -Match 'Join-Path \$nodeRoot ''node_modules/npm/package\.json'''
+        $workflow | Should -Match '\$npmLauncherPath\.Equals\(\$expectedNpmLauncherPath'
+        $workflow | Should -Match 'npmVersion -cne \$npmPackageVersion'
+        $workflow | Should -Match 'nodeExecutableSha256'
+        $workflow | Should -Match 'npmLauncherSha256'
+        $workflow | Should -Match 'npmCliSha256'
+        $workflow | Should -Match 'npmPackageJsonSha256'
+        $workflow | Should -Match 'node-runtime-before-source-setup\.json'
+        $nodeRuntimeCapture = $workflow.IndexOf('Capture and verify Node runtime before source setup', [StringComparison]::Ordinal)
+        $sourceToolsSetup = $workflow.IndexOf('Prepare source tool receipts through the canonical validator', [StringComparison]::Ordinal)
+        $nodeRuntimeCapture | Should -BeGreaterThan -1
+        $nodeRuntimeCapture | Should -BeLessThan $sourceToolsSetup
         $workflow | Should -Match 'runs-on:\s+windows-latest'
         $workflow | Should -Match '(?s)Preserve committed bytes before checkout.*?core\.autocrlf false.*?Checkout exact event candidate'
         $workflow | Should -Match 'github\.event\.pull_request\.head\.sha\s*\|\|\s*github\.sha'

@@ -213,6 +213,76 @@ jobs:
           [IO.File]::AppendAllText($env:GITHUB_ENV, "STANDARD_GO_RUNTIME_VERSION=$($Matches.version)`n", [Text.UTF8Encoding]::new($false))
           Write-Host "Verified Go runtime: $($Matches.version)"
 
+      - name: Set up approved Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24.21.0'
+
+      - name: Capture and verify Node runtime before source setup
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $nodeCommand = Get-Command node.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          $nodeExecutablePath = [IO.Path]::GetFullPath([string]$nodeCommand.Source)
+          $nodeRoot = Split-Path -Parent $nodeExecutablePath
+          $npmCommand = Get-Command npm.cmd -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          $npmLauncherPath = [IO.Path]::GetFullPath([string]$npmCommand.Source)
+          $npmPackageJsonPath = Join-Path $nodeRoot 'node_modules/npm/package.json'
+          $npmCliPath = Join-Path $nodeRoot 'node_modules/npm/bin/npm-cli.js'
+          $nodeVersionOutput = @(& $nodeExecutablePath --version)
+          $nodeExitCode = $LASTEXITCODE
+          $nodeVersion = if ($nodeVersionOutput.Count -eq 1) { ([string]$nodeVersionOutput[0]).Trim() } else { $null }
+          $npmVersionOutput = @(& $npmLauncherPath --version)
+          $npmExitCode = $LASTEXITCODE
+          $npmVersion = if ($npmVersionOutput.Count -eq 1) { ([string]$npmVersionOutput[0]).Trim() } else { $null }
+          $npmPackageVersion = $null
+          if (Test-Path -LiteralPath $npmPackageJsonPath -PathType Leaf) {
+            $npmPackage = Get-Content -LiteralPath $npmPackageJsonPath -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 20 -ErrorAction Stop
+            $npmPackageVersion = [string]$npmPackage.version
+          }
+          $nodeExecutableSha256 = if (Test-Path -LiteralPath $nodeExecutablePath -PathType Leaf) {
+            (Get-FileHash -LiteralPath $nodeExecutablePath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+          } else { $null }
+          $npmLauncherSha256 = if (Test-Path -LiteralPath $npmLauncherPath -PathType Leaf) {
+            (Get-FileHash -LiteralPath $npmLauncherPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+          } else { $null }
+          $npmCliSha256 = if (Test-Path -LiteralPath $npmCliPath -PathType Leaf) {
+            (Get-FileHash -LiteralPath $npmCliPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+          } else { $null }
+          $npmPackageJsonSha256 = if (Test-Path -LiteralPath $npmPackageJsonPath -PathType Leaf) {
+            (Get-FileHash -LiteralPath $npmPackageJsonPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+          } else { $null }
+          $nodeRuntimeEvidence = [ordered]@{
+            schemaVersion = 1
+            report = 'approved-node-runtime-before-source-setup-v1'
+            capturedAtUtc = [DateTime]::UtcNow.ToString('O', [Globalization.CultureInfo]::InvariantCulture)
+            nodeVersion = $nodeVersion
+            nodeExecutablePath = $nodeExecutablePath
+            nodeExecutableSha256 = $nodeExecutableSha256
+            npmVersion = $npmVersion
+            npmLauncherPath = $npmLauncherPath
+            npmLauncherSha256 = $npmLauncherSha256
+            npmCliPath = $npmCliPath
+            npmCliSha256 = $npmCliSha256
+            npmPackageJsonPath = $npmPackageJsonPath
+            npmPackageVersion = $npmPackageVersion
+            npmPackageJsonSha256 = $npmPackageJsonSha256
+          }
+          $nodeRuntimeEvidencePath = Join-Path $env:KC_ARTIFACTS_ROOT 'node-runtime-before-source-setup.json'
+          [IO.File]::WriteAllText($nodeRuntimeEvidencePath, (($nodeRuntimeEvidence | ConvertTo-Json -Depth 8) + "`n"), [Text.UTF8Encoding]::new($false))
+          $expectedNpmLauncherPath = [IO.Path]::GetFullPath((Join-Path $nodeRoot 'npm.cmd'))
+          if ($nodeExitCode -ne 0 -or $nodeVersion -cne 'v24.21.0' -or
+              $npmExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($npmPackageVersion) -or
+              $npmVersion -cne $npmPackageVersion -or
+              -not $npmLauncherPath.Equals($expectedNpmLauncherPath, [StringComparison]::OrdinalIgnoreCase) -or
+              [string]::IsNullOrWhiteSpace($nodeExecutableSha256) -or
+              [string]::IsNullOrWhiteSpace($npmLauncherSha256) -or
+              [string]::IsNullOrWhiteSpace($npmCliSha256) -or
+              [string]::IsNullOrWhiteSpace($npmPackageJsonSha256)) {
+            throw 'Approved Node runtime or its bundled npm does not match the captured runtime evidence.'
+          }
+          Write-Host "Verified Node $nodeVersion with its bundled npm $npmVersion from $nodeRoot"
+
       - name: Install and verify latest official PowerShell
         shell: pwsh
         run: |
@@ -491,6 +561,7 @@ jobs:
           $requiredFiles = @(
             (Join-Path $env:KC_ARTIFACTS_ROOT 'source-tools.json'),
             (Join-Path $env:KC_ARTIFACTS_ROOT 'source-tools-setup-binding.json'),
+            (Join-Path $env:KC_ARTIFACTS_ROOT 'node-runtime-before-source-setup.json'),
             (Join-Path $env:KC_ARTIFACTS_ROOT 'powershell-runtime-setup.json'),
             (Join-Path $env:KC_ARTIFACTS_ROOT 'powershell-release-hashes.sha256'),
             (Join-Path $env:KC_ARTIFACTS_ROOT 'pester-runtime-setup-receipt.json')
