@@ -94,8 +94,8 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $workflow | Should -Match 'actions/checkout@[0-9a-f]{40}'
         $workflow | Should -Match 'uses:\s*\*checkout-action-reference'
         $workflow | Should -Match 'actions/setup-go@[0-9a-f]{40}'
-        $workflow | Should -Match '\$artifactsRoot = Join-Path \$env:RUNNER_TEMP "a-\$runNonce"'
-        $workflow | Should -Match 'path:\s+\$\{\{\s*runner\.temp\s*\}\}/a-\*'
+        $workflow | Should -Match '\$artifactsRoot = Join-Path \(\[IO\.Path\]::GetPathRoot\(\$env:RUNNER_TEMP\)\) "a-\$runNonce"'
+        $workflow | Should -Match 'path:\s+\$\{\{\s*env\.KC_ARTIFACTS_ROOT\s*\}\}'
         $workflow | Should -Not -Match 'knowledge-content-artifacts'
         $workflow | Should -Match 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020'
         $workflow | Should -Match "node-version:\s+'24\.21\.0'"

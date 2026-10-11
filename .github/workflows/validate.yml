@@ -166,7 +166,7 @@ jobs:
           $runNonce = [guid]::NewGuid().ToString('N')
           $ownedRoot = Join-Path $env:RUNNER_TEMP "knowledge-content-owned-$runNonce"
           $runtimeRoot = Join-Path $ownedRoot 'runtime'
-          $artifactsRoot = Join-Path $env:RUNNER_TEMP "a-$runNonce"
+          $artifactsRoot = Join-Path ([IO.Path]::GetPathRoot($env:RUNNER_TEMP)) "a-$runNonce"
           foreach ($path in @($ownedRoot, $runtimeRoot, $artifactsRoot)) {
             if (Test-Path -LiteralPath $path) { throw "Run-owned path unexpectedly exists: $path" }
           }
@@ -654,7 +654,7 @@ jobs:
         uses: *upload-artifact-reference # actions/upload-artifact v7.0.2
         with:
           name: standard-v1-source-validation-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/a-*
+          path: ${{ env.KC_ARTIFACTS_ROOT }}
           if-no-files-found: warn
           include-hidden-files: true
 
