@@ -1,6 +1,6 @@
 ---
 name: capture-private-course-knowledge
-description: Windows-only. Analyze and archive authorized course or lecture materials with evidence links. Use when the user wants to transcribe authenticated videos, relate PDFs, slides, code, or attachments, export notes, NotebookLM sources, or articles, and reconstruct teaching context without bypassing access controls. Windows is the only local host for development, installation, execution, testing, acceptance, and CI; authorized SaaS/browser/API services remain supported and cross-platform course code and commands remain source evidence.
+description: Windows-only. Analyze and archive authorized course/lecture materials with evidence links. Use when users want to transcribe authenticated videos; relate PDFs, slides, code, or attachments; export notes, NotebookLM sources, or articles; reconstruct teaching context without bypassing access controls.
 ---
 <!--
 SPDX-FileCopyrightText: 2026 SyuanTsai
