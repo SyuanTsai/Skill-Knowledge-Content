@@ -356,6 +356,128 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $release | Should -Not -Match 'scripts/(?:Invoke-StandardValidation|Test-Repository)\.ps1'
     }
 
+    # Scenario: one or more validation jobs return a non-success result before the three protected status mirrors run.
+    # Purpose: verify the exact PowerShell mirror bodies fail closed and that every declared job runs on Windows.
+    It 'UnitT70_runs_all_required_status_mirrors_on_Windows_and_rejects_non_success_results' {
+        $workflowPath = Join-Path $script:RepositoryRoot '.github/workflows/validate.yml'
+        $workflow = Get-Content -LiteralPath $workflowPath -Raw
+        $jobsSection = [regex]::Match($workflow, '(?ms)^jobs:[ \t]*\r?\n(?<body>.*)\z')
+        $jobsSection.Success | Should -BeTrue
+        $jobMatches = [regex]::Matches($jobsSection.Groups['body'].Value, '(?ms)^  (?<id>[a-z][a-z0-9-]*):[ \t]*\r?\n(?<body>.*?)(?=^  [a-z][a-z0-9-]*:[ \t]*\r?$|\z)')
+        $jobIds = @($jobMatches | ForEach-Object { $_.Groups['id'].Value })
+        $jobIds | Should -Be @('canonical-validation', 'repository-contract', 'skill-validator', 'skill-tools')
+
+        foreach ($jobMatch in $jobMatches) {
+            $jobId = $jobMatch.Groups['id'].Value
+            $jobText = $jobMatch.Value
+            $runnerMatches = [regex]::Matches($jobText, '(?m)^    runs-on:[ \t]*(?<runner>[^\s#]+)[ \t]*\r?$')
+            $runnerMatches.Count | Should -Be 1
+            $runnerMatches[0].Groups['runner'].Value | Should -BeExactly 'windows-latest'
+            $jobText | Should -Not -Match '(?m)^    container:'
+
+            if ($jobId -ceq 'canonical-validation') { continue }
+            $jobText | Should -Match ("(?m)^    name:[ \t]*{0}[ \t]*\r?$" -f [regex]::Escape($jobId))
+            $jobText | Should -Match '(?m)^    if:[ \t]+\$\{\{[ \t]*always\(\)[ \t]*\}\}[ \t]*\r?$'
+            $jobText | Should -Match '(?m)^    needs:[ \t]*\r?\n      - canonical-validation[ \t]*\r?$'
+            $jobText | Should -Match '(?m)^        shell:[ \t]*pwsh[ \t]*\r?$'
+            $jobText | Should -Match '(?m)^          CANONICAL_VALIDATION_RESULT:[ \t]*\$\{\{[ \t]*needs\[''canonical-validation''\]\.result[ \t]*\}\}[ \t]*\r?$'
+
+            $jobLines = $jobText -split "\r?\n"
+            $runLineIndex = -1
+            for ($lineIndex = 0; $lineIndex -lt $jobLines.Count; $lineIndex++) {
+                if ($jobLines[$lineIndex] -match '^        run:[ \t]*\|[ \t]*$') {
+                    $runLineIndex = $lineIndex
+                    break
+                }
+            }
+            $runLineIndex | Should -BeGreaterThan -1
+            $scriptLines = [System.Collections.Generic.List[string]]::new()
+            for ($lineIndex = $runLineIndex + 1; $lineIndex -lt $jobLines.Count; $lineIndex++) {
+                $line = [string]$jobLines[$lineIndex]
+                if ($line.StartsWith('          ', [StringComparison]::Ordinal)) {
+                    $scriptLines.Add($line.Substring(10))
+                    continue
+                }
+                if ([string]::IsNullOrWhiteSpace($line)) {
+                    $scriptLines.Add('')
+                    continue
+                }
+                break
+            }
+            $scriptText = $scriptLines -join "`n"
+            $scriptText | Should -Match '\$env:CANONICAL_VALIDATION_RESULT'
+            $scriptPath = Join-Path $TestDrive "mirror-$jobId.ps1"
+            [IO.File]::WriteAllText($scriptPath, $scriptText, [Text.UTF8Encoding]::new($false))
+
+            $pwshCommand = Get-Command pwsh.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
+            $pwshPath = [IO.Path]::GetFullPath([string]$pwshCommand.Source)
+            $invokeMirror = {
+                param([string]$Path, [bool]$SetResult, [AllowNull()][string]$Result)
+                $startInfo = [Diagnostics.ProcessStartInfo]::new()
+                $startInfo.FileName = $pwshPath
+                $startInfo.UseShellExecute = $false
+                $startInfo.CreateNoWindow = $true
+                $startInfo.RedirectStandardOutput = $true
+                $startInfo.RedirectStandardError = $true
+                [void]$startInfo.ArgumentList.Add('-NoLogo')
+                [void]$startInfo.ArgumentList.Add('-NoProfile')
+                [void]$startInfo.ArgumentList.Add('-NonInteractive')
+                [void]$startInfo.ArgumentList.Add('-File')
+                [void]$startInfo.ArgumentList.Add($Path)
+                if ($SetResult) {
+                    $startInfo.Environment['CANONICAL_VALIDATION_RESULT'] = $Result
+                } else {
+                    [void]$startInfo.Environment.Remove('CANONICAL_VALIDATION_RESULT')
+                }
+                $process = [Diagnostics.Process]::Start($startInfo)
+                try {
+                    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+                    $stderrTask = $process.StandardError.ReadToEndAsync()
+                    if (-not $process.WaitForExit(60000)) {
+                        try {
+                            $process.Kill($true)
+                        }
+                        catch {
+                            # Keep the timeout as the primary failure; process cleanup is best effort.
+                        }
+                        [void]$process.WaitForExit(5000)
+                        throw "Timed out waiting for mirror process '$Path'."
+                    }
+                    [pscustomobject]@{
+                        ExitCode = $process.ExitCode
+                        StandardOutput = $stdoutTask.GetAwaiter().GetResult()
+                        StandardError = $stderrTask.GetAwaiter().GetResult()
+                    }
+                }
+                finally {
+                    $process.Dispose()
+                }
+            }
+
+            $resultCases = @(
+                [pscustomobject]@{ Label = 'success'; Value = 'success'; SetResult = $true; ExpectedExitCode = 0 },
+                [pscustomobject]@{ Label = 'failure'; Value = 'failure'; SetResult = $true; ExpectedExitCode = 1 },
+                [pscustomobject]@{ Label = 'cancelled'; Value = 'cancelled'; SetResult = $true; ExpectedExitCode = 1 },
+                [pscustomobject]@{ Label = 'skipped'; Value = 'skipped'; SetResult = $true; ExpectedExitCode = 1 },
+                [pscustomobject]@{ Label = 'empty'; Value = ''; SetResult = $true; ExpectedExitCode = 1 },
+                [pscustomobject]@{ Label = 'missing'; Value = $null; SetResult = $false; ExpectedExitCode = 1 },
+                [pscustomobject]@{ Label = 'unexpected'; Value = 'passed-with-warning'; SetResult = $true; ExpectedExitCode = 1 },
+                [pscustomobject]@{ Label = 'wrong-case'; Value = 'Success'; SetResult = $true; ExpectedExitCode = 1 }
+            )
+            foreach ($resultCase in $resultCases) {
+                $processResult = & $invokeMirror $scriptPath $resultCase.SetResult $resultCase.Value
+                $processResult.ExitCode | Should -Be $resultCase.ExpectedExitCode -Because "$jobId must map result '$($resultCase.Label)' to its strict mirror exit code"
+                $processResult.StandardError.Trim() | Should -BeExactly '' -Because "$jobId must not emit PowerShell errors for result '$($resultCase.Label)'"
+                if ($resultCase.ExpectedExitCode -eq 0) {
+                    $processResult.StandardOutput.TrimEnd() | Should -BeExactly 'Canonical Standard v1 validation passed.'
+                } else {
+                    $expectedMessage = "Canonical Standard v1 validation result: $([string]$resultCase.Value)"
+                    $processResult.StandardOutput.TrimEnd() | Should -BeExactly $expectedMessage.TrimEnd()
+                }
+            }
+        }
+    }
+
     It 'keeps public validation documentation on the canonical entry point' {
         $readme = Get-Content -LiteralPath (Join-Path $script:RepositoryRoot 'README.md') -Raw
         $readme | Should -Match 'scripts/Validate\.ps1'

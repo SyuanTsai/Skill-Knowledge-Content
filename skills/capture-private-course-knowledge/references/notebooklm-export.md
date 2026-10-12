@@ -6,6 +6,8 @@ SPDX-License-Identifier: Apache-2.0
 
 Use this reference when NotebookLM is requested. Verify current supported source types and account limits in official Google documentation before producing or uploading a large export because capabilities and quotas can change.
 
+Generate local export files and run local preparation tools on Windows only. Use authorized Google Drive, NotebookLM, browser, or API services as SaaS destinations; do not use Linux, macOS, WSL, or Linux containers as local-host fallbacks. Retain platform-specific course commands in the export as source evidence rather than executing them as host setup.
+
 ## Design principles
 
 - Keep durable notes, material records, events, code, and evidence as the source of truth. Treat the NotebookLM bundle as a rebuildable export.

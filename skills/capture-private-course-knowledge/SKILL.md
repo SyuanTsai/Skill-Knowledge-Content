@@ -1,6 +1,6 @@
 ---
 name: capture-private-course-knowledge
-description: Analyze and archive authorized course or lecture materials with evidence links. Use when the user wants to transcribe authenticated videos, relate PDFs, slides, code, or attachments, export notes, NotebookLM sources, or articles, and reconstruct teaching context without bypassing access controls.
+description: Windows-only. Analyze and archive authorized course/lecture materials with evidence links. Use when users want to transcribe authenticated videos; relate PDFs, slides, code, or attachments; export notes, NotebookLM sources, or articles; reconstruct teaching context without bypassing access controls.
 ---
 <!--
 SPDX-FileCopyrightText: 2026 SyuanTsai
@@ -10,6 +10,10 @@ SPDX-License-Identifier: Apache-2.0
 # Capture Private Course Knowledge
 
 Create one trustworthy, reusable knowledge base from every material in an authorized course. Treat videos, PDFs, slides, code, quizzes, and attachments as related evidence sources rather than independent summaries.
+
+## Supported host and service boundary
+
+Use Windows as the only host for local development, installation, execution, testing, acceptance, and CI. Do not use Linux, macOS, WSL, or Linux containers as host fallbacks. Authorized SaaS, browser, and API services remain available for course capture. Preserve cross-platform code and commands found in course materials as source evidence; their presence does not change the local host requirement.
 
 ## Preserve authorization and privacy
 

@@ -789,49 +789,55 @@ jobs:
     if: ${{ always() }}
     needs:
       - canonical-validation
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - name: Mirror canonical Standard v1 result
-        shell: bash
+        shell: pwsh
+        env:
+          CANONICAL_VALIDATION_RESULT: ${{ needs['canonical-validation'].result }}
         run: |
-          set -euo pipefail
-          result='${{ needs['canonical-validation'].result }}'
-          if [[ "$result" != 'success' ]]; then
-            echo "Canonical Standard v1 validation result: $result"
+          $result = [string]$env:CANONICAL_VALIDATION_RESULT
+          if ($result -cne 'success') {
+            Write-Output "Canonical Standard v1 validation result: $result"
             exit 1
-          fi
-          echo 'Canonical Standard v1 validation passed.'
+          }
+          Write-Output 'Canonical Standard v1 validation passed.'
+          exit 0
   skill-validator:
     name: skill-validator
     if: ${{ always() }}
     needs:
       - canonical-validation
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - name: Mirror canonical Standard v1 result
-        shell: bash
+        shell: pwsh
+        env:
+          CANONICAL_VALIDATION_RESULT: ${{ needs['canonical-validation'].result }}
         run: |
-          set -euo pipefail
-          result='${{ needs['canonical-validation'].result }}'
-          if [[ "$result" != 'success' ]]; then
-            echo "Canonical Standard v1 validation result: $result"
+          $result = [string]$env:CANONICAL_VALIDATION_RESULT
+          if ($result -cne 'success') {
+            Write-Output "Canonical Standard v1 validation result: $result"
             exit 1
-          fi
-          echo 'Canonical Standard v1 validation passed.'
+          }
+          Write-Output 'Canonical Standard v1 validation passed.'
+          exit 0
   skill-tools:
     name: skill-tools
     if: ${{ always() }}
     needs:
       - canonical-validation
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - name: Mirror canonical Standard v1 result
-        shell: bash
+        shell: pwsh
+        env:
+          CANONICAL_VALIDATION_RESULT: ${{ needs['canonical-validation'].result }}
         run: |
-          set -euo pipefail
-          result='${{ needs['canonical-validation'].result }}'
-          if [[ "$result" != 'success' ]]; then
-            echo "Canonical Standard v1 validation result: $result"
+          $result = [string]$env:CANONICAL_VALIDATION_RESULT
+          if ($result -cne 'success') {
+            Write-Output "Canonical Standard v1 validation result: $result"
             exit 1
-          fi
-          echo 'Canonical Standard v1 validation passed.'
+          }
+          Write-Output 'Canonical Standard v1 validation passed.'
+          exit 0

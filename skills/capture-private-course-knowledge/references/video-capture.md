@@ -6,6 +6,8 @@ SPDX-License-Identifier: Apache-2.0
 
 Use this reference for course video or audio, including authenticated playback and video without captions. Preserve spoken and on-screen evidence together whenever both are needed to understand the lesson.
 
+Run local media inspection, transcription, and note preparation on Windows with Windows-native tools. Authorized course SaaS, browser playback, and API routes remain available; if a required local tool is unavailable, report the limitation or use an authorized service instead of switching to Linux, macOS, WSL, or Linux containers. Keep platform-specific code and commands shown in the course as source evidence.
+
 ## Choose the evidence route
 
 Use the strongest authorized route available:

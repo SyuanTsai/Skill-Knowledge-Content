@@ -124,8 +124,9 @@ Describe 'Knowledge & Content Standard v1 repository contract' {
     It 'rejects malformed OpenAI metadata lexical style' {
         $metadataPath = Join-Path $script:SkillRoot 'agents/openai.yaml'
         $metadata = Get-Content -LiteralPath $metadataPath -Raw
-        $metadata = $metadata -replace 'display_name: "Capture Private Course Knowledge"', '"display_name": "Capture Private Course Knowledge"'
-        Set-Content -LiteralPath $metadataPath -Value $metadata -Encoding utf8NoBOM -NoNewline
+        $malformedMetadata = [regex]::new('(?m)^([ \t]*)display_name(?=[ \t]*:)').Replace($metadata, '$1"display_name"', 1)
+        $malformedMetadata | Should -Not -BeExactly $metadata
+        Set-Content -LiteralPath $metadataPath -Value $malformedMetadata -Encoding utf8NoBOM -NoNewline
         { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } | Should -Throw '*quoted mapping key*'
     }
 
