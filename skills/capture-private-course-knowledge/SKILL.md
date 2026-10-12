@@ -130,7 +130,7 @@ Write in the user's language unless requested otherwise. Report scope, inventory
 ## Error Handling
 
 - If authentication, MFA, or CAPTCHA blocks access, stop and request only the minimum user action needed to restore the authorized session.
-- If every authorized route to a required material fails, report the exact material and access gap instead of substituting public or inferred content.
+- If every authorized route to a required material fails, stop and report the exact material and access gap instead of substituting public or inferred content.
 - If the only remaining route would bypass protections, stop and explain the blocker.
 - If a no-caption video, scanned PDF, or protected document cannot be processed with available authorized tools, including when a no-caption video requires unavailable audio, mark the affected range inaccessible and preserve partial coverage accurately.
 - If private material would leave the current environment through transcription, OCR, vision, storage, or another external service, obtain explicit approval before sending it.
