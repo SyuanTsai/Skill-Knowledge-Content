@@ -131,12 +131,10 @@ Write in the user's language unless requested otherwise. Report scope, inventory
 
 - If authentication, MFA, or CAPTCHA blocks access, stop and request only the minimum user action needed to restore the authorized session.
 - If every authorized route to a required material fails, report the exact material and access gap instead of substituting public or inferred content.
-- If a no-caption video, scanned PDF, or protected document cannot be processed with available authorized tools, mark the affected range inaccessible and preserve partial coverage accurately.
+- If the only remaining route would bypass protections, stop and explain the blocker.
+- If a no-caption video, scanned PDF, or protected document cannot be processed with available authorized tools, including when a no-caption video requires unavailable audio, mark the affected range inaccessible and preserve partial coverage accurately.
 - If private material would leave the current environment through transcription, OCR, vision, storage, or another external service, obtain explicit approval before sending it.
-- If durable recall has no approved destination or public output cannot avoid private or unlicensed material, stop before persistence or publication and explain the blocker.
-
-## Stop or ask for help when necessary
-
-Stop and explain the exact blocker when the user must sign in or complete verification; every authorized route to a required material fails; the only remaining route would bypass protections; a no-caption video requires unavailable audio; a scanned or protected PDF cannot be read with available authorized tools; private material would leave the current environment before explicit user approval is obtained; durable recall has no safe destination; public output cannot avoid private or unlicensed material; target publishing conventions cannot be inspected; or the scope cannot support honest coverage.
-
-State what was inspected, what remains inaccessible, and the smallest user action or artifact needed to continue.
+- If durable recall has no safe, approved destination, stop before persistence and explain the blocker.
+- If public output cannot avoid private or unlicensed material, stop before persistence or publication and explain the blocker.
+- If target publishing conventions cannot be inspected or the scope cannot support honest coverage, stop and explain the blocker.
+- State what was inspected, what remains inaccessible, and the smallest user action or artifact needed to continue.
