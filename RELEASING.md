@@ -4,6 +4,10 @@ SPDX-License-Identifier: Apache-2.0
 -->
 # Releasing and rollback
 
+## Supported platform
+
+Run local development, installation, execution, testing, acceptance, and CI on Windows. Linux, macOS, WSL, and Linux containers are not host fallbacks. Authorized SaaS, browser, and API services remain supported; platform-specific course code and commands remain source evidence. Every workflow job, including each required status mirror, runs on a Windows runner.
+
 ## Release contract
 
 The stable source ID is `knowledge-content`. Skill IDs and their `skills/<skill-id>` source paths are stable API and must not be repurposed.

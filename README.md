@@ -16,6 +16,12 @@ Independent Agent Skills repository for the **Knowledge & Content** domain.
 - Contract tests: the repository regression suite
 - Release and rollback rules: `RELEASING.md`
 
+## Supported platform
+
+Windows is the only host for local development, installation, execution, testing, acceptance, and CI. Do not use Linux, macOS, WSL, or Linux containers as host fallbacks. Authorized SaaS, browser, and API services remain in scope; cross-platform course code and commands remain source evidence. All GitHub Actions jobs use Windows runners, including the required status mirrors.
+
+`catalog/source.json` records only the stable source inventory. Its exact schema has no description or platform field; this README and the Skill documents define the Windows-only source scope.
+
 ## License and content boundary
 
 The Apache-2.0 license in [LICENSE](LICENSE) applies to the repository-authored Skill instructions, agent metadata, procedural references, source metadata, documentation, validation scripts, tests, and workflow configuration. It does not grant rights to course providers, publishers, NotebookLM, GitHub, or other external services.
