@@ -53,7 +53,7 @@ skills/capture-private-course-knowledge/
 
 ## Validation
 
-The public validation entry point is `scripts/Validate.ps1`. With the active Standard v1 pin at `ff85d5f80fe795b96354e753074b5ce59ad04ecd`, validation has two explicit purposes: `scripts/Validate.ps1 -PrepareSourceTools` creates run-owned setup receipts, and `scripts/Validate.ps1 -SourceValidation` performs the protected source acceptance using those receipts and the exact event base commit. The protected workflow invokes both purposes with the required clean roots and runtime evidence. A bare `scripts/Validate.ps1` call fails closed while this ff85 pin is active, so it cannot be mistaken for a completed release gate.
+The public validation entry point is `scripts/Validate.ps1`. With the active Standard v1 pin at `8e627baf54bd6e47862e6291b25e71cc45a2f2b7`, validation has two explicit purposes: `scripts/Validate.ps1 -PrepareSourceTools` creates run-owned setup receipts, and `scripts/Validate.ps1 -SourceValidation` performs the protected source acceptance using those receipts and the exact event base commit. The protected workflow invokes both purposes with the required clean roots and runtime evidence. A bare `scripts/Validate.ps1` call fails closed while this 8e62 pin is active, so it cannot be mistaken for a completed release gate.
 
 The validator checks:
 
@@ -64,18 +64,18 @@ The validator checks:
 - `SKILL.md` name matching the stable Skill ID;
 - deterministic `contentSha256` using repository-relative paths and raw file SHA-256 values.
 
-The canonical validator invokes the repository contract and Pester components. They are not additional public validation commands. The protected source gate covers stages 1–5 and runs Static without an LLM plus the complete repository test suite. GitHub Actions checks out the exact event candidate and protected base on Windows, verifies the clean ff85 authority, prepares the verified PowerShell and locked Pester runtimes, then invokes the same `scripts/Validate.ps1` entry point once for each explicit purpose. The source report must pass the source authority's final report assertion before the canonical job succeeds; the existing required status contexts mirror that one gate result. This source gate does not grant release, installation, publication, or downstream cutover authority. The field `releaseEligible=false` remains false permanently, including after a PASS, review, or merge.
+The canonical validator invokes the repository contract and Pester components. They are not additional public validation commands. The protected source gate covers stages 1–5 and runs Static without an LLM plus the complete repository test suite. GitHub Actions checks out the exact event candidate and protected base on Windows, verifies the clean 8e62 authority, prepares the verified PowerShell and locked Pester runtimes, then invokes the same `scripts/Validate.ps1` entry point once for each explicit purpose. The source report must pass the source authority's final report assertion before the canonical job succeeds; the existing required status contexts mirror that one gate result. This source gate does not grant release, installation, publication, or downstream cutover authority. The field `releaseEligible=false` remains false permanently, including after a PASS, review, or merge.
 
 ### Protected local run
 
-The local equivalent uses a clean candidate checkout at the exact event head and a separate, clean protected-driver checkout of this repository at the exact event base. Before cloning or checking out any of these roots, set global `core.autocrlf=false`; keep it false through source validation so checkout files and subsequent Git archives retain committed bytes. Recreate any checkout made while line-ending conversion was enabled. The base must be a full nonzero 40-character SHA, must resolve to itself, and must be a distinct ancestor of the candidate. Use a separate clean authority checkout at `ff85d5f80fe795b96354e753074b5ce59ad04ecd`. `OwnedRoot` is a fresh parent that contains `RuntimeRoot` and the Pester setup area. Keep `ArtifactsRoot` fresh as a separate sibling outside `OwnedRoot`, candidate, driver, authority, and runtime; setup cleanup must stay within its owned paths and must not remove those roots. `SourceToolsPath` must be directly under `ArtifactsRoot`. Use the exact stable Go version installed for the run. Verify the official PowerShell archive hash against the release `hashes.sha256` and its `pwsh.exe` Microsoft Authenticode signature before using it.
+The local equivalent uses a clean candidate checkout at the exact event head and a separate, clean protected-driver checkout of this repository at the exact event base. Before cloning or checking out any of these roots, set global `core.autocrlf=false`; keep it false through source validation so checkout files and subsequent Git archives retain committed bytes. Recreate any checkout made while line-ending conversion was enabled. The base must be a full nonzero 40-character SHA, must resolve to itself, and must be a distinct ancestor of the candidate. Use a separate clean authority checkout at `8e627baf54bd6e47862e6291b25e71cc45a2f2b7`. `OwnedRoot` is a fresh parent that contains `RuntimeRoot` and the Pester setup area. Keep `ArtifactsRoot` fresh as a separate sibling outside `OwnedRoot`, candidate, driver, authority, and runtime; setup cleanup must stay within its owned paths and must not remove those roots. `SourceToolsPath` must be directly under `ArtifactsRoot`. Use the exact stable Go version installed for the run. Verify the official PowerShell archive hash against the release `hashes.sha256` and its `pwsh.exe` Microsoft Authenticode signature before using it.
 
 Set the root paths and event SHAs first. Then run the global line-ending control and verification before cloning or checking out the three repositories. After checkout, the commands below bind the exact event head, protected driver base, clean ancestry, effective line-ending settings, and clean worktrees. The Pester setup uses the same verified PowerShell and `RUN_OWNED_ROOT` between the two canonical calls:
 
 ```powershell
 $CandidateRoot = 'C:\work\candidate'
 $DriverRoot = 'C:\work\driver-at-event-base'
-$AuthorityRoot = 'C:\work\authority-ff85'
+$AuthorityRoot = 'C:\work\authority-8e62'
 $OwnedRoot = 'C:\work\owned-run-unique'
 $RuntimeRoot = Join-Path $OwnedRoot 'runtime'
 $ArtifactsRoot = 'C:\work\artifacts-run-unique'
@@ -94,8 +94,8 @@ if ($CandidateHead -cnotmatch '^[0-9a-f]{40}$' -or $CandidateHead -match '^0+$' 
 if ($LASTEXITCODE -ne 0) { throw 'Could not check out the exact event candidate head.' }
 & git -C $DriverRoot checkout --detach $BaseCommit
 if ($LASTEXITCODE -ne 0) { throw 'Could not check out the exact event base as protected driver.' }
-& git -C $AuthorityRoot checkout --detach ff85d5f80fe795b96354e753074b5ce59ad04ecd
-if ($LASTEXITCODE -ne 0) { throw 'Could not check out the exact ff85 authority.' }
+& git -C $AuthorityRoot checkout --detach 8e627baf54bd6e47862e6291b25e71cc45a2f2b7
+if ($LASTEXITCODE -ne 0) { throw 'Could not check out the exact 8e62 authority.' }
 
 $candidateHeadObserved = (& git -C $CandidateRoot rev-parse --verify --end-of-options 'HEAD^{commit}' 2>$null | Out-String).Trim()
 if ($LASTEXITCODE -ne 0 -or $candidateHeadObserved -cne $CandidateHead) { throw 'Candidate HEAD must equal the exact event head.' }
@@ -147,7 +147,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Protected source validation failed.' }
 
 The source gate is limited to stages 1–5, no-LLM Static, and the whole test suite. A report PASS, workflow success, review, and merge do not authorize release, installation, publication, or downstream cutover. `releaseEligible` is permanently false; any separate release process must make its own decision.
 
-Rollback must use a normal reviewed PR that reverts the entire adoption, including the `.github/workflows/validate.yml` ff85 activation, `config/standard-v1.json`, the active driver, tests, and docs. Restore the complete previously validated 8a authority tuple: commit `8aabd22694a05771f98639f6d726cc9a620eb94b`, archive SHA-256 `d92df1a8f0aa342970dc9c66a77b6211955b4708de12119cb7f9a360fd265311`, and its full 26-file hash inventory, along with the prior workflow and ordinary validation route. Reverting only the config or driver while leaving the ff85 source workflow active is invalid: that workflow rejects the 8a authority.
+Rollback must use a normal reviewed PR that reverts the entire adoption, including the `.github/workflows/validate.yml` 8e62 activation, `config/standard-v1.json`, the active driver, tests, and docs. Restore the complete previously validated ff85 authority tuple: commit `ff85d5f80fe795b96354e753074b5ce59ad04ecd`, archive SHA-256 `3dc38613f2e2316ad8fcc79d4bf48d0b03fd8398f8dacc72d156abcbce95ea9d`, and its full 32-file hash inventory, along with the prior protected two-purpose workflow. Reverting only the config or driver while leaving the 8e62 source workflow active is invalid: that workflow rejects the ff85 authority. The prepared base reader accepts either complete approved tuple; no previous receipts count as evidence for the rollback candidate.
 
 ## Versioning
 
