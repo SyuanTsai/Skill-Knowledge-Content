@@ -29,6 +29,17 @@ BeforeAll {
         }
     }
 
+    function New-ScopedAuthorityCandidate {
+        $authority = New-PreparedAuthorityCandidate
+        $authority.commit = '8e627baf54bd6e47862e6291b25e71cc45a2f2b7'
+        $authority.archiveUrl = 'https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/8e627baf54bd6e47862e6291b25e71cc45a2f2b7'
+        $authority.archiveSha256 = '9aa4a7fc8fc7c7f0ff9e774c79c77a64077b4003212a523dda519d034ff99989'
+        ($authority.files | Where-Object path -CEQ 'docs/standards/skill-repository-standard.md').sha256 = 'f7457bc6dbc13b475bcffc532b75961ff838e8d184162188dbbb1c766fd17e98'
+        ($authority.files | Where-Object path -CEQ 'scripts/Invoke-StandardAuthorityGate.ps1').sha256 = 'c4609b7f88f9b88be8583cc52f939837d49f2fa5e784977156cfe3d7c752082e'
+        ($authority.files | Where-Object path -CEQ 'scripts/Invoke-StandardValidation.ps1').sha256 = 'd13cea68b471aea60142665ee787a1bb2111d5ea7f8d45dfea14e0a2a59409b8'
+        return $authority
+    }
+
     function Assert-NoReparseAncestors {
         param([Parameter(Mandatory = $true)][string] $Path, [Parameter(Mandatory = $true)][string] $Context)
 
@@ -221,6 +232,58 @@ Describe 'Knowledge Content protected source driver preparation' {
         @($pin.files.Keys | Sort-Object -Unique -CaseSensitive).Count | Should -Be 32
         $pin.files['docs/standards/standard-core-validation-v2.json'] | Should -Be '2ba91aec827a642517fd90d294524e0dfc3fed9ae19c27d867d442d73b4915d6'
         $pin.files['docs/standards/third-party-raw-skill-sources.md'] | Should -Be '18649fd56eada4a94a5d47de778669b0ebcecfb85b84f5c581d283b21979f7ac'
+    }
+
+    # Scenario: a successor candidate selects the complete, normally merged 325 authority tuple.
+    # Purpose: prepare the protected base reader before activation without changing the active ff85 pin.
+    It 'UnitT01_accepts_exact_scoped_authority_with_all_32_members' {
+        $authority = New-ScopedAuthorityCandidate
+        $accepted = Assert-KnowledgeContentPreparedAuthorityTuple -Authority $authority
+        $accepted.commit | Should -BeExactly $authority.commit
+        $accepted.archiveSha256 | Should -BeExactly $authority.archiveSha256
+        $accepted.files.Count | Should -Be 32
+        foreach ($file in $authority.files) {
+            $accepted.files[$file.path] | Should -BeExactly $file.sha256
+        }
+    }
+
+    # Scenario: both explicit purposes receive the same approved successor candidate tuple.
+    # Purpose: setup and execution must resolve the same authority instead of preparing old tools for a new runner.
+    It 'UnitT02_routes_both_source_purposes_to_the_candidate_scoped_authority' {
+        $authority = New-ScopedAuthorityCandidate
+        foreach ($purpose in @('PrepareSourceTools', 'SourceValidation')) {
+            $request = @{ SourceToolsPath = 'C:/owned/source-tools.json'; AuthorityRepositoryRoot = 'C:/authority'; TrustedToolRoot = 'C:/runtime'; CandidateAuthority = $authority }
+            $request[$purpose] = $true
+            $route = Resolve-KnowledgeContentSourceRoute @request
+            $route.authority.commit | Should -BeExactly $authority.commit
+            $route.authority.files['scripts/Invoke-StandardValidation.ps1'] | Should -BeExactly 'd13cea68b471aea60142665ee787a1bb2111d5ea7f8d45dfea14e0a2a59409b8'
+        }
+    }
+
+    # Scenario: a successor tuple retains an old runner, archive, omitted member, extra member, or an unapproved revision.
+    # Purpose: reject mixed authority identities at both setup and execution boundaries.
+    It 'UnitT03_rejects_mixed_or_incomplete_scoped_tuple_<Mutation>' -TestCases @(
+        @{ Mutation = 'runner' }, @{ Mutation = 'archive' }, @{ Mutation = 'missing' }, @{ Mutation = 'extra' }, @{ Mutation = 'commit' }, @{ Mutation = 'uppercase' }
+    ) {
+        param($Mutation)
+        $authority = New-ScopedAuthorityCandidate
+        switch ($Mutation) {
+            'runner' { ($authority.files | Where-Object path -CEQ 'scripts/Invoke-StandardValidation.ps1').sha256 = 'a4ee880810171428a6abd2e8fd5db2da1eaeda4abc0fc6c72dc259b4a709174b' }
+            'archive' { $authority.archiveSha256 = '3dc38613f2e2316ad8fcc79d4bf48d0b03fd8398f8dacc72d156abcbce95ea9d' }
+            'missing' { $authority.files = @($authority.files | Select-Object -SkipLast 1) }
+            'extra' { $authority.files += [pscustomobject]@{ path = 'extra'; sha256 = '0' * 64 } }
+            'commit' { $authority.commit = '0' * 40 }
+            'uppercase' {
+                $authority = New-PreparedAuthorityCandidate
+                $authority.commit = '8E627BAF54BD6E47862E6291B25E71CC45A2F2B7'
+                $authority.archiveUrl = "https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/$($authority.commit)"
+            }
+        }
+        foreach ($purpose in @('PrepareSourceTools', 'SourceValidation')) {
+            $request = @{ SourceToolsPath = 'C:/owned/source-tools.json'; AuthorityRepositoryRoot = 'C:/authority'; TrustedToolRoot = 'C:/runtime'; CandidateAuthority = $authority }
+            $request[$purpose] = $true
+            { Resolve-KnowledgeContentSourceRoute @request } | Should -Throw
+        }
     }
 
     # Scenario: a candidate authority contains the exact fields, ordered files, and identities in the prepared ff85 pin.
