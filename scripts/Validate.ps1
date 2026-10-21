@@ -703,7 +703,7 @@ try {
 
     . (Join-Path $PSScriptRoot 'StandardCoreSourceValidation.ps1')
     $candidateAuthority = $null
-    if ($SourceValidation) {
+    if ($SourceValidation -or $PrepareSourceTools) {
         $candidateConfig = Read-JsonFile -Path (Join-Path $repoRoot 'config/standard-v1.json') -Context 'candidate config/standard-v1.json'
         $candidateAuthority = $candidateConfig.authority
     }

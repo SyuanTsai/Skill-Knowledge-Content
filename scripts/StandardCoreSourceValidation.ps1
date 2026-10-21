@@ -62,17 +62,28 @@ function Assert-KnowledgeContentExactPropertySet {
 
 function Get-KnowledgeContentPreparedAuthorityPin {
     [CmdletBinding()]
-    param()
+    param(
+        [ValidateSet('ff85d5f80fe795b96354e753074b5ce59ad04ecd', '8e627baf54bd6e47862e6291b25e71cc45a2f2b7', IgnoreCase = $false)]
+        [string] $Commit = $script:KnowledgeContentPreparedAuthorityCommit
+    )
 
     $files = [ordered]@{}
     foreach ($entry in $script:KnowledgeContentPreparedAuthorityFiles.GetEnumerator()) {
         $files[[string]$entry.Key] = [string]$entry.Value
     }
+    $archiveSha256 = $script:KnowledgeContentPreparedAuthorityArchiveSha256
+    if ($Commit -ceq '8e627baf54bd6e47862e6291b25e71cc45a2f2b7') {
+        # The other 29 ordered members are byte-identical in the two approved snapshots.
+        $archiveSha256 = '9aa4a7fc8fc7c7f0ff9e774c79c77a64077b4003212a523dda519d034ff99989'
+        $files['docs/standards/skill-repository-standard.md'] = 'f7457bc6dbc13b475bcffc532b75961ff838e8d184162188dbbb1c766fd17e98'
+        $files['scripts/Invoke-StandardAuthorityGate.ps1'] = 'c4609b7f88f9b88be8583cc52f939837d49f2fa5e784977156cfe3d7c752082e'
+        $files['scripts/Invoke-StandardValidation.ps1'] = 'd13cea68b471aea60142665ee787a1bb2111d5ea7f8d45dfea14e0a2a59409b8'
+    }
     return [pscustomobject][ordered]@{
         repository = $script:KnowledgeContentPreparedAuthorityRepository
-        commit = $script:KnowledgeContentPreparedAuthorityCommit
-        archiveUrl = "https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/$($script:KnowledgeContentPreparedAuthorityCommit)"
-        archiveSha256 = $script:KnowledgeContentPreparedAuthorityArchiveSha256
+        commit = $Commit
+        archiveUrl = "https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/$Commit"
+        archiveSha256 = $archiveSha256
         files = $files
     }
 }
@@ -85,7 +96,7 @@ function Assert-KnowledgeContentPreparedAuthorityTuple {
         -Expected @('repository', 'commit', 'archiveUrl', 'archiveSha256', 'files') `
         -Context 'Prepared source authority'
 
-    $expected = Get-KnowledgeContentPreparedAuthorityPin
+    $expected = Get-KnowledgeContentPreparedAuthorityPin -Commit $Authority.commit
     foreach ($field in @('repository', 'commit', 'archiveUrl', 'archiveSha256')) {
         if ($Authority.$field -isnot [string] -or [string]$Authority.$field -cne [string]$expected.$field) {
             throw "Prepared source authority $field does not match the exact approved tuple."
@@ -160,7 +171,7 @@ function Assert-KnowledgeContentSourceRequest {
     if ([string]::IsNullOrWhiteSpace($AuthorityRepositoryRoot)) { throw 'Explicit source setup or validation requires AuthorityRepositoryRoot.' }
     if ([string]::IsNullOrWhiteSpace($TrustedToolRoot)) { throw 'Explicit source setup or validation requires TrustedToolRoot.' }
 
-    if ($SourceValidation) {
+    if ($SourceValidation -or $null -ne $CandidateAuthority) {
         if ($null -eq $CandidateAuthority) { throw 'SourceValidation requires the exact prepared candidate authority tuple.' }
         [void](Assert-KnowledgeContentPreparedAuthorityTuple -Authority $CandidateAuthority)
     }
@@ -182,7 +193,9 @@ function Resolve-KnowledgeContentSourceRoute {
     Assert-KnowledgeContentSourceRequest -PrepareSourceTools:$PrepareSourceTools -SourceValidation:$SourceValidation -SourceToolsPath $SourceToolsPath -AuthorityRepositoryRoot $AuthorityRepositoryRoot -TrustedToolRoot $TrustedToolRoot -AuthorityArchivePath $AuthorityArchivePath -CandidateAuthority $CandidateAuthority -BoundParameters $BoundParameters
 
     if ($PrepareSourceTools) {
-        return [pscustomobject]@{ mode = 'prepare-source-tools'; authority = Get-KnowledgeContentPreparedAuthorityPin }
+        $pin = if ($null -eq $CandidateAuthority) { Get-KnowledgeContentPreparedAuthorityPin }
+               else { Assert-KnowledgeContentPreparedAuthorityTuple -Authority $CandidateAuthority }
+        return [pscustomobject]@{ mode = 'prepare-source-tools'; authority = $pin }
     }
     if ($SourceValidation) {
         return [pscustomobject]@{ mode = 'source-validation'; authority = Assert-KnowledgeContentPreparedAuthorityTuple -Authority $CandidateAuthority }
