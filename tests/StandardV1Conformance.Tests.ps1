@@ -35,8 +35,8 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $adapter.schemaVersion | Should -Be 1
         $adapter.standardVersion | Should -Be 'v1'
         $adapter.authority.repository | Should -Be 'https://github.com/SyuanTsai/SyuanTsai-AI-Instructions.git'
-        $adapter.authority.commit | Should -Be 'ff85d5f80fe795b96354e753074b5ce59ad04ecd'
-        $adapter.authority.archiveSha256 | Should -Be '3dc38613f2e2316ad8fcc79d4bf48d0b03fd8398f8dacc72d156abcbce95ea9d'
+        $adapter.authority.commit | Should -Be '8e627baf54bd6e47862e6291b25e71cc45a2f2b7'
+        $adapter.authority.archiveSha256 | Should -Be '9aa4a7fc8fc7c7f0ff9e774c79c77a64077b4003212a523dda519d034ff99989'
         @($adapter.PSObject.Properties.Name) | Should -Not -Contain 'security'
         @($adapter.authority.files).Count | Should -Be 32
         @($adapter.authority.files.path) | Should -Contain 'docs/standards/standard-core-validation-v2.json'
@@ -137,7 +137,7 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $sourceBindingGuardEnd | Should -BeGreaterThan -1
         $protectedHelperDotSource | Should -BeGreaterThan $sourceBindingGuardEnd
         $workflow | Should -Match 'foreach \(\$root in @\(\$candidateRoot, \$driverRoot, \$authorityRoot\)\)'
-        $workflow | Should -Match 'ref:\s+ff85d5f80fe795b96354e753074b5ce59ad04ecd'
+        $workflow | Should -Match 'ref:\s+8e627baf54bd6e47862e6291b25e71cc45a2f2b7'
         $workflow | Should -Match 'PowerShell/PowerShell/releases/latest'
         $workflow | Should -Match 'Get-AuthenticodeSignature'
         $workflow | Should -Match 'scripts/Prepare-PesterRuntime\.ps1'
@@ -148,6 +148,7 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $workflow | Should -Match 'Join-Path \$env:KC_DRIVER_ROOT ''scripts/Validate\.ps1'''
         $workflow | Should -Not -Match 'Join-Path \$env:KC_CANDIDATE_ROOT ''scripts/(?:Validate|Prepare-PesterRuntime)\.ps1'''
         $workflow | Should -Match 'Assert-KnowledgeContentPreparedAuthorityCheckout'
+        $workflow | Should -Match "Get-KnowledgeContentPreparedAuthorityPin -Commit '8e627baf54bd6e47862e6291b25e71cc45a2f2b7'"
         $workflow | Should -Match 'Assert-StandardCoreSourceCheckReport -Report \$report'
         $workflow | Should -Match '\-ExpectedSourceRevision \$env:KC_HEAD_COMMIT -ExpectedBaseRevision \$env:KC_BASE_COMMIT'
         $workflow | Should -Match '\-ExpectedEventName \$env:GITHUB_EVENT_NAME -ArtifactsRoot \$sourceValidationRoot'
@@ -328,7 +329,7 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         }
     }
 
-    # Scenario: the active ff85 pin makes ordinary v1 validation intentionally incomplete.
+    # Scenario: the active 8e62 pin makes ordinary v1 validation intentionally incomplete.
     # Purpose: explain the two purposes while keeping the script path as the sole public validation command.
     It 'UnitT60_documents_both_protected_purposes_under_the_single_canonical_entrypoint' {
         $readme = Get-Content -LiteralPath (Join-Path $script:RepositoryRoot 'README.md') -Raw
@@ -337,14 +338,14 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
             $document | Should -Match 'scripts/Validate\.ps1'
             $document | Should -Match '-PrepareSourceTools'
             $document | Should -Match '-SourceValidation'
-            $document | Should -Match 'ff85d5f80fe795b96354e753074b5ce59ad04ecd'
+            $document | Should -Match '8e627baf54bd6e47862e6291b25e71cc45a2f2b7'
             $document | Should -Match 'releaseEligible=false'
             $document | Should -Match 'reverts the entire adoption'
             $document | Should -Match '\.github/workflows/validate\.yml'
             $document | Should -Match 'config/standard-v1\.json'
-            $document | Should -Match '8aabd22694a05771f98639f6d726cc9a620eb94b'
-            $document | Should -Match 'd92df1a8f0aa342970dc9c66a77b6211955b4708de12119cb7f9a360fd265311'
-            $document | Should -Match '26-file hash inventory'
+            $document | Should -Match 'ff85d5f80fe795b96354e753074b5ce59ad04ecd'
+            $document | Should -Match '3dc38613f2e2316ad8fcc79d4bf48d0b03fd8398f8dacc72d156abcbce95ea9d'
+            $document | Should -Match '32-file hash inventory'
         }
         $readme | Should -Match 'Protected local run'
         $readme | Should -Match '\$DriverRoot'

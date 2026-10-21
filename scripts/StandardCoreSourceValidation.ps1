@@ -220,7 +220,7 @@ function Assert-KnowledgeContentPreparedAuthorityCheckout {
     }
     $head = @(& $GitPath -C $fullRoot rev-parse --verify --end-of-options 'HEAD^{commit}' 2>$null)
     if ($LASTEXITCODE -ne 0 -or $head.Count -ne 1 -or ([string]$head[0]).Trim() -cne [string]$AuthorityPin.commit) {
-        throw 'Prepared authority checkout HEAD does not match the exact ff85 revision.'
+        throw 'Prepared authority checkout HEAD does not match the exact approved revision.'
     }
     $origins = @(& $GitPath -C $fullRoot config --local --get-all remote.origin.url 2>$null)
     if ($LASTEXITCODE -ne 0 -or $origins.Count -ne 1) { throw 'Prepared authority checkout must have exactly one origin URL.' }
@@ -757,7 +757,7 @@ function Invoke-KnowledgeContentSourcePurpose {
 
     if ($Mode -ceq 'source-validation') {
         [void](Assert-KnowledgeContentPreparedAuthorityTuple -Authority $CandidateAuthority)
-        if ([string]$CandidateAuthority.commit -cne [string]$AuthorityPin.commit) { throw 'Source validation candidate authority differs from the prepared ff85 authority.' }
+        if ([string]$CandidateAuthority.commit -cne [string]$AuthorityPin.commit) { throw 'Source validation candidate authority differs from the prepared authority.' }
         if ([string]::IsNullOrWhiteSpace($BaseCommit)) { $BaseCommit = 'HEAD^' }
         $baseRevision = Resolve-GitRevision -GitPath $gitPath -Root $repoRoot -Revision $BaseCommit -Context 'Base commit'
         & $gitPath -C $repoRoot merge-base --is-ancestor $baseRevision $candidateCommit
