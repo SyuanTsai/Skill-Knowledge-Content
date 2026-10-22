@@ -6,6 +6,8 @@ SPDX-License-Identifier: Apache-2.0
 
 Independent Agent Skills repository for the **Knowledge & Content** domain.
 
+For source maintenance and review, follow the [central Skill maintenance guidelines](https://github.com/SyuanTsai/SyuanTsai-AI-Instructions/blob/76cee33b5e9b91b8a21f362f2936078c74a68fb7/docs/skill-maintenance-guidelines.md) when deciding scope, supporting resources, dependencies, and replacement cleanup.
+
 ## Repository contract
 
 - Stable source ID: `knowledge-content`
