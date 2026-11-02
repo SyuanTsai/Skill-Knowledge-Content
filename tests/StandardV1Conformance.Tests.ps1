@@ -94,6 +94,9 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $workflow | Should -Match 'actions/checkout@[0-9a-f]{40}'
         $workflow | Should -Match 'uses:\s*\*checkout-action-reference'
         $workflow | Should -Match 'actions/setup-go@[0-9a-f]{40}'
+        $workflow | Should -Match '\$ownedRoot = Join-Path \$env:RUNNER_TEMP "kc-\$runNonce"'
+        $workflow | Should -Match '\$expectedOwnedRoot = Join-Path \$env:PROTECTED_RUNNER_TEMP "kc-\$expectedRunNonce"'
+        $workflow | Should -Not -Match 'knowledge-content-owned'
         $workflow | Should -Match '\$artifactsRoot = Join-Path \(\[IO\.Path\]::GetPathRoot\(\$env:RUNNER_TEMP\)\) "a-\$runNonce"'
         $workflow | Should -Match 'path:\s+\$\{\{\s*env\.KC_ARTIFACTS_ROOT\s*\}\}'
         $workflow | Should -Not -Match 'knowledge-content-artifacts'
@@ -251,7 +254,7 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $setupSha256 = 'a' * 64
         $helperSha256 = (Get-FileHash -LiteralPath (Join-Path $driverRoot $helperRelativePath) -Algorithm SHA256).Hash.ToLowerInvariant()
         $gitSha256 = (Get-FileHash -LiteralPath $gitPath -Algorithm SHA256).Hash.ToLowerInvariant()
-        $ownedRoot = Join-Path $runnerTemp "knowledge-content-owned-$runNonce"
+        $ownedRoot = Join-Path $runnerTemp "kc-$runNonce"
         $runtimeRoot = Join-Path $ownedRoot 'runtime'
         $artifactsRoot = Join-Path ([IO.Path]::GetPathRoot($runnerTemp)) "a-$runNonce"
         $sourceToolsPath = Join-Path $artifactsRoot 'source-tools.json'

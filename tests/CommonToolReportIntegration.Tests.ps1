@@ -21,10 +21,13 @@ Describe 'Knowledge child uses central package tool report rules' {
             return $rows -join "`n"
         }
         function Invoke-KnowledgeTestChild {
-            param([Parameter(Mandatory = $true)][string[]] $Arguments)
+            param(
+                [Parameter(Mandatory = $true)][string[]] $Arguments,
+                [string] $WorkingDirectory = $script:testRoot
+            )
             $previousLocation = Get-Location
             try {
-                Set-Location -LiteralPath $script:testRoot
+                Set-Location -LiteralPath $WorkingDirectory
                 $output = @(& $script:pwshPath @Arguments 2>&1)
                 $exitCode = $LASTEXITCODE
                 return [pscustomobject]@{ exitCode = $exitCode; output = @($output) }
@@ -39,6 +42,37 @@ Describe 'Knowledge child uses central package tool report rules' {
         [IO.File]::WriteAllText($script:childPath, $script:childMatch.Groups['body'].Value)
         $script:fakeToolPath = Join-Path $script:testRoot 'skill-validator.ps1'
         [IO.File]::WriteAllText($script:fakeToolPath, 'Get-Content -LiteralPath $env:SYP154_TEST_TOOL_REPORT -Raw; $global:LASTEXITCODE = 0')
+        $script:fakeStaticToolPath = Join-Path $script:testRoot 'skillspector.ps1'
+        $script:fakeStaticFailureToolPath = Join-Path $script:testRoot 'skillspector-failure.cmd'
+        $script:fakeStaticFailureChildPath = Join-Path $script:testRoot 'skillspector-failure-child.ps1'
+        $fakeStaticTool = @'
+[IO.File]::WriteAllText($env:SYP154_STATIC_ARGUMENTS, ($args | ConvertTo-Json -Compress), [Text.UTF8Encoding]::new($false))
+$report = [ordered]@{
+    execution_successful = $true
+    analysis_completeness = [ordered]@{
+        execution_successful = $true
+        is_complete = $true
+        status = 'complete'
+        coverage_percent = 100
+        ledger_exceptions = @()
+        scope_exclusions = @()
+        limitations = @()
+    }
+    skill = [ordered]@{ name = 'demo'; source = $env:SYP154_STATIC_SKILL_ROOT }
+    components = @([ordered]@{ path = 'SKILL.md' })
+    issues = @()
+}
+Write-Output ($report | ConvertTo-Json -Depth 10 -Compress)
+$global:LASTEXITCODE = 0
+'@
+        [IO.File]::WriteAllText($script:fakeStaticToolPath, $fakeStaticTool, [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText($script:fakeStaticFailureChildPath, "[Console]::Error.WriteLine('SkillSpector fixture stderr diagnostic')`nexit 73", [Text.UTF8Encoding]::new($false))
+        $fakeStaticFailureWrapper = @'
+@echo off
+"%SYP154_TEST_PWSH%" -NoProfile -NonInteractive -File "%~dp0skillspector-failure-child.ps1" %*
+exit /b %ERRORLEVEL%
+'@
+        [IO.File]::WriteAllText($script:fakeStaticFailureToolPath, $fakeStaticFailureWrapper, [Text.UTF8Encoding]::new($false))
         if ([string]::IsNullOrWhiteSpace($env:SYP154_CANDIDATE_AUTHORITY_ROOT)) {
             # Run the actual candidate driver against its immutable authority,
             # including when the protected CI driver still uses an older pin.
@@ -65,9 +99,10 @@ Describe 'Knowledge child uses central package tool report rules' {
         $script:runnerPath = Join-Path $moduleRoot 'scripts/Invoke-StandardValidation.ps1'
         $script:pwshPath = (Get-Command pwsh -CommandType Application | Select-Object -First 1).Source
         $script:priorEnv = @{}
-        foreach ($name in @('STANDARD_VALIDATION_ACTIVE_SKILLS', 'STANDARD_VALIDATION_SKILLS_ROOT', 'STANDARD_VALIDATION_SKILL_ID', 'STANDARD_VALIDATION_CANDIDATE_ID', 'STANDARD_VALIDATION_CANDIDATE_ROOT', 'STANDARD_VALIDATION_SKILL_INVENTORY_SHA256', 'SYP154_TEST_TOOL_REPORT', 'SYP154_CANDIDATE_AUTHORITY_ROOT')) {
+        foreach ($name in @('STANDARD_VALIDATION_ACTIVE_SKILLS', 'STANDARD_VALIDATION_SKILLS_ROOT', 'STANDARD_VALIDATION_SKILL_ID', 'STANDARD_VALIDATION_CANDIDATE_ID', 'STANDARD_VALIDATION_CANDIDATE_ROOT', 'STANDARD_VALIDATION_SKILL_INVENTORY_SHA256', 'SYP154_TEST_TOOL_REPORT', 'SYP154_STATIC_ARGUMENTS', 'SYP154_STATIC_SKILL_ROOT', 'SYP154_TEST_PWSH', 'SYP154_CANDIDATE_AUTHORITY_ROOT')) {
             $script:priorEnv[$name] = [Environment]::GetEnvironmentVariable($name)
         }
+        $env:SYP154_TEST_PWSH = $script:pwshPath
         $env:STANDARD_VALIDATION_ACTIVE_SKILLS = 'demo'
         $env:STANDARD_VALIDATION_SKILLS_ROOT = Join-Path $script:testRoot 'skills'
         $env:STANDARD_VALIDATION_SKILL_ID = 'demo'
@@ -163,6 +198,57 @@ Describe 'Knowledge child uses central package tool report rules' {
         $child.exitCode | Should -Be 1
         ($child.output -join "`n") | Should -Match 'central validation runner changed or is missing'
     }
+
+    # Scenario: SkillSpector v2.13.3 only emits its JSON report to stdout.
+    # Purpose: require a new stdout report file and forbid the removed --output argument.
+    It 'InterT35_captures_the_SkillSpector_stdout_report_without_the_removed_output_argument' {
+        $staticWorkingRoot = Join-Path $script:testRoot 'static-success'
+        [void](New-Item -ItemType Directory -Path $staticWorkingRoot)
+        $argumentsPath = Join-Path $staticWorkingRoot 'skillspector-arguments.json'
+        $reportPath = Join-Path $staticWorkingRoot 'skillspector-demo.json'
+        Test-Path -LiteralPath $reportPath | Should -BeFalse
+        $env:SYP154_STATIC_ARGUMENTS = $argumentsPath
+        $env:SYP154_STATIC_SKILL_ROOT = $script:skillRoot
+        $toolchain = [ordered]@{
+            skillSpectorPath = $script:fakeStaticToolPath
+            skillSpectorSha256 = (Get-FileHash -LiteralPath $script:fakeStaticToolPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        }
+        [IO.File]::WriteAllText($script:toolchainPath, ($toolchain | ConvertTo-Json -Compress), [Text.UTF8Encoding]::new($false))
+        $toolchainHash = (Get-FileHash -LiteralPath $script:toolchainPath -Algorithm SHA256).Hash.ToLowerInvariant()
+
+        $child = Invoke-KnowledgeTestChild -WorkingDirectory $staticWorkingRoot -Arguments @('-NoProfile', '-NonInteractive', '-File', $script:childPath, '-Mode', 'static', '-ToolchainPath', $script:toolchainPath, '-ToolchainSha256', $toolchainHash)
+
+        $child.exitCode | Should -Be 0 -Because ($child.output -join "`n")
+        Test-Path -LiteralPath $reportPath -PathType Leaf | Should -BeTrue
+        $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json -Depth 20
+        $report.execution_successful | Should -BeTrue
+        $recordedArguments = @(Get-Content -LiteralPath $argumentsPath -Raw | ConvertFrom-Json -Depth 20)
+        (@($recordedArguments) -join "`n") | Should -BeExactly (@('scan', $script:skillRoot, '--no-llm', '--format', 'json') -join "`n")
+        $recordedArguments | Should -Not -Contain '--output'
+        $envelope = ($child.output -join "`n") | ConvertFrom-Json -Depth 20
+        $nativeReport = @($envelope.nativeReports)[0]
+        $nativeReport.path | Should -BeExactly ([IO.Path]::GetFullPath($reportPath))
+        $nativeReport.sha256 | Should -BeExactly ((Get-FileHash -LiteralPath $reportPath -Algorithm SHA256).Hash.ToLowerInvariant())
+    }
+
+    # Scenario: SkillSpector returns a nonzero exit code after writing a native stderr diagnostic.
+    # Purpose: preserve bounded native diagnostics in the static-stage failure message.
+    It 'InterT36_reports_SkillSpector_stderr_when_the_static_scan_fails' {
+        $staticWorkingRoot = Join-Path $script:testRoot 'static-failure'
+        [void](New-Item -ItemType Directory -Path $staticWorkingRoot)
+        $toolchain = [ordered]@{
+            skillSpectorPath = $script:fakeStaticFailureToolPath
+            skillSpectorSha256 = (Get-FileHash -LiteralPath $script:fakeStaticFailureToolPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        }
+        [IO.File]::WriteAllText($script:toolchainPath, ($toolchain | ConvertTo-Json -Compress), [Text.UTF8Encoding]::new($false))
+        $toolchainHash = (Get-FileHash -LiteralPath $script:toolchainPath -Algorithm SHA256).Hash.ToLowerInvariant()
+
+        $child = Invoke-KnowledgeTestChild -WorkingDirectory $staticWorkingRoot -Arguments @('-NoProfile', '-NonInteractive', '-File', $script:childPath, '-Mode', 'static', '-ToolchainPath', $script:toolchainPath, '-ToolchainSha256', $toolchainHash)
+
+        $child.exitCode | Should -Be 1
+        ($child.output -join "`n") | Should -Match 'SkillSpector fixture stderr diagnostic'
+    }
+
     # Scenario: the reviewed new authority input is supplied to the actual candidate driver guard.
     # Purpose: prove the extracted real driver guard accepts a valid pin before
     # counting its rejection cases as coverage.

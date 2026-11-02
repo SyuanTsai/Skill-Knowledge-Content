@@ -193,7 +193,7 @@ jobs:
           }
 
           $runNonce = [guid]::NewGuid().ToString('N')
-          $ownedRoot = Join-Path $env:RUNNER_TEMP "knowledge-content-owned-$runNonce"
+          $ownedRoot = Join-Path $env:RUNNER_TEMP "kc-$runNonce"
           $runtimeRoot = Join-Path $ownedRoot 'runtime'
           $artifactsRoot = Join-Path ([IO.Path]::GetPathRoot($env:RUNNER_TEMP)) "a-$runNonce"
           foreach ($path in @($ownedRoot, $runtimeRoot, $artifactsRoot)) {
@@ -580,7 +580,7 @@ jobs:
               [string]$env:EXPECTED_SOURCE_TOOLS_SHA256 -cnotmatch '^[0-9a-f]{64}$') {
             throw 'Immutable protected workflow identity outputs are missing or malformed.'
           }
-          $expectedOwnedRoot = Join-Path $env:PROTECTED_RUNNER_TEMP "knowledge-content-owned-$expectedRunNonce"
+          $expectedOwnedRoot = Join-Path $env:PROTECTED_RUNNER_TEMP "kc-$expectedRunNonce"
           $expectedRuntimeRoot = Join-Path $expectedOwnedRoot 'runtime'
           $expectedArtifactsRoot = Join-Path ([IO.Path]::GetPathRoot($env:PROTECTED_RUNNER_TEMP)) "a-$expectedRunNonce"
           $expectedSourceToolsPath = Join-Path $expectedArtifactsRoot 'source-tools.json'

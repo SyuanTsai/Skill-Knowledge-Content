@@ -632,12 +632,22 @@ try {
                 $skillRoot = Get-SkillRoot -SkillId $skillId
                 $inventory = Get-InventoryPaths -SkillRoot $skillRoot
                 $reportPath = Join-Path (Get-Location) ("skillspector-$skillId.json")
-                $nativeArguments = @('scan', $skillRoot, '--no-llm', '--format', 'json', '--output', $reportPath)
-                & ([string]$toolchain.skillSpectorPath) @nativeArguments | Out-Null
+                if (Test-Path -LiteralPath $reportPath) { throw "SkillSpector stdout report path already exists for '$skillId'." }
+                $staticStderrPath = Join-Path (Get-Location) ("skillspector-$skillId.stderr")
+                $nativeArguments = @('scan', $skillRoot, '--no-llm', '--format', 'json')
+                & ([string]$toolchain.skillSpectorPath) @nativeArguments 1> $reportPath 2> $staticStderrPath
                 $nativeExit = $LASTEXITCODE
+                $staticStderr = if (Test-Path -LiteralPath $staticStderrPath -PathType Leaf) { [IO.File]::ReadAllText($staticStderrPath) } else { [string]::Empty }
+                if (-not [string]::IsNullOrEmpty($staticStderr) -and $staticStderr.Length -gt 4096) { $staticStderr = $staticStderr.Substring(0, 4096) + '[truncated]' }
+                $staticStderrDiagnostic = if ([string]::IsNullOrWhiteSpace($staticStderr)) { '' } else { " SkillSpector stderr: $staticStderr" }
                 Add-NativeReport -Command ([string]$toolchain.skillSpectorPath) -Arguments $nativeArguments -ExitCode $nativeExit -Path $reportPath -SkillId $skillId
-                if ($nativeExit -ne 0) { throw "SkillSpector returned exit code $nativeExit for '$skillId'." }
-                $report = Read-Json -Path $reportPath -Context "SkillSpector report for '$skillId'"
+                if ($nativeExit -ne 0) { throw "SkillSpector returned exit code $nativeExit for '$skillId'.$staticStderrDiagnostic" }
+                try {
+                    $report = Read-Json -Path $reportPath -Context "SkillSpector report for '$skillId'"
+                }
+                catch {
+                    throw "Could not read SkillSpector report for '$skillId'.$staticStderrDiagnostic $($_.Exception.Message)"
+                }
                 $findings += Assert-SkillSpectorReport -Report $report -SkillRoot $skillRoot -SkillId $skillId -Inventory $inventory
             }
             $semantic = ($SemanticRequired -ceq 'true') -or $findings.Count -gt 0
