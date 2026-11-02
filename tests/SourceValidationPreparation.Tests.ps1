@@ -635,7 +635,10 @@ Describe 'Knowledge Content protected source driver preparation' {
         $driver | Should -Match '\$script:NativeReports\s*=\s*@\(\)'
         $driver | Should -Match 'nativeReports\s*=\s*@\(\$script:NativeReports\)'
         $driver | Should -Match 'Add-NativeReport\s+-Command \(\[string\]\$toolchain\.skillSpectorPath\)\s+-Arguments \$nativeArguments\s+-ExitCode \$nativeExit\s+-Path \$reportPath\s+-SkillId \$skillId'
-        $driver | Should -Match '\$nativeArguments = @\(''scan'', \$skillRoot, ''--no-llm'', ''--format'', ''json'', ''--output'', \$reportPath\)'
+        $driver | Should -Match 'if \(Test-Path -LiteralPath \$reportPath\) \{ throw "SkillSpector stdout report path already exists for ''\$skillId''\." \}'
+        $driver | Should -Match '\$nativeArguments = @\(''scan'', \$skillRoot, ''--no-llm'', ''--format'', ''json''\)'
+        $driver | Should -Not -Match '\$nativeArguments = @\([^\r\n]*''--output'''
+        $driver | Should -Match '& \(\[string\]\$toolchain\.skillSpectorPath\) @nativeArguments 1> \$reportPath 2> \$staticStderrPath'
         $sourceDriver = Get-Content -LiteralPath $script:sourceDriverPath -Raw
         $sourceDriver | Should -Match 'skillSpectorPath\s*=\s*\[string\]\$receipts\.skillspector\.executablePath'
         $sourceDriver | Should -Match 'skillSpectorReceiptSha256\s*=\s*\[string\]\$receiptBindings\[2\]\.sha256'
