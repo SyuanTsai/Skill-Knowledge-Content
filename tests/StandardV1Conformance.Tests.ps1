@@ -250,9 +250,19 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $guardEnd | Should -BeGreaterThan $guardStart
         $guardText = $workflow.Substring($guardStart, $guardEnd - $guardStart) -replace '(?m)^ {10}', ''
         $guardScript = [ScriptBlock]::Create($guardText + "`n[IO.Path]::GetFullPath(`$protectedHelperPath)")
+        $guardAst = [ScriptBlock]::Create($guardText).Ast
+        $resolveRunnerExecutableAst = $guardAst.Find({
+                param($ast)
+                $ast -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $ast.Name -eq 'Resolve-RunnerExecutable'
+            }, $true)
+        $resolveRunnerExecutableAst | Should -Not -BeNullOrEmpty
+        $resolveRunnerExecutable = [ScriptBlock]::Create(
+            $resolveRunnerExecutableAst.Extent.Text + "`nResolve-RunnerExecutable -CommandPath `$args[0] -Name 'Git'"
+        )
 
         $gitCommand = Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1
-        $gitPath = [IO.Path]::GetFullPath([string]$gitCommand.Path)
+        $gitCommandPath = [IO.Path]::GetFullPath([string]$gitCommand.Path)
+        $gitPath = [IO.Path]::GetFullPath([string](& $resolveRunnerExecutable $gitCommandPath))
         $fixtureRoot = Join-Path $TestDrive 'protected-source-binding'
         $workspaceRoot = Join-Path $fixtureRoot 'workspace'
         $candidateRoot = Join-Path $workspaceRoot 'candidate'
@@ -263,15 +273,15 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
             [void](New-Item -ItemType Directory -Path $directory -Force)
         }
 
-        & $gitPath -C $candidateRoot init --quiet
+        & $gitCommandPath -C $candidateRoot init --quiet
         if ($LASTEXITCODE -ne 0) { throw 'Could not initialize the protected source-binding fixture repository.' }
-        & $gitPath -C $candidateRoot config user.name 'Conformance Fixture'
+        & $gitCommandPath -C $candidateRoot config user.name 'Conformance Fixture'
         if ($LASTEXITCODE -ne 0) { throw 'Could not configure the protected source-binding fixture repository.' }
-        & $gitPath -C $candidateRoot config user.email 'fixture@example.invalid'
+        & $gitCommandPath -C $candidateRoot config user.email 'fixture@example.invalid'
         if ($LASTEXITCODE -ne 0) { throw 'Could not configure the protected source-binding fixture repository.' }
-        & $gitPath -C $candidateRoot config core.autocrlf false
+        & $gitCommandPath -C $candidateRoot config core.autocrlf false
         if ($LASTEXITCODE -ne 0) { throw 'Could not disable line-ending conversion in the protected source-binding fixture.' }
-        & $gitPath -C $candidateRoot config core.longpaths true
+        & $gitCommandPath -C $candidateRoot config core.longpaths true
         if ($LASTEXITCODE -ne 0) { throw 'Could not enable long paths in the protected source-binding fixture.' }
         $helperRelativePath = 'scripts/StandardCoreSourceValidation.ps1'
         $helperPath = Join-Path $candidateRoot $helperRelativePath
@@ -279,24 +289,24 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $helperBytes = "# protected fixture helper`n"
         [IO.File]::WriteAllText($helperPath, $helperBytes, [Text.UTF8Encoding]::new($false))
         [IO.File]::WriteAllText((Join-Path $candidateRoot 'README.md'), "base`n", [Text.UTF8Encoding]::new($false))
-        & $gitPath -C $candidateRoot add --all
+        & $gitCommandPath -C $candidateRoot add --all
         if ($LASTEXITCODE -ne 0) { throw 'Could not stage the protected source-binding fixture base.' }
-        & $gitPath -C $candidateRoot commit --quiet -m 'fixture base'
+        & $gitCommandPath -C $candidateRoot commit --quiet -m 'fixture base'
         if ($LASTEXITCODE -ne 0) { throw 'Could not create the protected source-binding fixture base.' }
-        $baseCommit = ([string](& $gitPath -C $candidateRoot rev-parse --verify 'HEAD^{commit}')).Trim()
+        $baseCommit = ([string](& $gitCommandPath -C $candidateRoot rev-parse --verify 'HEAD^{commit}')).Trim()
         if ($LASTEXITCODE -ne 0) { throw 'Could not resolve the protected source-binding fixture base.' }
         [IO.File]::WriteAllText((Join-Path $candidateRoot 'README.md'), "candidate`n", [Text.UTF8Encoding]::new($false))
-        & $gitPath -C $candidateRoot add --all
+        & $gitCommandPath -C $candidateRoot add --all
         if ($LASTEXITCODE -ne 0) { throw 'Could not stage the protected source-binding fixture candidate.' }
-        & $gitPath -C $candidateRoot commit --quiet -m 'fixture candidate'
+        & $gitCommandPath -C $candidateRoot commit --quiet -m 'fixture candidate'
         if ($LASTEXITCODE -ne 0) { throw 'Could not create the protected source-binding fixture candidate.' }
-        $headCommit = ([string](& $gitPath -C $candidateRoot rev-parse --verify 'HEAD^{commit}')).Trim()
+        $headCommit = ([string](& $gitCommandPath -C $candidateRoot rev-parse --verify 'HEAD^{commit}')).Trim()
         if ($LASTEXITCODE -ne 0) { throw 'Could not resolve the protected source-binding fixture candidate.' }
-        & $gitPath -c core.autocrlf=false -c core.longpaths=true clone --quiet $candidateRoot $driverRoot
+        & $gitCommandPath -c core.autocrlf=false -c core.longpaths=true clone --quiet $candidateRoot $driverRoot
         if ($LASTEXITCODE -ne 0) { throw 'Could not clone the protected source-binding fixture driver.' }
-        & $gitPath -C $driverRoot config --local core.longpaths true
+        & $gitCommandPath -C $driverRoot config --local core.longpaths true
         if ($LASTEXITCODE -ne 0) { throw 'Could not enable long paths in the protected source-binding driver fixture.' }
-        & $gitPath -C $driverRoot checkout --quiet --detach $baseCommit
+        & $gitCommandPath -C $driverRoot checkout --quiet --detach $baseCommit
         if ($LASTEXITCODE -ne 0) { throw 'Could not check out the exact protected source-binding fixture base.' }
 
         $environmentNames = @(
@@ -325,7 +335,7 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
             $env:EXPECTED_EVENT_BASE = $baseCommit
             $env:EXPECTED_HELPER_SHA256 = $helperSha256
             $env:EXPECTED_RUN_NONCE = $runNonce
-            $env:EXPECTED_GIT_COMMAND_PATH = $gitPath
+            $env:EXPECTED_GIT_COMMAND_PATH = $gitCommandPath
             $env:EXPECTED_GIT_PATH = $gitPath
             $env:EXPECTED_GIT_SHA256 = $gitSha256
             $env:EXPECTED_SOURCE_TOOLS_RUN_ID = $setupRunId
@@ -368,23 +378,23 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
             Assert-TestThrowsLike { & $guardScript } '*Protected source helper SHA256 differs from its immutable identity-binding output.*'
             $env:EXPECTED_HELPER_SHA256 = $helperSha256
 
-            & $gitPath -C $driverRoot config --local core.autocrlf true
+            & $gitCommandPath -C $driverRoot config --local core.autocrlf true
             if ($LASTEXITCODE -ne 0) { throw 'Could not enable line-ending conversion for the protected helper fixture.' }
             $savedGitConfigCount = [Environment]::GetEnvironmentVariable('GIT_CONFIG_COUNT', 'Process')
             try {
                 # Isolate the fixture's local conversion setting from caller-scoped Git overrides.
                 $env:GIT_CONFIG_COUNT = '0'
                 [IO.File]::WriteAllText((Join-Path $driverRoot $helperRelativePath), "# protected fixture helper`r`n", [Text.UTF8Encoding]::new($false))
-                & $gitPath -C $driverRoot add -- $helperRelativePath
+                & $gitCommandPath -C $driverRoot add -- $helperRelativePath
                 if ($LASTEXITCODE -ne 0) { throw 'Could not refresh the unchanged normalized helper blob in the fixture index.' }
-                $driverStatus = @(& $gitPath -C $driverRoot status --porcelain=v1 --untracked-files=all)
+                $driverStatus = @(& $gitCommandPath -C $driverRoot status --porcelain=v1 --untracked-files=all)
                 if ($LASTEXITCODE -ne 0 -or $driverStatus.Count -ne 0) { throw 'The CRLF protected helper fixture must remain clean after Git line-ending conversion.' }
                 Assert-TestThrowsLike { & $guardScript } '*Protected source helper raw bytes differ from the immutable event-base Git blob.*'
             }
             finally {
                 [Environment]::SetEnvironmentVariable('GIT_CONFIG_COUNT', $savedGitConfigCount, 'Process')
                 [IO.File]::WriteAllText((Join-Path $driverRoot $helperRelativePath), $helperBytes, [Text.UTF8Encoding]::new($false))
-                & $gitPath -C $driverRoot config --local core.autocrlf false
+                & $gitCommandPath -C $driverRoot config --local core.autocrlf false
                 if ($LASTEXITCODE -ne 0) { throw 'Could not restore line-ending configuration for the protected helper fixture.' }
             }
         }
