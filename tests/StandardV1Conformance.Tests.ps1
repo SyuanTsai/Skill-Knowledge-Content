@@ -122,6 +122,14 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $workflow | Should -Match 'Protected driver HEAD differs from the exact event base SHA'
         $workflow | Should -Match 'Protected driver checkout is not clean'
         $workflow | Should -Match 'Protected source helper raw bytes differ from the exact event-base Git blob'
+        $workflow | Should -Match 'git_command_path=\$gitCommandPath'
+        $workflow | Should -Match 'EXPECTED_GIT_COMMAND_PATH:'
+        $workflow | Should -Match 'ResolveLinkTarget\(\$CommandPath, \$true\)'
+        $workflow | Should -Match 'nodeCommandPath = \$nodeCommandPath'
+        $workflow | Should -Match 'npmCommandPath = \$npmCommandPath'
+        $workflow | Should -Match 'Approved Node runtime physical executable bytes changed after capture'
+        $workflow | Should -Match "Required workflow value '\$requiredName' is missing before final source evidence verification"
+        $workflow | Should -Not -Match '\$matches\s*='
         $workflow | Should -Match '\$ownedRoot = Join-Path \$env:RUNNER_TEMP "kc-\$runNonce"'
         $workflow | Should -Match 'Join-Path \$env:RUNNER_TEMP "a-\$runNonce"'
         $workflow | Should -Match 'Prepare-WorkflowPowerShell\.ps1''\) -Mode Resolve'
@@ -141,6 +149,9 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $powerShellPreparer | Should -Match 'mandatory post-cache verification'
         $powerShellPreparer | Should -Match 'Get-AuthenticodeSignature'
         $powerShellPreparer | Should -Match 'Resolve-WorkflowPhysicalPath'
+        $powerShellPreparer | Should -Match '@\(Get-ChildItem -LiteralPath \$Path -Force\)\.Count'
+        $powerShellPreparer | Should -Not -Match '\$matches\s*='
+        (Get-Content -LiteralPath (Join-Path $script:RepositoryRoot 'scripts/StandardCoreSourceValidation.ps1') -Raw) | Should -Not -Match '\$matches\s*='
         $pesterPreparer = Get-Content -LiteralPath (Join-Path $script:RepositoryRoot 'scripts/Prepare-PesterRuntime.ps1') -Raw
         $pesterPreparer | Should -Match 'Test-CorePesterPackageArchive -ArchivePath \$cacheArchivePath'
         $pesterPreparer | Should -Match 'Discarded invalid cached Pester package'
@@ -176,6 +187,21 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
             $job | Should -Match "needs\['canonical-validation'\]\.result"
             $job | Should -Match 'needs\.canonical-aggregate\.result'
         }
+    }
+
+    # Scenario: the verified PowerShell runtime root exists but contains no entries under strict mode.
+    # Purpose: protect the empty-enumeration boundary that previously raised a property-binding error.
+    It 'UnitT52_accepts_an_empty_fresh_PowerShell_runtime_root' {
+        $preparerPath = Join-Path $script:RepositoryRoot 'scripts/Prepare-WorkflowPowerShell.ps1'
+        . $preparerPath -Mode Verify -Platform $(if ($IsWindows) { 'windows' } elseif ($IsMacOS) { 'macos' } else { 'linux' }) `
+            -ExpectedArchitecture ([Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()) `
+            -ExecutableName $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' }) -DefineFunctionsOnly
+        $emptyRuntimeRoot = Join-Path $TestDrive 'empty-powershell-runtime'
+        [void](New-Item -ItemType Directory -Path $emptyRuntimeRoot -Force)
+
+        { Assert-WorkflowRuntimeRootEmpty -Path $emptyRuntimeRoot } | Should -Not -Throw
+        [IO.File]::WriteAllText((Join-Path $emptyRuntimeRoot 'unexpected.txt'), 'unexpected')
+        { Assert-WorkflowRuntimeRootEmpty -Path $emptyRuntimeRoot } | Should -Throw '*fresh and empty*'
     }
 
     # Scenario: candidate source steps may rewrite environment state and the driver checkout before final verification.
@@ -242,7 +268,7 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
 
         $environmentNames = @(
             'PROTECTED_GITHUB_WORKSPACE', 'PROTECTED_RUNNER_TEMP', 'EXPECTED_EVENT_HEAD', 'EXPECTED_EVENT_BASE',
-            'EXPECTED_HELPER_SHA256', 'EXPECTED_RUN_NONCE', 'EXPECTED_GIT_PATH', 'EXPECTED_GIT_SHA256',
+            'EXPECTED_HELPER_SHA256', 'EXPECTED_RUN_NONCE', 'EXPECTED_GIT_COMMAND_PATH', 'EXPECTED_GIT_PATH', 'EXPECTED_GIT_SHA256',
             'EXPECTED_SOURCE_TOOLS_RUN_ID', 'EXPECTED_SOURCE_TOOLS_SHA256', 'KC_CANDIDATE_ROOT', 'KC_DRIVER_ROOT',
             'KC_AUTHORITY_ROOT', 'KC_BASE_COMMIT', 'KC_HEAD_COMMIT', 'KC_OWNED_ROOT', 'KC_RUNTIME_ROOT',
             'KC_ARTIFACTS_ROOT', 'KC_SOURCE_TOOLS_PATH', 'KC_RUN_NONCE', 'RUN_OWNED_ROOT',
@@ -266,6 +292,7 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
             $env:EXPECTED_EVENT_BASE = $baseCommit
             $env:EXPECTED_HELPER_SHA256 = $helperSha256
             $env:EXPECTED_RUN_NONCE = $runNonce
+            $env:EXPECTED_GIT_COMMAND_PATH = $gitPath
             $env:EXPECTED_GIT_PATH = $gitPath
             $env:EXPECTED_GIT_SHA256 = $gitSha256
             $env:EXPECTED_SOURCE_TOOLS_RUN_ID = $setupRunId

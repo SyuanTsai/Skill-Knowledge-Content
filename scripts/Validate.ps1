@@ -147,7 +147,26 @@ function Write-Utf8NoBom {
 
 function Get-ResolvedGitPath {
     $command = Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1
-    return [IO.Path]::GetFullPath([string]$command.Path)
+    $commandPath = [IO.Path]::GetFullPath([string]$command.Path)
+    $commandItem = Get-Item -LiteralPath $commandPath -Force -ErrorAction Stop
+    if ($commandItem.PSIsContainer) { throw 'Resolved Git command path must be a file.' }
+    if ($IsWindows) {
+        if (($commandItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw 'Resolved Git command path must be a plain, non-reparse file on Windows.'
+        }
+        return $commandPath
+    }
+    $resolvedTarget = if (($commandItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        [IO.File]::ResolveLinkTarget($commandPath, $true)
+    }
+    else { $commandItem }
+    if ($null -eq $resolvedTarget) { throw 'Resolved Git command path symbolic link could not be resolved.' }
+    $physicalPath = [IO.Path]::GetFullPath([string]$resolvedTarget.FullName)
+    $physicalItem = Get-Item -LiteralPath $physicalPath -Force -ErrorAction Stop
+    if ($physicalItem.PSIsContainer -or ($physicalItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw 'Resolved Git physical target must be a regular, non-link file.'
+    }
+    return $physicalPath
 }
 
 function Get-ResolvedPowerShellPath {

@@ -20,7 +20,8 @@ param(
     [string] $HashesUrl,
     [string] $OfficialArchiveSha256,
     [string] $HashesManifestSha256,
-    [string] $FreshHashesPath
+    [string] $FreshHashesPath,
+    [switch] $DefineFunctionsOnly
 )
 
 Set-StrictMode -Version Latest
@@ -51,12 +52,21 @@ function Assert-RequiredValue {
 function Get-OfficialManifestArchiveSha256 {
     param([Parameter(Mandatory)][string] $ManifestPath, [Parameter(Mandatory)][string] $ArchiveName)
     $pattern = '^(?<hash>[0-9a-fA-F]{64})\s+\*?' + [regex]::Escape($ArchiveName) + '\s*$'
-    $matches = @(foreach ($line in [IO.File]::ReadAllLines($ManifestPath)) {
+    $digests = @(foreach ($line in [IO.File]::ReadAllLines($ManifestPath)) {
         if ($line -match $pattern) { $Matches.hash.ToLowerInvariant() }
     })
-    if ($matches.Count -ne 1) { throw "Official PowerShell hash manifest must contain one exact $ArchiveName digest." }
-    return [string]$matches[0]
+    if ($digests.Count -ne 1) { throw "Official PowerShell hash manifest must contain one exact $ArchiveName digest." }
+    return [string]$digests[0]
 }
+
+function Assert-WorkflowRuntimeRootEmpty {
+    param([Parameter(Mandatory)][string] $Path)
+    if (@(Get-ChildItem -LiteralPath $Path -Force).Count -ne 0) {
+        throw 'Verified PowerShell runtime root must be fresh and empty.'
+    }
+}
+
+if ($DefineFunctionsOnly) { return }
 
 Assert-WorkflowArchitecture
 
@@ -147,7 +157,7 @@ switch ($Mode) {
             (Get-OfficialManifestArchiveSha256 -ManifestPath $cachedManifestPath -ArchiveName $AssetName) -cne $OfficialArchiveSha256) {
             throw 'PowerShell release bytes failed mandatory post-cache verification.'
         }
-        if ((Get-ChildItem -LiteralPath $RuntimeRoot -Force).Count -ne 0) { throw 'Verified PowerShell runtime root must be fresh and empty.' }
+        Assert-WorkflowRuntimeRootEmpty -Path $RuntimeRoot
         if ($IsWindows) { Expand-Archive -LiteralPath $archivePath -DestinationPath $RuntimeRoot -ErrorAction Stop }
         else {
             & tar -xzf $archivePath -C $RuntimeRoot

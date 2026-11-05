@@ -465,11 +465,11 @@ function Assert-KnowledgeContentSourceReceiptClosureFrozen {
                 -not [IO.Path]::IsPathRooted([string]$pathProperty.Value)) {
                 throw "Source $toolName receipt has an invalid $($pair[0]) frozen identity."
             }
-            $matches = @($FrozenFiles | Where-Object {
+            $frozenMatches = @($FrozenFiles | Where-Object {
                 (Test-KnowledgeContentPathEqual -Left ([string]$_.path) -Right ([string]$pathProperty.Value)) -and
                 [string]$_.sha256 -ceq [string]$hashProperty.Value
             })
-            if ($matches.Count -ne 1) {
+            if ($frozenMatches.Count -ne 1) {
                 throw "Source $toolName receipt $($pair[0]) is not frozen exactly once."
             }
         }

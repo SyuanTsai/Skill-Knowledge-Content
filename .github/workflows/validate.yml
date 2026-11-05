@@ -115,12 +115,34 @@ jobs:
               -not (Test-Path -LiteralPath $driverRoot -PathType Container)) {
             throw 'Candidate, protected driver, or authority checkout is missing.'
           }
+          function Resolve-RunnerExecutable {
+            param([Parameter(Mandatory = $true)][string] $CommandPath, [Parameter(Mandatory = $true)][string] $Name)
+            $fullCommandPath = [IO.Path]::GetFullPath($CommandPath)
+            $commandItem = Get-Item -LiteralPath $fullCommandPath -Force -ErrorAction Stop
+            if ($commandItem.PSIsContainer) { throw "$Name command path must be a file." }
+            if ($IsWindows) {
+              if (($commandItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "$Name command path must be a plain, non-reparse file on Windows."
+              }
+              return $fullCommandPath
+            }
+            $resolvedTarget = if (($commandItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+              [IO.File]::ResolveLinkTarget($CommandPath, $true)
+            } else { $commandItem }
+            if ($null -eq $resolvedTarget) { throw "$Name command path symbolic link could not be resolved." }
+            $physicalPath = [IO.Path]::GetFullPath([string]$resolvedTarget.FullName)
+            $physicalItem = Get-Item -LiteralPath $physicalPath -Force -ErrorAction Stop
+            if ($physicalItem.PSIsContainer -or ($physicalItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+              throw "$Name resolved physical target must be a regular, non-link file."
+            }
+            return $physicalPath
+          }
           $gitCommand = Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1
-          $gitExecutable = [IO.Path]::GetFullPath([string]$gitCommand.Path)
+          $gitCommandPath = [IO.Path]::GetFullPath([string]$gitCommand.Path)
+          $gitExecutable = Resolve-RunnerExecutable -CommandPath $gitCommandPath -Name 'Git'
           $gitExecutableItem = Get-Item -LiteralPath $gitExecutable -Force -ErrorAction Stop
-          if ($gitExecutableItem.PSIsContainer -or
-              ($gitExecutableItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-            throw 'Resolved Git executable must be a plain file.'
+          if ($gitExecutableItem.PSIsContainer -or ($gitExecutableItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw 'Resolved Git physical executable must be a plain file.'
           }
           $gitExecutableSha256 = (Get-FileHash -LiteralPath $gitExecutable -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
 
@@ -253,7 +275,8 @@ jobs:
           )) {
             [IO.File]::AppendAllText($env:GITHUB_ENV, $entry + "`n", $githubEnv)
           }
-          [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "protected_helper_sha256=$protectedHelperSha256`nrun_nonce=$runNonce`ngit_path=$gitExecutable`ngit_sha256=$gitExecutableSha256`n", [Text.UTF8Encoding]::new($false))
+          [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "protected_helper_sha256=$protectedHelperSha256`nrun_nonce=$runNonce`ngit_command_path=$gitCommandPath`ngit_path=$gitExecutable`ngit_sha256=$gitExecutableSha256`n", [Text.UTF8Encoding]::new($false))
+          Write-Host "Git command path=$gitCommandPath physical path=$gitExecutable"
           Write-Host "Candidate=$candidateHead Base=$baseRevision Authority=$authorityHead"
 
       - name: Set up approved Go runtime
@@ -288,12 +311,36 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          function Resolve-RunnerExecutable {
+            param([Parameter(Mandatory = $true)][string] $CommandPath, [Parameter(Mandatory = $true)][string] $Name)
+            $fullCommandPath = [IO.Path]::GetFullPath($CommandPath)
+            $commandItem = Get-Item -LiteralPath $fullCommandPath -Force -ErrorAction Stop
+            if ($commandItem.PSIsContainer) { throw "$Name command path must be a file." }
+            if ($IsWindows) {
+              if (($commandItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "$Name command path must be a plain, non-reparse file on Windows."
+              }
+              return $fullCommandPath
+            }
+            $resolvedTarget = if (($commandItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+              [IO.File]::ResolveLinkTarget($CommandPath, $true)
+            } else { $commandItem }
+            if ($null -eq $resolvedTarget) { throw "$Name command path symbolic link could not be resolved." }
+            $physicalPath = [IO.Path]::GetFullPath([string]$resolvedTarget.FullName)
+            $physicalItem = Get-Item -LiteralPath $physicalPath -Force -ErrorAction Stop
+            if ($physicalItem.PSIsContainer -or ($physicalItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+              throw "$Name resolved physical target must be a regular, non-link file."
+            }
+            return $physicalPath
+          }
           $nodeCommand = Get-Command node -CommandType Application -ErrorAction Stop | Select-Object -First 1
-          $nodeExecutablePath = [IO.Path]::GetFullPath([string]$nodeCommand.Source)
+          $nodeCommandPath = [IO.Path]::GetFullPath([string]$nodeCommand.Source)
+          $nodeExecutablePath = Resolve-RunnerExecutable -CommandPath $nodeCommandPath -Name 'Node'
           $nodeBinRoot = Split-Path -Parent $nodeExecutablePath
           $nodeInstallRoot = if ($IsWindows) { $nodeBinRoot } else { Split-Path -Parent $nodeBinRoot }
           $npmCommand = Get-Command npm -CommandType Application -ErrorAction Stop | Select-Object -First 1
-          $npmLauncherPath = [IO.Path]::GetFullPath([string]$npmCommand.Source)
+          $npmCommandPath = [IO.Path]::GetFullPath([string]$npmCommand.Source)
+          $npmLauncherPath = Resolve-RunnerExecutable -CommandPath $npmCommandPath -Name 'npm'
           $npmPackageRoot = if ($IsWindows) { Join-Path $nodeInstallRoot 'node_modules/npm' } else { Join-Path $nodeInstallRoot 'lib/node_modules/npm' }
           $npmPackageJsonPath = Join-Path $npmPackageRoot 'package.json'
           $npmCliPath = Join-Path $npmPackageRoot 'bin/npm-cli.js'
@@ -325,9 +372,11 @@ jobs:
             report = 'approved-node-runtime-before-source-setup-v1'
             capturedAtUtc = [DateTime]::UtcNow.ToString('O', [Globalization.CultureInfo]::InvariantCulture)
             nodeVersion = $nodeVersion
+            nodeCommandPath = $nodeCommandPath
             nodeExecutablePath = $nodeExecutablePath
             nodeExecutableSha256 = $nodeExecutableSha256
             npmVersion = $npmVersion
+            npmCommandPath = $npmCommandPath
             npmLauncherPath = $npmLauncherPath
             npmLauncherSha256 = $npmLauncherSha256
             npmCliPath = $npmCliPath
@@ -338,18 +387,22 @@ jobs:
           }
           $nodeRuntimeEvidencePath = Join-Path $env:KC_ARTIFACTS_ROOT 'node-runtime-before-source-setup.json'
           [IO.File]::WriteAllText($nodeRuntimeEvidencePath, (($nodeRuntimeEvidence | ConvertTo-Json -Depth 8) + "`n"), [Text.UTF8Encoding]::new($false))
-          $expectedNpmLauncherPath = [IO.Path]::GetFullPath((Join-Path $nodeBinRoot $(if ($IsWindows) { 'npm.cmd' } else { 'npm' })))
+          $expectedNpmCommandPath = [IO.Path]::GetFullPath((Join-Path $nodeBinRoot $(if ($IsWindows) { 'npm.cmd' } else { 'npm' })))
           $pathComparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+          $nodeInstallPrefix = $nodeInstallRoot.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
           if ($nodeExitCode -ne 0 -or $nodeVersion -cne 'v24.21.0' -or
               $npmExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($npmPackageVersion) -or
               $npmVersion -cne $npmPackageVersion -or
-              -not $npmLauncherPath.Equals($expectedNpmLauncherPath, $pathComparison) -or
+              -not $npmCommandPath.Equals($expectedNpmCommandPath, $pathComparison) -or
+              (-not $IsWindows -and -not $npmLauncherPath.StartsWith($nodeInstallPrefix, [StringComparison]::Ordinal)) -or
               [string]::IsNullOrWhiteSpace($nodeExecutableSha256) -or
               [string]::IsNullOrWhiteSpace($npmLauncherSha256) -or
               [string]::IsNullOrWhiteSpace($npmCliSha256) -or
               [string]::IsNullOrWhiteSpace($npmPackageJsonSha256)) {
             throw 'Approved Node runtime or its bundled npm does not match the captured runtime evidence.'
           }
+          Write-Host "Node command path=$nodeCommandPath physical path=$nodeExecutablePath"
+          Write-Host "npm command path=$npmCommandPath physical path=$npmLauncherPath"
           Write-Host "Verified Node $nodeVersion with its bundled npm $npmVersion from $nodeInstallRoot"
 
       - name: Resolve latest official PowerShell release metadata
@@ -501,6 +554,7 @@ jobs:
           EXPECTED_EVENT_BASE: ${{ github.event.pull_request.base.sha || github.event.before || inputs.base_commit }}
           EXPECTED_HELPER_SHA256: ${{ steps.bind_identities.outputs.protected_helper_sha256 }}
           EXPECTED_RUN_NONCE: ${{ steps.bind_identities.outputs.run_nonce }}
+          EXPECTED_GIT_COMMAND_PATH: ${{ steps.bind_identities.outputs.git_command_path }}
           EXPECTED_GIT_PATH: ${{ steps.bind_identities.outputs.git_path }}
           EXPECTED_GIT_SHA256: ${{ steps.bind_identities.outputs.git_sha256 }}
           EXPECTED_SOURCE_TOOLS_RUN_ID: ${{ steps.prepare_source_tools.outputs.run_id }}
@@ -510,6 +564,16 @@ jobs:
           SOURCE_VALIDATION_OUTCOME: ${{ steps.source_validation.outcome }}
         run: |
           $ErrorActionPreference = 'Stop'
+          foreach ($requiredName in @(
+            'KC_DRIVER_ROOT', 'KC_POWERSHELL_EXECUTABLE', 'KC_POWERSHELL_VERSION', 'KC_POWERSHELL_ARCHIVE_SHA256',
+            'PROTECTED_GITHUB_WORKSPACE', 'PROTECTED_RUNNER_TEMP', 'EXPECTED_EVENT_HEAD', 'EXPECTED_EVENT_BASE',
+            'EXPECTED_HELPER_SHA256', 'EXPECTED_RUN_NONCE', 'EXPECTED_GIT_COMMAND_PATH', 'EXPECTED_GIT_PATH',
+            'EXPECTED_GIT_SHA256', 'EXPECTED_SOURCE_TOOLS_RUN_ID', 'EXPECTED_SOURCE_TOOLS_SHA256'
+          )) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($requiredName, 'Process'))) {
+              throw "Required workflow value '$requiredName' is missing before final source evidence verification."
+            }
+          }
           & (Join-Path $env:KC_DRIVER_ROOT 'scripts/Prepare-WorkflowPowerShell.ps1') -Mode Verify `
             -Platform '${{ matrix.platform }}' -ExpectedArchitecture '${{ matrix.architecture }}' -ExecutableName '${{ matrix.executable }}'
           function Get-FileSha256 {
@@ -535,10 +599,33 @@ jobs:
             }
           }
           # PROTECTED_SOURCE_BINDING_GUARD_BEGIN
+          $pathComparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+          function Resolve-RunnerExecutable {
+            param([Parameter(Mandatory = $true)][string] $CommandPath, [Parameter(Mandatory = $true)][string] $Name)
+            $fullCommandPath = [IO.Path]::GetFullPath($CommandPath)
+            $commandItem = Get-Item -LiteralPath $fullCommandPath -Force -ErrorAction Stop
+            if ($commandItem.PSIsContainer) { throw "$Name command path must be a file." }
+            if ($IsWindows) {
+              if (($commandItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "$Name command path must be a plain, non-reparse file on Windows."
+              }
+              return $fullCommandPath
+            }
+            $resolvedTarget = if (($commandItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+              [IO.File]::ResolveLinkTarget($CommandPath, $true)
+            } else { $commandItem }
+            if ($null -eq $resolvedTarget) { throw "$Name command path symbolic link could not be resolved." }
+            $physicalPath = [IO.Path]::GetFullPath([string]$resolvedTarget.FullName)
+            $physicalItem = Get-Item -LiteralPath $physicalPath -Force -ErrorAction Stop
+            if ($physicalItem.PSIsContainer -or ($physicalItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+              throw "$Name resolved physical target must be a regular, non-link file."
+            }
+            return $physicalPath
+          }
           function Assert-WorkflowPathBinding {
             param([Parameter(Mandatory = $true)][string] $Observed, [Parameter(Mandatory = $true)][string] $Expected, [Parameter(Mandatory = $true)][string] $Name)
             if ([string]::IsNullOrWhiteSpace($Observed) -or
-                -not [IO.Path]::GetFullPath($Observed).Equals([IO.Path]::GetFullPath($Expected), $comparison)) {
+                -not [IO.Path]::GetFullPath($Observed).Equals([IO.Path]::GetFullPath($Expected), $pathComparison)) {
               throw "$Name differs from its immutable workflow binding."
             }
           }
@@ -560,6 +647,7 @@ jobs:
               $expectedHeadCommit -cnotmatch '^[0-9a-f]{40}$' -or
               $expectedRunNonce -cnotmatch '^[0-9a-f]{32}$' -or
               [string]$env:EXPECTED_HELPER_SHA256 -cnotmatch '^[0-9a-f]{64}$' -or
+              [string]::IsNullOrWhiteSpace([string]$env:EXPECTED_GIT_COMMAND_PATH) -or
               [string]$env:EXPECTED_GIT_SHA256 -cnotmatch '^[0-9a-f]{64}$' -or
               [string]$env:EXPECTED_SOURCE_TOOLS_RUN_ID -cnotmatch '^[0-9a-f]{32}$' -or
               [string]$env:EXPECTED_SOURCE_TOOLS_SHA256 -cnotmatch '^[0-9a-f]{64}$') {
@@ -588,7 +676,15 @@ jobs:
               [string]$env:KC_SOURCE_TOOLS_SHA256 -cne [string]$env:EXPECTED_SOURCE_TOOLS_SHA256) {
             throw 'Protected source environment identity differs from immutable event or setup outputs.'
           }
-          $gitPath = [IO.Path]::GetFullPath([string]$env:EXPECTED_GIT_PATH)
+          $currentGitCommand = Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          $currentGitCommandPath = [IO.Path]::GetFullPath([string]$currentGitCommand.Path)
+          if (-not $currentGitCommandPath.Equals([IO.Path]::GetFullPath([string]$env:EXPECTED_GIT_COMMAND_PATH), $pathComparison)) {
+            throw 'Protected Git command path changed after identity binding.'
+          }
+          $gitPath = Resolve-RunnerExecutable -CommandPath $currentGitCommandPath -Name 'Git'
+          if (-not $gitPath.Equals([IO.Path]::GetFullPath([string]$env:EXPECTED_GIT_PATH), $pathComparison)) {
+            throw 'Protected Git resolved physical path changed after identity binding.'
+          }
           Assert-WorkflowPlainFile -Path $gitPath -Name 'Protected Git executable'
           if ((Get-FileHash -LiteralPath $gitPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant() -cne [string]$env:EXPECTED_GIT_SHA256) {
             throw 'Protected Git executable bytes changed after identity binding.'
@@ -680,6 +776,47 @@ jobs:
             if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -le 0) {
               throw "Protected source evidence is missing or empty: $path"
             }
+          }
+          $nodeEvidencePath = Join-Path $env:KC_ARTIFACTS_ROOT 'node-runtime-before-source-setup.json'
+          $nodeEvidence = Get-Content -LiteralPath $nodeEvidencePath -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 20 -ErrorAction Stop
+          $currentNodeCommand = Get-Command node -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          $currentNodeCommandPath = [IO.Path]::GetFullPath([string]$currentNodeCommand.Source)
+          $currentNodePhysicalPath = Resolve-RunnerExecutable -CommandPath $currentNodeCommandPath -Name 'Node'
+          $currentNpmCommand = Get-Command npm -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          $currentNpmCommandPath = [IO.Path]::GetFullPath([string]$currentNpmCommand.Source)
+          $currentNpmPhysicalPath = Resolve-RunnerExecutable -CommandPath $currentNpmCommandPath -Name 'npm'
+          foreach ($binding in @(
+            @{ Name = 'Node command path'; Observed = $currentNodeCommandPath; Expected = [string]$nodeEvidence.nodeCommandPath },
+            @{ Name = 'Node resolved physical path'; Observed = $currentNodePhysicalPath; Expected = [string]$nodeEvidence.nodeExecutablePath },
+            @{ Name = 'npm command path'; Observed = $currentNpmCommandPath; Expected = [string]$nodeEvidence.npmCommandPath },
+            @{ Name = 'npm resolved physical path'; Observed = $currentNpmPhysicalPath; Expected = [string]$nodeEvidence.npmLauncherPath }
+          )) {
+            if ([string]::IsNullOrWhiteSpace($binding.Expected) -or
+                -not [IO.Path]::GetFullPath($binding.Observed).Equals([IO.Path]::GetFullPath($binding.Expected), $pathComparison)) {
+              throw "$($binding.Name) differs from the captured approved Node runtime evidence."
+            }
+          }
+          Assert-WorkflowPlainFile -Path $currentNodePhysicalPath -Name 'Approved Node physical executable'
+          Assert-WorkflowPlainFile -Path $currentNpmPhysicalPath -Name 'Approved npm physical launcher'
+          Assert-WorkflowPlainFile -Path ([string]$nodeEvidence.npmCliPath) -Name 'Approved npm CLI'
+          Assert-WorkflowPlainFile -Path ([string]$nodeEvidence.npmPackageJsonPath) -Name 'Approved npm package manifest'
+          if ((Get-FileSha256 -Path $currentNodePhysicalPath) -cne [string]$nodeEvidence.nodeExecutableSha256) {
+            throw 'Approved Node runtime physical executable bytes changed after capture.'
+          }
+          if ((Get-FileSha256 -Path $currentNpmPhysicalPath) -cne [string]$nodeEvidence.npmLauncherSha256 -or
+              (Get-FileSha256 -Path ([string]$nodeEvidence.npmCliPath)) -cne [string]$nodeEvidence.npmCliSha256 -or
+              (Get-FileSha256 -Path ([string]$nodeEvidence.npmPackageJsonPath)) -cne [string]$nodeEvidence.npmPackageJsonSha256) {
+            throw 'Approved npm runtime bytes changed after capture.'
+          }
+          $verifiedNodeVersion = @(& $currentNodePhysicalPath --version)
+          $nodeVerificationExitCode = $LASTEXITCODE
+          $verifiedNpmVersion = @(& $currentNpmPhysicalPath --version)
+          $npmVerificationExitCode = $LASTEXITCODE
+          if ($nodeVerificationExitCode -ne 0 -or $verifiedNodeVersion.Count -ne 1 -or
+              ([string]$verifiedNodeVersion[0]).Trim() -cne [string]$nodeEvidence.nodeVersion -or
+              $npmVerificationExitCode -ne 0 -or $verifiedNpmVersion.Count -ne 1 -or
+              ([string]$verifiedNpmVersion[0]).Trim() -cne [string]$nodeEvidence.npmVersion) {
+            throw 'Approved Node or npm runtime version changed after capture.'
           }
           $sourceTools = Get-Content -LiteralPath (Join-Path $env:KC_ARTIFACTS_ROOT 'source-tools.json') -Raw | ConvertFrom-Json -Depth 50
           $runId = [string]$sourceTools.runId
@@ -910,13 +1047,13 @@ jobs:
             'sourceToolPreparation', 'sourceValidation', 'finalEvidence'
           )
           foreach ($platform in $expected.Keys) {
-            $matches = @($receipts | Where-Object { [string]$_.platform -ceq $platform })
-            if ($matches.Count -ne 1) {
-              $problems.Add("Platform '$platform' must have exactly one receipt; found $($matches.Count).")
+            $platformReceipts = @($receipts | Where-Object { [string]$_.platform -ceq $platform })
+            if ($platformReceipts.Count -ne 1) {
+              $problems.Add("Platform '$platform' must have exactly one receipt; found $($platformReceipts.Count).")
               $rows.Add([pscustomobject]@{ platform = $platform; setup = '-'; source = '-'; total = '-'; status = 'missing/duplicate' })
               continue
             }
-            $receipt = $matches[0]
+            $receipt = $platformReceipts[0]
             $platformExpected = $expected[$platform]
             foreach ($binding in @(
               @{ name = 'schemaVersion'; actual = [string]$receipt.schemaVersion; wanted = '1' },
