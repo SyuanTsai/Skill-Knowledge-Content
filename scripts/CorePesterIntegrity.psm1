@@ -153,6 +153,18 @@ function Get-CorePesterRuntimeModuleRoot {
     return [IO.Path]::GetFullPath((Join-Path $runtimeRoot 'Modules/Pester/6.2.0'))
 }
 
+function Assert-NoLegacyCorePesterBootstrapEnvironment {
+    [CmdletBinding()]
+    param()
+
+    $processEnvironment = [Environment]::GetEnvironmentVariables([EnvironmentVariableTarget]::Process)
+    foreach ($name in @('STANDARD_VALIDATION_BOOTSTRAP_RELEASE_PATH', 'STANDARD_VALIDATION_BOOTSTRAP_COMMAND')) {
+        if ($processEnvironment.Contains($name)) {
+            throw "Core Pester received unexpected legacy bootstrap transport variable '$name'."
+        }
+    }
+}
+
 function Get-VerifiedCoreAuthoritySnapshotPath {
     param([Parameter(Mandatory = $true)][string] $OuterAdapterRunId)
 
@@ -544,50 +556,6 @@ function Test-CorePesterShardUnion {
     return [pscustomobject]@{ IsValid = $errors.Count -eq 0; Errors = @($errors.ToArray()); DiscoveryCount = $discovered.Count; UnionCount = $union.Count }
 }
 
-function Remove-CorePesterConsumedBootstrapSignal {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)][string] $CandidateRoot,
-        [Parameter(Mandatory)][string] $ReleasePath,
-        [Parameter(Mandatory)][string] $BootstrapCommand,
-        [Parameter(Mandatory)][string] $VerifiedPowerShellExecutable
-    )
-
-    # The supervisor consumed this one-shot signal before invoking this child.
-    # Its idempotent cleanup accepts an absent signal. Keep the full snapshot:
-    # remove only this consumed transport artifact, never exclude source files.
-    $root = [IO.Path]::GetFullPath($CandidateRoot)
-    if (-not [IO.Path]::IsPathFullyQualified($ReleasePath) -or
-        -not [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($ReleasePath)).Equals($root, (Get-CorePesterPathComparison)) -or
-        [IO.Path]::GetFileName($ReleasePath) -cnotmatch '^b-[0-9a-f]{32}\.sig$') {
-        throw 'Core Pester bootstrap signal is not the exact candidate-root transport file.'
-    }
-    if (-not [IO.Path]::IsPathFullyQualified($BootstrapCommand) -or
-        -not [IO.Path]::GetFullPath($BootstrapCommand).Equals([IO.Path]::GetFullPath($VerifiedPowerShellExecutable), (Get-CorePesterPathComparison))) {
-        throw 'Core Pester bootstrap command differs from the verified PowerShell executable.'
-    }
-    $signal = [IO.Path]::GetFullPath($ReleasePath)
-    $cursor = $signal
-    while (-not [string]::IsNullOrWhiteSpace($cursor)) {
-        if (-not (Test-Path -LiteralPath $cursor)) { throw 'Core Pester bootstrap signal or its ancestry is missing.' }
-        $item = Get-Item -LiteralPath $cursor -Force -ErrorAction Stop
-        if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
-            ($cursor -ceq $signal -and $item.PSIsContainer)) {
-            throw 'Core Pester bootstrap signal must be a regular file with non-reparse ancestry.'
-        }
-        $parent = [IO.Path]::GetDirectoryName($cursor)
-        if ($parent -ceq $cursor) { break }
-        $cursor = $parent
-    }
-    $expected = [Text.UTF8Encoding]::new($false).GetBytes('release' + [Environment]::NewLine)
-    $actual = [IO.File]::ReadAllBytes($signal)
-    if ($actual.Length -ne $expected.Length -or [Convert]::ToHexString($actual) -cne [Convert]::ToHexString($expected)) {
-        throw 'Core Pester bootstrap signal bytes differ from the consumed release payload.'
-    }
-    [IO.File]::Delete($signal)
-    if (Test-Path -LiteralPath $signal) { throw 'Core Pester bootstrap signal cleanup failed.' }
-}
-
 function Get-CorePesterTreeSnapshot {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string] $Root)
@@ -734,4 +702,4 @@ function Test-CorePesterPackageArchive {
     }
 }
 
-Export-ModuleMember -Function Read-CorePesterClosureLock, Get-CorePesterRuntimeModuleRoot, Get-VerifiedCoreAuthoritySnapshotPath, Test-CorePesterPathBoundary, Test-CorePesterClosure, Test-CorePesterModuleCandidates, Get-CorePesterExpectedLoadedModulePath, Test-CorePesterLoadedModuleIdentity, Get-CorePesterCaseIdentity, ConvertFrom-CorePesterProgressLine, Test-CorePesterCaseIdentityPartition, Test-CorePesterShardUnion, Remove-CorePesterConsumedBootstrapSignal, Get-CorePesterTreeSnapshot, Test-CorePesterPackageArchive
+Export-ModuleMember -Function Read-CorePesterClosureLock, Get-CorePesterRuntimeModuleRoot, Assert-NoLegacyCorePesterBootstrapEnvironment, Get-VerifiedCoreAuthoritySnapshotPath, Test-CorePesterPathBoundary, Test-CorePesterClosure, Test-CorePesterModuleCandidates, Get-CorePesterExpectedLoadedModulePath, Test-CorePesterLoadedModuleIdentity, Get-CorePesterCaseIdentity, ConvertFrom-CorePesterProgressLine, Test-CorePesterCaseIdentityPartition, Test-CorePesterShardUnion, Get-CorePesterTreeSnapshot, Test-CorePesterPackageArchive

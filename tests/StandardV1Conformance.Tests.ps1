@@ -128,6 +128,17 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $workflow | Should -Match 'nodeCommandPath = \$nodeCommandPath'
         $workflow | Should -Match 'npmCommandPath = \$npmCommandPath'
         $workflow | Should -Match 'Approved Node runtime physical executable bytes changed after capture'
+        $workflow | Should -Match 'SETUP_PYTHON_ACTION_REFERENCE:\s+&setup-python-action-reference\s+actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0'
+        $pythonSetupStep = [regex]::Match($workflow, '(?ms)^      - name: Set up approved Python runtime\r?\n(?<body>.*?)(?=^      - name:|\z)')
+        $pythonSetupStep.Success | Should -BeTrue
+        $pythonSetupStep.Groups['body'].Value | Should -Match '(?m)^        uses:\s+\*setup-python-action-reference\s+# v7\.1\.0\r?$'
+        $pythonSetupStep.Groups['body'].Value | Should -Match "(?m)^          python-version:\s+'3\.12'\s*$"
+        $pythonSetupStep.Groups['body'].Value | Should -Match '(?m)^          check-latest:\s+false\s*$'
+        $pythonSetupStep.Groups['body'].Value | Should -Not -Match '(?m)^\s+cache:'
+        $workflow | Should -Match 'python-runtime-before-source-setup\.json'
+        $workflow | Should -Match "pythonVersion = \[string\]\$pythonEvidence\.pythonVersion"
+        $workflow | Should -Match 'receipt has no approved Python 3\.12 version'
+        $workflow | Should -Match 'Python major\.minor differs across platform receipts'
         $workflow | Should -Match "Required workflow value '\$requiredName' is missing before final source evidence verification"
         $workflow | Should -Not -Match '\$matches\s*='
         $workflow | Should -Match '\$ownedRoot = Join-Path \$env:RUNNER_TEMP "kc-\$runNonce"'

@@ -68,6 +68,12 @@ Artifacts root 在 Windows 使用磁碟根目錄下的短路徑；Linux/macOS �
 2. dispatch 的 candidate 指向其後的 distinct descendant commit。
 3. 保存三個 leg artifacts、三份 receipt 與 aggregate summary，並核對 candidate/base/authority 身分。
 
+## Python runtime pin
+
+三個 matrix leg 都必須在 source tool preparation 前透過 pinned `actions/setup-python` 選用 Python 3.12，並保存 interpreter 版本與 executable SHA-256。Authority resolver 以目前 interpreter 執行 wheel-only SkillSpector dependency closure；SkillSpector 2.13.4 所需的 `yara-python` 4.5.4 尚未發布 CPython 3.14 (`cp314`) wheel，因此 Ubuntu/macOS runner 的 Python 3.14 預設值會讓解析器反覆 backtrack，最後超過 acquisition round limit。Windows runner 原本的預設 Python 3.12 可成功解析，固定三個平台為 3.12 也可避免 leg 間漂移。
+
+當 `yara-python` 發布 `cp314` wheels 後，必須重新檢視此 pin；升級前應以三平台 wheel-only resolution、runtime evidence 與 aggregate receipt 一致性驗證新版本，不可只移除 pin。
+
 ## Cache key 與安全性
 
 | 內容 | Key | 安全條件 |

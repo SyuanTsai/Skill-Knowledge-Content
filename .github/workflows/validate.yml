@@ -35,6 +35,7 @@ jobs:
       CACHE_ACTION_REFERENCE: &cache-action-reference actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
       UPLOAD_ARTIFACT_ACTION_REFERENCE: &upload-artifact-reference actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
       DOWNLOAD_ARTIFACT_ACTION_REFERENCE: &download-artifact-reference actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+      SETUP_PYTHON_ACTION_REFERENCE: &setup-python-action-reference actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -299,6 +300,79 @@ jobs:
           }
           [IO.File]::AppendAllText($env:GITHUB_ENV, "STANDARD_GO_RUNTIME_VERSION=$($Matches.version)`n", [Text.UTF8Encoding]::new($false))
           Write-Host "Verified Go runtime: $($Matches.version)"
+
+      - name: Set up approved Python runtime
+        id: setup_python
+        uses: *setup-python-action-reference # v7.1.0
+        with:
+          python-version: '3.12'
+          check-latest: false
+
+      - name: Capture and verify Python runtime before source setup
+        id: capture_python
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function Resolve-RunnerExecutable {
+            param([Parameter(Mandatory = $true)][string] $CommandPath, [Parameter(Mandatory = $true)][string] $Name)
+            $fullCommandPath = [IO.Path]::GetFullPath($CommandPath)
+            $commandItem = Get-Item -LiteralPath $fullCommandPath -Force -ErrorAction Stop
+            if ($commandItem.PSIsContainer) { throw "$Name command path must be a file." }
+            if ($IsWindows) {
+              if (($commandItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "$Name command path must be a plain, non-reparse file on Windows."
+              }
+              return $fullCommandPath
+            }
+            $resolvedTarget = if (($commandItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+              [IO.File]::ResolveLinkTarget($CommandPath, $true)
+            } else { $commandItem }
+            if ($null -eq $resolvedTarget) { throw "$Name command path symbolic link could not be resolved." }
+            $physicalPath = [IO.Path]::GetFullPath([string]$resolvedTarget.FullName)
+            $physicalItem = Get-Item -LiteralPath $physicalPath -Force -ErrorAction Stop
+            if ($physicalItem.PSIsContainer -or ($physicalItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+              throw "$Name resolved physical target must be a regular, non-link file."
+            }
+            return $physicalPath
+          }
+          $pythonCommand = Get-Command python -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          $pythonCommandPath = [IO.Path]::GetFullPath([string]$pythonCommand.Source)
+          $pythonExecutablePath = Resolve-RunnerExecutable -CommandPath $pythonCommandPath -Name 'Python'
+          $pythonOutput = @(& $pythonCommandPath -I -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')
+          $pythonExitCode = $LASTEXITCODE
+          $pythonVersion = if ($pythonOutput.Count -eq 1) { ([string]$pythonOutput[0]).Trim() } else { $null }
+          if ($pythonExitCode -ne 0 -or $pythonVersion -cnotmatch '^3\.12\.[0-9]+$') {
+            throw "setup-python did not provide the approved Python 3.12 interpreter through the authority resolver's 'python' command."
+          }
+          $python3CommandPath = $null
+          $python3ExecutablePath = $null
+          if (-not $IsWindows) {
+            $python3Command = Get-Command python3 -CommandType Application -ErrorAction Stop | Select-Object -First 1
+            $python3CommandPath = [IO.Path]::GetFullPath([string]$python3Command.Source)
+            $python3ExecutablePath = Resolve-RunnerExecutable -CommandPath $python3CommandPath -Name 'Python3'
+            $python3Output = @(& $python3CommandPath -I -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')
+            $python3ExitCode = $LASTEXITCODE
+            if ($python3ExitCode -ne 0 -or $python3Output.Count -ne 1 -or
+                ([string]$python3Output[0]).Trim() -cne $pythonVersion -or
+                $python3ExecutablePath -cne $pythonExecutablePath) {
+              throw 'Unix python3 does not resolve to the approved Python 3.12 toolcache interpreter selected as python.'
+            }
+          }
+          $pythonExecutableSha256 = (Get-FileHash -LiteralPath $pythonExecutablePath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+          $pythonRuntimeEvidence = [ordered]@{
+            schemaVersion = 1
+            report = 'approved-python-runtime-before-source-setup-v1'
+            capturedAtUtc = [DateTime]::UtcNow.ToString('O', [Globalization.CultureInfo]::InvariantCulture)
+            pythonVersion = $pythonVersion
+            pythonCommandPath = $pythonCommandPath
+            pythonExecutablePath = $pythonExecutablePath
+            pythonExecutableSha256 = $pythonExecutableSha256
+            python3CommandPath = $python3CommandPath
+            python3ExecutablePath = $python3ExecutablePath
+          }
+          $pythonRuntimeEvidencePath = Join-Path $env:KC_ARTIFACTS_ROOT 'python-runtime-before-source-setup.json'
+          [IO.File]::WriteAllText($pythonRuntimeEvidencePath, (($pythonRuntimeEvidence | ConvertTo-Json -Depth 8) + "`n"), [Text.UTF8Encoding]::new($false))
+          Write-Host "Verified authority resolver Python $pythonVersion command=$pythonCommandPath physical=$pythonExecutablePath"
 
       - name: Set up approved Node runtime
         id: setup_node
@@ -803,6 +877,7 @@ jobs:
           $requiredFiles = @(
             (Join-Path $env:KC_ARTIFACTS_ROOT 'source-tools.json'),
             (Join-Path $env:KC_ARTIFACTS_ROOT 'source-tools-setup-binding.json'),
+            (Join-Path $env:KC_ARTIFACTS_ROOT 'python-runtime-before-source-setup.json'),
             (Join-Path $env:KC_ARTIFACTS_ROOT 'node-runtime-before-source-setup.json'),
             (Join-Path $env:KC_ARTIFACTS_ROOT 'powershell-runtime-setup.json'),
             (Join-Path $env:KC_ARTIFACTS_ROOT 'powershell-release-hashes.sha256'),
@@ -812,6 +887,26 @@ jobs:
             if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -le 0) {
               throw "Protected source evidence is missing or empty: $path"
             }
+          }
+          $pythonEvidencePath = Join-Path $env:KC_ARTIFACTS_ROOT 'python-runtime-before-source-setup.json'
+          $pythonEvidence = Get-Content -LiteralPath $pythonEvidencePath -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 20 -ErrorAction Stop
+          $currentPythonCommand = Get-Command python -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          $currentPythonCommandPath = [IO.Path]::GetFullPath([string]$currentPythonCommand.Source)
+          $currentPythonPhysicalPath = Resolve-RunnerExecutable -CommandPath $currentPythonCommandPath -Name 'Python'
+          if ([string]$pythonEvidence.report -cne 'approved-python-runtime-before-source-setup-v1' -or
+              [string]$pythonEvidence.pythonVersion -cnotmatch '^3\.12\.[0-9]+$' -or
+              -not $currentPythonCommandPath.Equals([IO.Path]::GetFullPath([string]$pythonEvidence.pythonCommandPath), $pathComparison) -or
+              -not $currentPythonPhysicalPath.Equals([IO.Path]::GetFullPath([string]$pythonEvidence.pythonExecutablePath), $pathComparison)) {
+            throw 'Approved Python runtime identity differs from its captured source-setup evidence.'
+          }
+          Assert-WorkflowPlainFile -Path $currentPythonPhysicalPath -Name 'Approved Python physical executable'
+          if ((Get-FileSha256 -Path $currentPythonPhysicalPath) -cne [string]$pythonEvidence.pythonExecutableSha256) {
+            throw 'Approved Python runtime physical executable bytes changed after capture.'
+          }
+          $verifiedPythonVersion = @(& $currentPythonCommandPath -I -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')
+          if ($LASTEXITCODE -ne 0 -or $verifiedPythonVersion.Count -ne 1 -or
+              ([string]$verifiedPythonVersion[0]).Trim() -cne [string]$pythonEvidence.pythonVersion) {
+            throw 'Approved Python runtime version changed after capture.'
           }
           $nodeEvidencePath = Join-Path $env:KC_ARTIFACTS_ROOT 'node-runtime-before-source-setup.json'
           $nodeEvidence = Get-Content -LiteralPath $nodeEvidencePath -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 20 -ErrorAction Stop
@@ -951,6 +1046,8 @@ jobs:
           BIND_OUTCOME: ${{ steps.bind_identities.outcome }}
           GO_SETUP_OUTCOME: ${{ steps.setup_go.outcome }}
           GO_CAPTURE_OUTCOME: ${{ steps.capture_go.outcome }}
+          PYTHON_SETUP_OUTCOME: ${{ steps.setup_python.outcome }}
+          PYTHON_CAPTURE_OUTCOME: ${{ steps.capture_python.outcome }}
           NODE_SETUP_OUTCOME: ${{ steps.setup_node.outcome }}
           NODE_CAPTURE_OUTCOME: ${{ steps.capture_node.outcome }}
           RELEASE_OUTCOME: ${{ steps.powershell_release.outcome }}
@@ -970,8 +1067,13 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $sourceReportSha256 = $null
           $setupSeconds = $null; $sourceSeconds = $null; $totalSeconds = $null
+          $pythonEvidence = $null
           if (-not [string]::IsNullOrWhiteSpace([string]$env:KC_ARTIFACTS_ROOT) -and
               (Test-Path -LiteralPath $env:KC_ARTIFACTS_ROOT -PathType Container)) {
+            $pythonEvidencePath = Join-Path $env:KC_ARTIFACTS_ROOT 'python-runtime-before-source-setup.json'
+            if (Test-Path -LiteralPath $pythonEvidencePath -PathType Leaf) {
+              $pythonEvidence = Get-Content -LiteralPath $pythonEvidencePath -Raw | ConvertFrom-Json -Depth 20
+            }
             $reports = @(Get-ChildItem -LiteralPath $env:KC_ARTIFACTS_ROOT -Recurse -File -Filter 'knowledge-content-source-validation.json' -ErrorAction SilentlyContinue)
             if ($reports.Count -eq 1) { $sourceReportSha256 = (Get-FileHash -LiteralPath $reports[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
             $timings = @(Get-ChildItem -LiteralPath $env:KC_ARTIFACTS_ROOT -File -Filter 'source-workflow-timing-*.json' -ErrorAction SilentlyContinue)
@@ -995,6 +1097,7 @@ jobs:
             candidateSha = [string]$env:EXPECTED_CANDIDATE
             baseSha = [string]$env:EXPECTED_BASE
             authoritySha = '2f249f5c1acdb1e7b9eb03180a709d85408e9ac0'
+            pythonVersion = [string]$pythonEvidence.pythonVersion
             powerShell = [ordered]@{ version = [string]$env:KC_POWERSHELL_VERSION; archiveSha256 = [string]$env:KC_POWERSHELL_ARCHIVE_SHA256 }
             outcomes = [ordered]@{
               preserveCheckoutBytes = [string]$env:PRESERVE_OUTCOME
@@ -1004,6 +1107,8 @@ jobs:
               identityBinding = [string]$env:BIND_OUTCOME
               goSetup = [string]$env:GO_SETUP_OUTCOME
               goCapture = [string]$env:GO_CAPTURE_OUTCOME
+              pythonSetup = [string]$env:PYTHON_SETUP_OUTCOME
+              pythonCapture = [string]$env:PYTHON_CAPTURE_OUTCOME
               nodeSetup = [string]$env:NODE_SETUP_OUTCOME
               nodeCapture = [string]$env:NODE_CAPTURE_OUTCOME
               powerShellRelease = [string]$env:RELEASE_OUTCOME
@@ -1082,7 +1187,7 @@ jobs:
           }
           $expectedOutcomes = @(
             'preserveCheckoutBytes', 'candidateCheckout', 'authorityCheckout', 'driverCheckout', 'identityBinding',
-            'goSetup', 'goCapture', 'nodeSetup', 'nodeCapture', 'powerShellRelease', 'powerShellCache',
+            'goSetup', 'goCapture', 'pythonSetup', 'pythonCapture', 'nodeSetup', 'nodeCapture', 'powerShellRelease', 'powerShellCache',
             'powerShellInstall', 'powerShellRuntime', 'pesterCache', 'pesterPreparation',
             'sourceToolPreparation', 'sourceValidation', 'finalEvidence'
           )
@@ -1110,6 +1215,7 @@ jobs:
             )) {
               if ($binding.actual -cne $binding.wanted) { $problems.Add("$platform receipt $($binding.name)='$($binding.actual)', expected '$($binding.wanted)'.") }
             }
+            if ([string]$receipt.pythonVersion -cnotmatch '^3\.12\.[0-9]+$') { $problems.Add("$platform receipt has no approved Python 3.12 version.") }
             if ([string]$receipt.powerShell.version -cnotmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { $problems.Add("$platform receipt has no verified PowerShell version.") }
             if ([string]$receipt.powerShell.archiveSha256 -cnotmatch '^[0-9a-f]{64}$') { $problems.Add("$platform receipt has no verified PowerShell archive SHA-256.") }
             $outcomeNames = @($receipt.outcomes.PSObject.Properties.Name)
@@ -1127,6 +1233,13 @@ jobs:
               total = if ($null -eq $receipt.timing.totalSeconds) { '-' } else { [string]$receipt.timing.totalSeconds }
               status = if (@($receipt.outcomes.PSObject.Properties | Where-Object { [string]$_.Value -cne 'success' }).Count -eq 0) { 'success' } else { 'failed' }
             })
+          }
+          $pythonMajorMinors = @($receipts | ForEach-Object {
+            $versionMatch = [regex]::Match([string]$_.pythonVersion, '^(?<majorMinor>[0-9]+\.[0-9]+)\.[0-9]+$')
+            if ($versionMatch.Success) { $versionMatch.Groups['majorMinor'].Value }
+          } | Sort-Object -Unique)
+          if ($pythonMajorMinors.Count -ne 1) {
+            $problems.Add('Python major.minor differs across platform receipts or is missing.')
           }
           foreach ($receipt in $receipts) {
             if ([string]$receipt.platform -cnotin @('windows', 'linux', 'macos')) { $problems.Add("Unexpected receipt platform '$($receipt.platform)'.") }
