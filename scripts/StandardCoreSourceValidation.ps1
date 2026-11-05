@@ -476,6 +476,20 @@ function Assert-KnowledgeContentSourceReceiptClosureFrozen {
     }
 }
 
+function Write-KnowledgeContentSourceSetupArtifact {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string] $Path,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string] $Text,
+        [AllowEmptyString()][string] $ProtectedToken
+    )
+
+    if (-not [string]::IsNullOrEmpty($ProtectedToken) -and $Text.Contains($ProtectedToken, [StringComparison]::Ordinal)) {
+        throw 'Source setup artifact content contains the protected resolver credential.'
+    }
+    Write-KnowledgeContentUtf8CreateNew -Path $Path -Text $Text
+}
+
 function New-KnowledgeContentSourceToolSetup {
     [CmdletBinding()]
     param(
@@ -488,9 +502,11 @@ function New-KnowledgeContentSourceToolSetup {
         [Parameter(Mandatory = $true)][string] $SourceCheckoutRoot,
         [Parameter(Mandatory = $true)][string] $PreparedPath,
         [Parameter(Mandatory = $true)][string] $GoVersion,
-        [Parameter(Mandatory = $true)][int] $LimitSeconds
+        [Parameter(Mandatory = $true)][int] $LimitSeconds,
+        [hashtable] $ResolverEnvironment = @{}
     )
 
+    $protectedToken = if ($ResolverEnvironment.ContainsKey('GITHUB_TOKEN')) { [string]$ResolverEnvironment['GITHUB_TOKEN'] } else { '' }
     $setupId = [guid]::NewGuid().ToString('N')
     $owned = [IO.Path]::GetFullPath((Join-Path $Root "source-tools-$setupId"))
     if (Test-Path -LiteralPath $owned) { throw 'Source setup root already exists.' }
@@ -508,8 +524,8 @@ function New-KnowledgeContentSourceToolSetup {
     foreach ($tool in @('skill-validator', 'skill-tools', 'skillspector')) {
         $receiptPath = Join-Path $owned "receipt-$tool.json"
         $resolverArguments = @('-NoProfile', '-NonInteractive', '-File', $resolver, '-PolicyPath', $policy, '-ToolName', $tool, '-Install', '-InstallRoot', (Join-Path $owned 'installed'), '-ExpectedGoRuntimeVersion', $GoVersion, '-RunId', $setupId, '-OutputPath', $receiptPath)
-        $result = Invoke-StandardValidationProcess -Command $PowerShell -Arguments $resolverArguments -WorkingDirectory $owned -Environment @{} -TimeoutSeconds $LimitSeconds -CoreLifecycleOnly
-        Write-KnowledgeContentUtf8CreateNew -Path (Join-Path $owned "setup-$tool-process.json") -Text (($result | ConvertTo-Json -Depth 30) + [Environment]::NewLine)
+        $result = Invoke-StandardValidationProcess -Command $PowerShell -Arguments $resolverArguments -WorkingDirectory $owned -Environment $ResolverEnvironment -TimeoutSeconds $LimitSeconds -CoreLifecycleOnly
+        Write-KnowledgeContentSourceSetupArtifact -Path (Join-Path $owned "setup-$tool-process.json") -Text (($result | ConvertTo-Json -Depth 30) + [Environment]::NewLine) -ProtectedToken $protectedToken
         if ($result.status -cne 'passed' -or $result.exitCode -ne 0 -or -not $result.cleanedUp) {
             throw "Source setup $tool failed: $($result.status), exit=$($result.exitCode), cleanup=$($result.cleanedUp). $($result.stderr)"
         }
@@ -536,10 +552,10 @@ function New-KnowledgeContentSourceToolSetup {
         skillSpectorReceiptSha256 = [string]$receiptBindings[2].sha256
     }
     $toolchainPath = Join-Path $owned 'toolchain.json'
-    Write-KnowledgeContentUtf8CreateNew -Path $toolchainPath -Text (($toolchain | ConvertTo-Json -Depth 20) + [Environment]::NewLine)
+    Write-KnowledgeContentSourceSetupArtifact -Path $toolchainPath -Text (($toolchain | ConvertTo-Json -Depth 20) + [Environment]::NewLine) -ProtectedToken $protectedToken
 
     $wrapper = Join-Path $owned 'Invoke-KnowledgeContentValidationChild.ps1'
-    Write-KnowledgeContentUtf8CreateNew -Path $wrapper -Text $childRunnerText
+    Write-KnowledgeContentSourceSetupArtifact -Path $wrapper -Text $childRunnerText -ProtectedToken $protectedToken
     $archive = Join-Path $owned 'candidate.zip'
     & $Git -C $SourceCheckoutRoot archive --format=zip "--output=$archive" $CandidateRevision
     if ($LASTEXITCODE -ne 0) { throw 'Source setup could not archive the exact candidate.' }
@@ -569,7 +585,7 @@ function New-KnowledgeContentSourceToolSetup {
         ownedRoot = $owned
         sourceValidation = $dispatch
     }
-    Write-KnowledgeContentUtf8CreateNew -Path $PreparedPath -Text (($prepared | ConvertTo-Json -Depth 40) + [Environment]::NewLine)
+    Write-KnowledgeContentSourceSetupArtifact -Path $PreparedPath -Text (($prepared | ConvertTo-Json -Depth 40) + [Environment]::NewLine) -ProtectedToken $protectedToken
 }
 
 function Test-KnowledgeContentPathEqual {
@@ -740,6 +756,21 @@ function Read-KnowledgeContentSourceToolSetup {
     return $prepared
 }
 
+function Get-KnowledgeContentSourceResolverEnvironment {
+    [CmdletBinding()]
+    param([switch] $IncludeSetupToken)
+
+    $environment = @{}
+    if ($IncludeSetupToken) {
+        $sourceSetupGitHubToken = [Environment]::GetEnvironmentVariable('KC_SOURCE_SETUP_GITHUB_TOKEN', 'Process')
+        if (-not [string]::IsNullOrWhiteSpace($sourceSetupGitHubToken)) {
+            $environment['GITHUB_TOKEN'] = $sourceSetupGitHubToken
+        }
+    }
+    Remove-Item -LiteralPath 'Env:KC_SOURCE_SETUP_GITHUB_TOKEN', 'Env:GITHUB_TOKEN', 'Env:GH_TOKEN' -Force -ErrorAction SilentlyContinue
+    return $environment
+}
+
 function Invoke-KnowledgeContentSourcePurpose {
     [CmdletBinding()]
     param(
@@ -756,6 +787,8 @@ function Invoke-KnowledgeContentSourcePurpose {
         [string] $OutputPath,
         [int] $TimeoutSeconds = 900
     )
+
+    $resolverEnvironment = Get-KnowledgeContentSourceResolverEnvironment -IncludeSetupToken:($Mode -ceq 'prepare-source-tools')
 
     $repoRoot = [IO.Path]::GetFullPath($RepositoryRoot)
     if (-not (Test-Path -LiteralPath $repoRoot -PathType Container)) { throw "RepositoryRoot does not exist: $repoRoot" }
@@ -800,7 +833,7 @@ function Invoke-KnowledgeContentSourcePurpose {
         $goVersion = Resolve-GoRuntimeVersion -Expected $ExpectedGoRuntimeVersion
         New-KnowledgeContentSourceToolSetup -Root $artifactsRootFull -AuthorityRoot $authorityCheckout.root -AuthorityPin $AuthorityPin `
             -PowerShell $pwshPath -CandidateRevision $candidateCommit -Git $gitPath -SourceCheckoutRoot $repoRoot `
-            -PreparedPath $preparedPath -GoVersion $goVersion -LimitSeconds $TimeoutSeconds
+            -PreparedPath $preparedPath -GoVersion $goVersion -LimitSeconds $TimeoutSeconds -ResolverEnvironment $resolverEnvironment
         return 0
     }
 

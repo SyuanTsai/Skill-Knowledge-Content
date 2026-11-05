@@ -92,12 +92,26 @@ Describe 'Legacy Core process bootstrap transport' {
         @{ VariableName = 'STANDARD_VALIDATION_BOOTSTRAP_RELEASE_PATH' },
         @{ VariableName = 'STANDARD_VALIDATION_BOOTSTRAP_COMMAND' }
     ) {
-        $previous = [Environment]::GetEnvironmentVariable($VariableName, 'Process')
+        $names = @('STANDARD_VALIDATION_BOOTSTRAP_RELEASE_PATH', 'STANDARD_VALIDATION_BOOTSTRAP_COMMAND')
+        $previous = @{}
         try {
+            foreach ($name in $names) {
+                $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+                Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
+            }
             [Environment]::SetEnvironmentVariable($VariableName, 'unexpected-legacy-transport', 'Process')
             Assert-TestThrowsLike { Assert-NoLegacyCorePesterBootstrapEnvironment } "*unexpected legacy bootstrap transport variable '$VariableName'*"
         }
-        finally { [Environment]::SetEnvironmentVariable($VariableName, $previous, 'Process') }
+        finally {
+            foreach ($name in $names) {
+                if ($null -eq $previous[$name]) {
+                    Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
+                }
+                else {
+                    Set-Item -LiteralPath "Env:$name" -Value $previous[$name]
+                }
+            }
+        }
     }
 
     # Scenario: The current owned-process Core launch contains no legacy bootstrap transport variables.
@@ -108,12 +122,19 @@ Describe 'Legacy Core process bootstrap transport' {
         try {
             foreach ($name in $names) {
                 $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
-                [Environment]::SetEnvironmentVariable($name, $null, 'Process')
+                Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
             }
             { Assert-NoLegacyCorePesterBootstrapEnvironment } | Should -Not -Throw
         }
         finally {
-            foreach ($name in $names) { [Environment]::SetEnvironmentVariable($name, $previous[$name], 'Process') }
+            foreach ($name in $names) {
+                if ($null -eq $previous[$name]) {
+                    Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
+                }
+                else {
+                    Set-Item -LiteralPath "Env:$name" -Value $previous[$name]
+                }
+            }
         }
 
         $wrapper = Get-Content -LiteralPath (Join-Path $script:repositoryRoot 'scripts/Invoke-CorePester.ps1') -Raw

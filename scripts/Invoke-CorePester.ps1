@@ -102,7 +102,12 @@ try {
 }
 finally {
     $ErrorActionPreference = $previousErrorActionPreference
-    [Environment]::SetEnvironmentVariable('SYP154_CANDIDATE_AUTHORITY_ROOT', $previousCandidateAuthorityRoot, 'Process')
+    if ($null -eq $previousCandidateAuthorityRoot) {
+        [Environment]::SetEnvironmentVariable('SYP154_CANDIDATE_AUTHORITY_ROOT', [NullString]::Value, 'Process')
+    }
+    else {
+        [Environment]::SetEnvironmentVariable('SYP154_CANDIDATE_AUTHORITY_ROOT', $previousCandidateAuthorityRoot, 'Process')
+    }
 }
 if ($null -eq $result) { throw 'Pester did not return a result object.' }
 $postRunClosure = Test-CorePesterClosure -ModuleRoot $verifiedPesterModuleRoot -Lock $closureLockRecord.Value

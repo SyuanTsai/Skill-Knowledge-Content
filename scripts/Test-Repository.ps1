@@ -458,12 +458,12 @@ function Get-ContentInventory {
     foreach ($path in $sortedPaths) {
         $repositoryPath = "skills/$SkillId/$path"
         $workingObjectId = ([string](@(
-            & $git.Path -C $RepositoryRoot hash-object "--path=$repositoryPath" -- $pathToFile[$path].FullName
+            & $gitPath -C $RepositoryRoot hash-object "--path=$repositoryPath" -- $pathToFile[$path].FullName
         ) | Select-Object -First 1)).Trim()
         if ($LASTEXITCODE -ne 0 -or $workingObjectId -cnotmatch '^[0-9a-f]{40}$' -or $workingObjectId -cne $tracked[$path]) {
             throw "Skill '$SkillId' working-tree content is not bound to its Git index entry '$path'."
         }
-        $sha256 = Get-GitBlobSha256 -GitPath $git.Path -RepositoryRoot $RepositoryRoot -ObjectId $tracked[$path]
+        $sha256 = Get-GitBlobSha256 -GitPath $gitPath -RepositoryRoot $RepositoryRoot -ObjectId $tracked[$path]
         $files += [pscustomobject][ordered]@{ path = $path; sha256 = $sha256 }
         [void]$canonical.Append($path).Append("`t").Append($sha256).Append("`n")
     }

@@ -6,6 +6,12 @@ Describe 'Knowledge child uses central package tool report rules' {
         $script:validationSource = Get-Content -LiteralPath $validationPath -Raw
         $script:childMatch = [regex]::Match($script:validationSource, '(?ms)^\$childRunnerText = @''\r?\n(?<body>.*?)^''@')
         if (-not $script:childMatch.Success) { throw 'Knowledge child runner source was not found.' }
+        $sourceHelperPath = Join-Path (Split-Path -Parent $validationPath) 'StandardCoreSourceValidation.ps1'
+        $quotedSourceHelperPath = ([IO.Path]::GetFullPath($sourceHelperPath)).Replace("'", "''")
+        $script:driverPrefix = $script:validationSource.Substring(0, $script:childMatch.Index).Replace(
+            ". (Join-Path `$PSScriptRoot 'StandardCoreSourceValidation.ps1')",
+            ". '$quotedSourceHelperPath'"
+        )
 
         function Assert-TestThrowsLike {
             param([scriptblock] $ScriptBlock, [string] $Pattern)
@@ -262,12 +268,11 @@ exit /b %ERRORLEVEL%
     # counting its rejection cases as coverage.
     It 'UnitT35_accepts_exact_candidate_authority_config' {
         $config = Get-Content -LiteralPath (Join-Path (Split-Path -Parent $PSScriptRoot) 'config/standard-v1.json') -Raw | ConvertFrom-Json
-        $prefix = $script:validationSource.Substring(0, $script:childMatch.Index)
         & {
             param($DriverPrefix, $CandidateConfig)
             . ([scriptblock]::Create($DriverPrefix))
             Assert-AuthorityConfig -Config $CandidateConfig
-        } $prefix $config
+        } $script:driverPrefix $config
     }
 
     # Scenario: candidate authority config substitutes commit, archive or member identity.
@@ -291,13 +296,12 @@ exit /b %ERRORLEVEL%
         elseif ($Field -eq 'member') { $config.authority.files[0].sha256 = '0' * 64 }
         elseif ($Field -eq 'commit') { $config.authority.commit = '0' * 40 }
         else { $config.authority.archiveSha256 = '0' * 64 }
-        $prefix = $script:validationSource.Substring(0, $script:childMatch.Index)
         Assert-TestThrowsLike {
             & {
                 param($DriverPrefix, $CandidateConfig)
                 . ([scriptblock]::Create($DriverPrefix))
                 Assert-AuthorityConfig -Config $CandidateConfig
-            } $prefix $config
+            } $script:driverPrefix $config
         } $(if ($Field -eq 'member' -or $Field.Contains('/')) { '*authority file identity mismatch*' } else { '*exact approved P02 authority snapshot*' })
     }
 }

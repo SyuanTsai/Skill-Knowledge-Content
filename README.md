@@ -55,7 +55,7 @@ skills/capture-private-course-knowledge/
 
 ## Validation
 
-The public validation entry point is `scripts/Validate.ps1`. With the active Standard v1 pin at `2f249f5c1acdb1e7b9eb03180a709d85408e9ac0`, validation has two explicit purposes: `scripts/Validate.ps1 -PrepareSourceTools` creates run-owned setup receipts, and `scripts/Validate.ps1 -SourceValidation` performs the protected source acceptance using those receipts and the exact event base commit. The protected three-platform workflow invokes both purposes with the required clean roots and runtime evidence. A bare `scripts/Validate.ps1` call fails closed, so it cannot be mistaken for a completed release gate.
+The public validation entry point is `scripts/Validate.ps1`, and the canonical protected CI workflow entry point is `.github/workflows/validate.yml`. With the active Standard v1 pin at `2f249f5c1acdb1e7b9eb03180a709d85408e9ac0`, validation has two explicit purposes: `scripts/Validate.ps1 -PrepareSourceTools` creates run-owned setup receipts, and `scripts/Validate.ps1 -SourceValidation` performs the protected source acceptance using those receipts and the exact event base commit. The protected three-platform workflow invokes both purposes with the required clean roots and runtime evidence. A bare `scripts/Validate.ps1` call fails closed, so it cannot be mistaken for a completed release gate.
 
 The validator checks:
 
@@ -149,7 +149,9 @@ if ($LASTEXITCODE -ne 0) { throw 'Protected source validation failed.' }
 
 The source gate is limited to stages 1–5, no-LLM Static, and the whole test suite. A report PASS, workflow success, review, and merge do not authorize release, installation, publication, or downstream cutover. `releaseEligible` is permanently false; any separate release process must make its own decision.
 
-Rollback must use a normal reviewed PR that reverts the workflow, complete authority tuple, protected driver, tests, and documentation together to one previously validated repository commit. Do not mix an older authority inventory with the current driver, and do not reuse receipts from another candidate.
+## Rollback
+
+Rollback must use a normal reviewed PR that reverts the entire adoption together: the `.github/workflows/validate.yml` three-platform matrix, `config/standard-v1.json`, the active driver scripts (`scripts/*.ps1` and `*.psm1`), tests, and documentation. It must restore the complete previously validated 8e62 authority tuple: commit `8e627baf54bd6e47862e6291b25e71cc45a2f2b7`, archive SHA-256 `9aa4a7fc8fc7c7f0ff9e774c79c77a64077b4003212a523dda519d034ff99989`, its full 32-file inventory, and the prior single-Windows protected workflow. Reverting only part of the adoption is invalid because the active driver accepts only the 2f249 tuple.
 
 ## Versioning
 

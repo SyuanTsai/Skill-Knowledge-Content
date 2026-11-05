@@ -572,6 +572,7 @@ jobs:
           KC_MATRIX_PLATFORM: ${{ matrix.platform }}
           KC_MATRIX_ARCHITECTURE: ${{ matrix.architecture }}
           KC_MATRIX_EXECUTABLE: ${{ matrix.executable }}
+          KC_SOURCE_SETUP_GITHUB_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Stop'
           & (Join-Path $env:KC_DRIVER_ROOT 'scripts/Prepare-WorkflowPowerShell.ps1') -Mode Verify `

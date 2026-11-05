@@ -261,12 +261,13 @@ Describe 'Knowledge Content protected source driver preparation' {
     # Purpose: setup and execution must resolve the same authority instead of preparing old tools for a new runner.
     It 'UnitT02_routes_both_source_purposes_to_the_candidate_scoped_authority' {
         $authority = New-ScopedAuthorityCandidate
+        $expectedRunnerSha256 = [string](Get-KnowledgeContentPreparedAuthorityPin -Commit $authority.commit).files['scripts/Invoke-StandardValidation.ps1']
         foreach ($purpose in @('PrepareSourceTools', 'SourceValidation')) {
             $request = @{ SourceToolsPath = $script:fixtureSourceToolsPath; AuthorityRepositoryRoot = $script:fixtureAuthorityRoot; TrustedToolRoot = $script:fixtureRuntimeRoot; CandidateAuthority = $authority }
             $request[$purpose] = $true
             $route = Resolve-KnowledgeContentSourceRoute @request
             $route.authority.commit | Should -BeExactly $authority.commit
-            $route.authority.files['scripts/Invoke-StandardValidation.ps1'] | Should -BeExactly 'd13cea68b471aea60142665ee787a1bb2111d5ea7f8d45dfea14e0a2a59409b8'
+            $route.authority.files['scripts/Invoke-StandardValidation.ps1'] | Should -BeExactly $expectedRunnerSha256
         }
     }
 
@@ -528,6 +529,57 @@ Describe 'Knowledge Content protected source driver preparation' {
         }
     }
 
+    # Scenario: the workflow supplies a dedicated GitHub token while ambient GitHub CLI credentials are also present.
+    # Purpose: consume the dedicated value once, remove every process-scoped credential immediately, and expose only GITHUB_TOKEN to resolvers.
+    It 'UnitT53_scopes_the_source_setup_token_to_the_resolver_environment' {
+        $names = @('KC_SOURCE_SETUP_GITHUB_TOKEN', 'GITHUB_TOKEN', 'GH_TOKEN')
+        $previous = @{}
+        foreach ($name in $names) { $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
+        try {
+            [Environment]::SetEnvironmentVariable('KC_SOURCE_SETUP_GITHUB_TOKEN', 'fixture-source-setup-token', 'Process')
+            [Environment]::SetEnvironmentVariable('GITHUB_TOKEN', 'ambient-github-token', 'Process')
+            [Environment]::SetEnvironmentVariable('GH_TOKEN', 'ambient-gh-token', 'Process')
+
+            $resolverEnvironment = Get-KnowledgeContentSourceResolverEnvironment -IncludeSetupToken
+
+            @($resolverEnvironment.Keys) | Should -Be @('GITHUB_TOKEN')
+            $resolverEnvironment['GITHUB_TOKEN'] | Should -BeExactly 'fixture-source-setup-token'
+            foreach ($name in $names) {
+                [Environment]::GetEnvironmentVariable($name, 'Process') | Should -BeNullOrEmpty
+            }
+            (Get-KnowledgeContentSourceResolverEnvironment -IncludeSetupToken).Count | Should -Be 0
+        }
+        finally {
+            foreach ($name in $names) { [Environment]::SetEnvironmentVariable($name, $previous[$name], 'Process') }
+        }
+    }
+
+    # Scenario: resolver process output or a later setup structure accidentally contains the credential value.
+    # Purpose: pass the resolver environment only to the three setup processes and reject the credential before any driver-owned artifact is created.
+    It 'UnitT54_limits_the_resolver_token_to_three_children_and_blocks_artifact_leakage' {
+        $sourceDriver = Get-Content -LiteralPath $script:sourceDriverPath -Raw
+        @([regex]::Matches($sourceDriver, "GetEnvironmentVariable\('KC_SOURCE_SETUP_GITHUB_TOKEN', 'Process'\)")).Count | Should -Be 1
+        @([regex]::Matches($sourceDriver, 'Invoke-StandardValidationProcess')).Count | Should -Be 1
+        $sourceDriver | Should -Match 'foreach \(\$tool in @\(''skill-validator'', ''skill-tools'', ''skillspector''\)\)'
+        $sourceDriver | Should -Match 'Invoke-StandardValidationProcess[^\r\n]+-Environment \$ResolverEnvironment'
+        $sourceDriver | Should -Not -Match 'Invoke-StandardValidationProcess[^\r\n]+-Environment @\{\s*GITHUB_TOKEN'
+        $setupStart = $sourceDriver.IndexOf('function New-KnowledgeContentSourceToolSetup', [StringComparison]::Ordinal)
+        $setupEnd = $sourceDriver.IndexOf('function Test-KnowledgeContentPathEqual', $setupStart, [StringComparison]::Ordinal)
+        $setupBody = $sourceDriver.Substring($setupStart, $setupEnd - $setupStart)
+        $setupBody | Should -Not -Match 'Write-KnowledgeContentUtf8CreateNew'
+        @([regex]::Matches($setupBody, 'Write-KnowledgeContentSourceSetupArtifact')).Count | Should -Be 4
+
+        $leakPath = Join-Path $TestDrive 'source-setup-token-leak.json'
+        Assert-TestThrowsLike {
+            Write-KnowledgeContentSourceSetupArtifact -Path $leakPath -Text '{"token":"fixture-source-setup-token"}' -ProtectedToken 'fixture-source-setup-token'
+        } '*contains the protected resolver credential*'
+        Test-Path -LiteralPath $leakPath | Should -BeFalse
+
+        $safePath = Join-Path $TestDrive 'source-setup-safe.json'
+        Write-KnowledgeContentSourceSetupArtifact -Path $safePath -Text '{"status":"passed"}' -ProtectedToken 'fixture-source-setup-token'
+        (Get-Content -LiteralPath $safePath -Raw) | Should -BeExactly '{"status":"passed"}'
+    }
+
     # Scenario: source validation is requested with the active 2f249 config, an obsolete config, or incomplete setup locations.
     # Purpose: accept only the complete active pin while continuing to reject stale receipts and missing trust roots.
     It 'UnitT55_accepts_active_scoped_pin_and_rejects_obsolete_or_incomplete_requests' {
@@ -678,8 +730,8 @@ Describe 'Knowledge Content protected source driver preparation' {
         $previousBytecode = [Environment]::GetEnvironmentVariable('PYTHONDONTWRITEBYTECODE', 'Process')
         $previousCachePrefix = [Environment]::GetEnvironmentVariable('PYTHONPYCACHEPREFIX', 'Process')
         try {
-            [Environment]::SetEnvironmentVariable('PYTHONDONTWRITEBYTECODE', $null, 'Process')
-            [Environment]::SetEnvironmentVariable('PYTHONPYCACHEPREFIX', $null, 'Process')
+            Remove-Item -LiteralPath 'Env:PYTHONDONTWRITEBYTECODE' -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath 'Env:PYTHONPYCACHEPREFIX' -ErrorAction SilentlyContinue
             $defaultOutput = @(& $python.Source @launcherArguments -c $pythonCode $defaultImportRoot 2>&1)
             $defaultExitCode = $LASTEXITCODE
             $defaultExitCode | Should -Be 0 -Because ($defaultOutput -join "`n")
@@ -705,8 +757,18 @@ Describe 'Knowledge Content protected source driver preparation' {
             @(Get-ChildItem -LiteralPath $guardedImportRoot -Filter '*.pyc' -File -Recurse -Force).Count | Should -Be 0
         }
         finally {
-            [Environment]::SetEnvironmentVariable('PYTHONDONTWRITEBYTECODE', $previousBytecode, 'Process')
-            [Environment]::SetEnvironmentVariable('PYTHONPYCACHEPREFIX', $previousCachePrefix, 'Process')
+            if ($null -eq $previousBytecode) {
+                Remove-Item -LiteralPath 'Env:PYTHONDONTWRITEBYTECODE' -ErrorAction SilentlyContinue
+            }
+            else {
+                Set-Item -LiteralPath 'Env:PYTHONDONTWRITEBYTECODE' -Value $previousBytecode
+            }
+            if ($null -eq $previousCachePrefix) {
+                Remove-Item -LiteralPath 'Env:PYTHONPYCACHEPREFIX' -ErrorAction SilentlyContinue
+            }
+            else {
+                Set-Item -LiteralPath 'Env:PYTHONPYCACHEPREFIX' -Value $previousCachePrefix
+            }
         }
     }
 

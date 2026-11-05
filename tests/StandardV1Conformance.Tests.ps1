@@ -1,21 +1,21 @@
 # SPDX-FileCopyrightText: 2026 SyuanTsai
 # SPDX-License-Identifier: Apache-2.0
-function Assert-TestThrowsLike {
-    param([Parameter(Mandatory = $true)][scriptblock] $ScriptBlock, [Parameter(Mandatory = $true)][string] $Pattern)
-
-    $caught = $null
-    try { & $ScriptBlock }
-    catch { $caught = $_ }
-    $caught | Should -Not -BeNullOrEmpty
-    ([string]$caught.Exception.Message) | Should -BeLike $Pattern
-}
-
 Describe 'Knowledge & Content Standard v1 reference implementation' {
     BeforeAll {
         $script:RepositoryRoot = Split-Path -Parent $PSScriptRoot
         $script:SourceInventoryPath = Join-Path $script:RepositoryRoot 'catalog/source.json'
         $script:AdapterPath = Join-Path $script:RepositoryRoot 'config/standard-v1.json'
         $script:CanonicalValidatorPath = Join-Path $script:RepositoryRoot 'scripts/Validate.ps1'
+
+        function Assert-TestThrowsLike {
+            param([Parameter(Mandatory = $true)][scriptblock] $ScriptBlock, [Parameter(Mandatory = $true)][string] $Pattern)
+
+            $caught = $null
+            try { & $ScriptBlock }
+            catch { $caught = $_ }
+            $caught | Should -Not -BeNullOrEmpty
+            ([string]$caught.Exception.Message) | Should -BeLike $Pattern
+        }
     }
 
     It 'uses the canonical skills source root and schema v2 inventory' {
@@ -136,10 +136,10 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $pythonSetupStep.Groups['body'].Value | Should -Match '(?m)^          check-latest:\s+false\s*$'
         $pythonSetupStep.Groups['body'].Value | Should -Not -Match '(?m)^\s+cache:'
         $workflow | Should -Match 'python-runtime-before-source-setup\.json'
-        $workflow | Should -Match "pythonVersion = \[string\]\$pythonEvidence\.pythonVersion"
+        $workflow | Should -Match 'pythonVersion\s*=\s*\[string\]\$pythonEvidence\.pythonVersion'
         $workflow | Should -Match 'receipt has no approved Python 3\.12 version'
         $workflow | Should -Match 'Python major\.minor differs across platform receipts'
-        $workflow | Should -Match "Required workflow value '\$requiredName' is missing before final source evidence verification"
+        $workflow | Should -Match ([regex]::Escape('Required workflow value ''$requiredName'' is missing before final source evidence verification'))
         $workflow | Should -Not -Match '\$matches\s*='
         $workflow | Should -Match '\$ownedRoot = Join-Path \$env:RUNNER_TEMP "kc-\$runNonce"'
         $workflow | Should -Match 'Join-Path \$env:RUNNER_TEMP "a-\$runNonce"'
@@ -150,6 +150,15 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $resolvePowerShellStep.Success | Should -BeTrue
         $resolvePowerShellStep.Groups['body'].Value | Should -Match '(?m)^          KC_GITHUB_API_TOKEN: \$\{\{ github\.token \}\}\r?$'
         @([regex]::Matches($workflow, '(?m)^\s+KC_GITHUB_API_TOKEN:')).Count | Should -Be 1
+        $sourceSetupStep = [regex]::Match($workflow, '(?ms)^      - name: Prepare source tool receipts through the canonical validator\r?\n(?<body>.*?)(?=^      - name:|\z)')
+        $sourceSetupStep.Success | Should -BeTrue
+        $sourceSetupStep.Groups['body'].Value | Should -Match '(?m)^          KC_SOURCE_SETUP_GITHUB_TOKEN: \$\{\{ github\.token \}\}\r?$'
+        $sourceSetupRun = [regex]::Match($sourceSetupStep.Groups['body'].Value, '(?ms)^        run:\s*\|\r?\n(?<run>.*)\z')
+        $sourceSetupRun.Success | Should -BeTrue
+        @($sourceSetupRun.Groups['run'].Value -split '\r?\n' | Where-Object {
+            $_ -match 'GITHUB_(?:ENV|OUTPUT)' -and $_ -match '(?:KC_SOURCE_SETUP_GITHUB_TOKEN|GITHUB_TOKEN)'
+        }).Count | Should -Be 0
+        @([regex]::Matches($workflow, '(?m)^\s+KC_SOURCE_SETUP_GITHUB_TOKEN:')).Count | Should -Be 1
         $workflow | Should -Match 'scripts/Prepare-PesterRuntime\.ps1'
         $workflow | Should -Match 'KC_PESTER_PACKAGE_CACHE'
         $workflow | Should -Match 'hashFiles\(''driver/config/pester-\*-closure\.lock\.json''\)'
