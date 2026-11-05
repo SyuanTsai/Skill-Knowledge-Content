@@ -385,6 +385,20 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $release | Should -Not -Match 'scripts/(?:Invoke-StandardValidation|Test-Repository)\.ps1'
     }
 
+    # Scenario: workflow expressions are present only in YAML expression-capable fields, never inside shell scripts.
+    # Purpose: prevent GitHub's single-expression expansion from rejecting an oversized run block.
+    It 'UnitT51_rejects_expressions_inside_workflow_run_blocks' {
+        $workflowPath = Join-Path $script:RepositoryRoot '.github/workflows/validate.yml'
+        $workflow = Get-Content -LiteralPath $workflowPath -Raw
+        $runBlocks = @([regex]::Matches($workflow, '(?m)^ {8}run:[ \t]*\|[ \t]*\r?\n(?<body>(?:^ {10}.*(?:\r?\n|$))*)'))
+
+        $runBlocks.Count | Should -BeGreaterThan 0
+        foreach ($runBlock in $runBlocks) {
+            $runBlock.Groups['body'].Value | Should -Not -Match '\$\{\{'
+        }
+        $workflow | Should -Not -Match '(?m)^\s+run:.*\$\{\{'
+    }
+
     # Scenario: the matrix or aggregate is unsuccessful before the protected status mirrors run.
     # Purpose: keep mirrors pure, Linux-hosted, and fail closed on both upstream results.
     It 'UnitT70_keeps_required_status_mirrors_pure_and_bound_to_matrix_and_aggregate' {

@@ -408,10 +408,15 @@ jobs:
       - name: Resolve latest official PowerShell release metadata
         id: powershell_release
         shell: pwsh
+        env:
+          KC_MATRIX_PLATFORM: ${{ matrix.platform }}
+          KC_MATRIX_ARCHITECTURE: ${{ matrix.architecture }}
+          KC_MATRIX_EXECUTABLE: ${{ matrix.executable }}
+          KC_MATRIX_ASSET_TEMPLATE: ${{ matrix.assetTemplate }}
         run: |
           & (Join-Path $env:KC_DRIVER_ROOT 'scripts/Prepare-WorkflowPowerShell.ps1') -Mode Resolve `
-            -Platform '${{ matrix.platform }}' -ExpectedArchitecture '${{ matrix.architecture }}' `
-            -ExecutableName '${{ matrix.executable }}' -AssetTemplate '${{ matrix.assetTemplate }}'
+            -Platform ([string]$env:KC_MATRIX_PLATFORM) -ExpectedArchitecture ([string]$env:KC_MATRIX_ARCHITECTURE) `
+            -ExecutableName ([string]$env:KC_MATRIX_EXECUTABLE) -AssetTemplate ([string]$env:KC_MATRIX_ASSET_TEMPLATE)
 
       - name: Restore PowerShell release bytes cache
         id: restore_powershell_cache
@@ -423,24 +428,40 @@ jobs:
       - name: Install verified latest official PowerShell
         id: install_powershell
         shell: pwsh
+        env:
+          KC_MATRIX_PLATFORM: ${{ matrix.platform }}
+          KC_MATRIX_ARCHITECTURE: ${{ matrix.architecture }}
+          KC_MATRIX_EXECUTABLE: ${{ matrix.executable }}
+          KC_POWERSHELL_VERSION_INPUT: ${{ steps.powershell_release.outputs.version }}
+          KC_POWERSHELL_RELEASE_TAG: ${{ steps.powershell_release.outputs.tag }}
+          KC_POWERSHELL_ASSET: ${{ steps.powershell_release.outputs.asset }}
+          KC_POWERSHELL_ARCHIVE_URL: ${{ steps.powershell_release.outputs.archive_url }}
+          KC_POWERSHELL_HASHES_URL: ${{ steps.powershell_release.outputs.hashes_url }}
+          KC_POWERSHELL_OFFICIAL_ARCHIVE_SHA256: ${{ steps.powershell_release.outputs.official_sha256 }}
+          KC_POWERSHELL_HASHES_MANIFEST_SHA256: ${{ steps.powershell_release.outputs.hashes_sha256 }}
+          KC_POWERSHELL_FRESH_HASHES_PATH: ${{ steps.powershell_release.outputs.fresh_hashes_path }}
         run: |
           & (Join-Path $env:KC_DRIVER_ROOT 'scripts/Prepare-WorkflowPowerShell.ps1') -Mode Install `
-            -Platform '${{ matrix.platform }}' -ExpectedArchitecture '${{ matrix.architecture }}' -ExecutableName '${{ matrix.executable }}' `
+            -Platform ([string]$env:KC_MATRIX_PLATFORM) -ExpectedArchitecture ([string]$env:KC_MATRIX_ARCHITECTURE) -ExecutableName ([string]$env:KC_MATRIX_EXECUTABLE) `
             -RuntimeRoot $env:KC_RUNTIME_ROOT -OwnedRoot $env:KC_OWNED_ROOT -ArtifactsRoot $env:KC_ARTIFACTS_ROOT `
             -CacheRoot (Join-Path $env:RUNNER_TEMP 'kc-pwsh-release-cache') `
-            -Version '${{ steps.powershell_release.outputs.version }}' -ReleaseTag '${{ steps.powershell_release.outputs.tag }}' `
-            -AssetName '${{ steps.powershell_release.outputs.asset }}' -ArchiveUrl '${{ steps.powershell_release.outputs.archive_url }}' `
-            -HashesUrl '${{ steps.powershell_release.outputs.hashes_url }}' `
-            -OfficialArchiveSha256 '${{ steps.powershell_release.outputs.official_sha256 }}' `
-            -HashesManifestSha256 '${{ steps.powershell_release.outputs.hashes_sha256 }}' `
-            -FreshHashesPath '${{ steps.powershell_release.outputs.fresh_hashes_path }}'
+            -Version ([string]$env:KC_POWERSHELL_VERSION_INPUT) -ReleaseTag ([string]$env:KC_POWERSHELL_RELEASE_TAG) `
+            -AssetName ([string]$env:KC_POWERSHELL_ASSET) -ArchiveUrl ([string]$env:KC_POWERSHELL_ARCHIVE_URL) `
+            -HashesUrl ([string]$env:KC_POWERSHELL_HASHES_URL) `
+            -OfficialArchiveSha256 ([string]$env:KC_POWERSHELL_OFFICIAL_ARCHIVE_SHA256) `
+            -HashesManifestSha256 ([string]$env:KC_POWERSHELL_HASHES_MANIFEST_SHA256) `
+            -FreshHashesPath ([string]$env:KC_POWERSHELL_FRESH_HASHES_PATH)
 
       - name: Verify selected PowerShell runtime
         id: verify_runtime
         shell: pwsh
+        env:
+          KC_MATRIX_PLATFORM: ${{ matrix.platform }}
+          KC_MATRIX_ARCHITECTURE: ${{ matrix.architecture }}
+          KC_MATRIX_EXECUTABLE: ${{ matrix.executable }}
         run: |
           & (Join-Path $env:KC_DRIVER_ROOT 'scripts/Prepare-WorkflowPowerShell.ps1') -Mode Verify `
-            -Platform '${{ matrix.platform }}' -ExpectedArchitecture '${{ matrix.architecture }}' -ExecutableName '${{ matrix.executable }}'
+            -Platform ([string]$env:KC_MATRIX_PLATFORM) -ExpectedArchitecture ([string]$env:KC_MATRIX_ARCHITECTURE) -ExecutableName ([string]$env:KC_MATRIX_EXECUTABLE)
 
       - name: Restore Pester package bytes cache
         id: restore_pester_cache
@@ -452,10 +473,14 @@ jobs:
       - name: Prepare locked Pester runtime under verified PowerShell
         id: prepare_pester_runtime
         shell: pwsh
+        env:
+          KC_MATRIX_PLATFORM: ${{ matrix.platform }}
+          KC_MATRIX_ARCHITECTURE: ${{ matrix.architecture }}
+          KC_MATRIX_EXECUTABLE: ${{ matrix.executable }}
         run: |
           $ErrorActionPreference = 'Stop'
           & (Join-Path $env:KC_DRIVER_ROOT 'scripts/Prepare-WorkflowPowerShell.ps1') -Mode Verify `
-            -Platform '${{ matrix.platform }}' -ExpectedArchitecture '${{ matrix.architecture }}' -ExecutableName '${{ matrix.executable }}'
+            -Platform ([string]$env:KC_MATRIX_PLATFORM) -ExpectedArchitecture ([string]$env:KC_MATRIX_ARCHITECTURE) -ExecutableName ([string]$env:KC_MATRIX_EXECUTABLE)
           $env:RUN_OWNED_ROOT = $env:KC_OWNED_ROOT
           & $env:KC_POWERSHELL_EXECUTABLE -NoProfile -NonInteractive -File (Join-Path $env:KC_DRIVER_ROOT 'scripts/Prepare-PesterRuntime.ps1') `
             -RuntimeExecutable $env:KC_POWERSHELL_EXECUTABLE -OwnedRoot $env:KC_OWNED_ROOT
@@ -468,10 +493,14 @@ jobs:
       - name: Prepare source tool receipts through the canonical validator
         id: prepare_source_tools
         shell: pwsh
+        env:
+          KC_MATRIX_PLATFORM: ${{ matrix.platform }}
+          KC_MATRIX_ARCHITECTURE: ${{ matrix.architecture }}
+          KC_MATRIX_EXECUTABLE: ${{ matrix.executable }}
         run: |
           $ErrorActionPreference = 'Stop'
           & (Join-Path $env:KC_DRIVER_ROOT 'scripts/Prepare-WorkflowPowerShell.ps1') -Mode Verify `
-            -Platform '${{ matrix.platform }}' -ExpectedArchitecture '${{ matrix.architecture }}' -ExecutableName '${{ matrix.executable }}'
+            -Platform ([string]$env:KC_MATRIX_PLATFORM) -ExpectedArchitecture ([string]$env:KC_MATRIX_ARCHITECTURE) -ExecutableName ([string]$env:KC_MATRIX_EXECUTABLE)
           if (Test-Path -LiteralPath $env:KC_SOURCE_TOOLS_PATH) { throw 'Fresh source-tools output path unexpectedly exists before protected preparation.' }
           & $env:KC_POWERSHELL_EXECUTABLE -NoProfile -NonInteractive -File (Join-Path $env:KC_DRIVER_ROOT 'scripts/Validate.ps1') `
             -RepositoryRoot $env:KC_CANDIDATE_ROOT -PrepareSourceTools -ArtifactsRoot $env:KC_ARTIFACTS_ROOT `
@@ -505,6 +534,9 @@ jobs:
         shell: pwsh
         env:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
+          KC_MATRIX_PLATFORM: ${{ matrix.platform }}
+          KC_MATRIX_ARCHITECTURE: ${{ matrix.architecture }}
+          KC_MATRIX_EXECUTABLE: ${{ matrix.executable }}
         run: |
           $sourceTimer = [Diagnostics.Stopwatch]::StartNew()
           $sourceStartedAtUtc = [DateTime]::UtcNow
@@ -513,7 +545,7 @@ jobs:
           try {
             $ErrorActionPreference = 'Stop'
             & (Join-Path $env:KC_DRIVER_ROOT 'scripts/Prepare-WorkflowPowerShell.ps1') -Mode Verify `
-              -Platform '${{ matrix.platform }}' -ExpectedArchitecture '${{ matrix.architecture }}' -ExecutableName '${{ matrix.executable }}'
+              -Platform ([string]$env:KC_MATRIX_PLATFORM) -ExpectedArchitecture ([string]$env:KC_MATRIX_ARCHITECTURE) -ExecutableName ([string]$env:KC_MATRIX_EXECUTABLE)
             & $env:KC_POWERSHELL_EXECUTABLE -NoProfile -NonInteractive -File (Join-Path $env:KC_DRIVER_ROOT 'scripts/Validate.ps1') `
               -RepositoryRoot $env:KC_CANDIDATE_ROOT -SourceValidation -ArtifactsRoot $env:KC_ARTIFACTS_ROOT `
               -SourceToolsPath $env:KC_SOURCE_TOOLS_PATH -AuthorityRepositoryRoot $env:KC_AUTHORITY_ROOT `
@@ -562,6 +594,9 @@ jobs:
           PREPARE_PESTER_OUTCOME: ${{ steps.prepare_pester_runtime.outcome }}
           PREPARE_SOURCE_TOOLS_OUTCOME: ${{ steps.prepare_source_tools.outcome }}
           SOURCE_VALIDATION_OUTCOME: ${{ steps.source_validation.outcome }}
+          KC_MATRIX_PLATFORM: ${{ matrix.platform }}
+          KC_MATRIX_ARCHITECTURE: ${{ matrix.architecture }}
+          KC_MATRIX_EXECUTABLE: ${{ matrix.executable }}
         run: |
           $ErrorActionPreference = 'Stop'
           foreach ($requiredName in @(
@@ -575,7 +610,7 @@ jobs:
             }
           }
           & (Join-Path $env:KC_DRIVER_ROOT 'scripts/Prepare-WorkflowPowerShell.ps1') -Mode Verify `
-            -Platform '${{ matrix.platform }}' -ExpectedArchitecture '${{ matrix.architecture }}' -ExecutableName '${{ matrix.executable }}'
+            -Platform ([string]$env:KC_MATRIX_PLATFORM) -ExpectedArchitecture ([string]$env:KC_MATRIX_ARCHITECTURE) -ExecutableName ([string]$env:KC_MATRIX_EXECUTABLE)
           function Get-FileSha256 {
             param([Parameter(Mandatory = $true)][string] $Path)
             return (Get-FileHash -LiteralPath $Path -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
@@ -926,6 +961,10 @@ jobs:
           TOOL_SETUP_OUTCOME: ${{ steps.prepare_source_tools.outcome }}
           SOURCE_OUTCOME: ${{ steps.source_validation.outcome }}
           EVIDENCE_OUTCOME: ${{ steps.verify_source_evidence.outcome }}
+          KC_MATRIX_PLATFORM: ${{ matrix.platform }}
+          KC_MATRIX_OS: ${{ matrix.os }}
+          KC_MATRIX_ARCHITECTURE: ${{ matrix.architecture }}
+          KC_RUNNER_OS: ${{ runner.os }}
         run: |
           $ErrorActionPreference = 'Stop'
           $sourceReportSha256 = $null
@@ -945,10 +984,10 @@ jobs:
           $receipt = [ordered]@{
             schemaVersion = 1
             receipt = 'knowledge-content-platform-leg-v1'
-            platform = '${{ matrix.platform }}'
-            os = '${{ matrix.os }}'
-            arch = '${{ matrix.architecture }}'
-            runnerOs = '${{ runner.os }}'
+            platform = [string]$env:KC_MATRIX_PLATFORM
+            os = [string]$env:KC_MATRIX_OS
+            arch = [string]$env:KC_MATRIX_ARCHITECTURE
+            runnerOs = [string]$env:KC_RUNNER_OS
             runId = [string]$env:GITHUB_RUN_ID
             runAttempt = [string]$env:GITHUB_RUN_ATTEMPT
             eventName = [string]$env:GITHUB_EVENT_NAME
@@ -979,7 +1018,7 @@ jobs:
             sourceReportSha256 = $sourceReportSha256
             timing = [ordered]@{ setupSeconds = $setupSeconds; sourceValidationSeconds = $sourceSeconds; totalSeconds = $totalSeconds }
           }
-          $receiptPath = Join-Path $env:RUNNER_TEMP 'kc-leg-receipt-${{ matrix.platform }}.json'
+          $receiptPath = Join-Path $env:RUNNER_TEMP ("kc-leg-receipt-{0}.json" -f [string]$env:KC_MATRIX_PLATFORM)
           [IO.File]::WriteAllText($receiptPath, (($receipt | ConvertTo-Json -Depth 10) + "`n"), [Text.UTF8Encoding]::new($false))
           [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "path=$receiptPath`n", [Text.UTF8Encoding]::new($false))
 
