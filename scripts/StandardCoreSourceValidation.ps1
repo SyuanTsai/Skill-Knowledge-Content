@@ -5,41 +5,58 @@
 Set-StrictMode -Version Latest
 
 $script:KnowledgeContentPreparedAuthorityRepository = 'https://github.com/SyuanTsai/SyuanTsai-AI-Instructions.git'
-$script:KnowledgeContentPreparedAuthorityCommit = 'ff85d5f80fe795b96354e753074b5ce59ad04ecd'
-$script:KnowledgeContentPreparedAuthorityArchiveSha256 = '3dc38613f2e2316ad8fcc79d4bf48d0b03fd8398f8dacc72d156abcbce95ea9d'
+$script:KnowledgeContentPreparedAuthorityCommit = '6cee5b8e43fe4e327fedc788865f931c561d6e89'
+$script:KnowledgeContentPreparedAuthorityArchiveSha256 = '336290db31dde3d04fe89f11d90e517f88e8140b1b235b72fe01f7ed12345cd2'
 $script:KnowledgeContentPreparedAuthorityFiles = [ordered]@{
-    'docs/standards/README.md' = '43c1526ac55302f62b706688905be160d9805cc3a6a800189d689e66fa727b71'
-    'docs/standards/managed-skill-lifecycle.md' = '70950cf8bdd02819efae6f6e06ac5be1da3e70f809c23e3c6f8d3b217797416c'
+    'docs/standards/README.md' = '69ddc46b4ca4aca06001aaa0fb5b078ef38168f67c21552f3b075548ea707441'
+    'docs/standards/managed-skill-lifecycle.md' = '4e3f8595072d663f51d18aa28f42293fda5456362b49c0ea3f0157ae3dcf56dd'
     'docs/standards/schemas/managed-skill-lifecycle-v1.schema.json' = '9a7f4c02588d2b88194e953a41766a72a9426fa89d4c3781c5750dcc22d35863'
     'docs/standards/schemas/openai-agent-metadata.schema.json' = '23c1aaee28a54fea1946a61d6122a2097906ffa5bdd66c8014fc6b1625c9062a'
     'docs/standards/schemas/source-inventory-v2.schema.json' = '084550944b4141ab5535f58fb6e99730a5c34b56103f6b59fd5a352679caa98e'
-    'docs/standards/schemas/validation-security-gate-v1.schema.json' = 'ac58302e0e350c1ab4ba4dad8a33cd3abce12d592537fbdb23dfb1936d064e91'
-    'docs/standards/skill-repository-review-matrix.md' = '299925aabe3cab360827baad9bdeb1f0f56fc320dad967e49fe0b6bf9cdf8f8a'
-    'docs/standards/skill-repository-standard.md' = '86a24a75eaf96f9eaa02307937a46d1b2ce788cf63b4657c60bec9815b2ca4b3'
-    'docs/standards/upstream-interoperability.md' = '4329e8586e88713027bcd95c7537331e050a89b004f2361223efdc01bf44370e'
-    'docs/standards/validation-security-gate.json' = '657122dde340f1f7f4442780cc27ffcb00b60c0d2afdcea22d63fbf7dbfdca7d'
+    'docs/standards/schemas/validation-security-gate-v1.schema.json' = 'b924b28a791f4d6eedcc0aa1c01fb62687ec863c0c17048093bfdd99aaa55b74'
+    'docs/standards/skill-repository-review-matrix.md' = '360346bee26f24c2dad27ea0827415150b82b555332c0d7f3d4e27bb56cf3a49'
+    'docs/standards/skill-repository-standard.md' = '24a932ff333bc74884fee8e1e784da2a7cd832373e8e0659469995be2659f1a0'
+    'docs/standards/upstream-interoperability.md' = '8e48cc4831d151ffa4665433d79ad88e8871cb1d694861908dd0206406dcefe5'
+    'docs/standards/validation-security-gate.json' = '1ab4c1208885a3aeb74654d8133426367134446e2b7519f06e63de3a53b16067'
     'docs/standards/validation-toolchain.json' = '1dddbf4c5736e22e56f6ecb298542f41d39e116ab00ca24ad18beb7a3eab40ed'
-    'scripts/Invoke-StandardAuthorityGate.ps1' = '8e00ee1e48ef8359ab7be3539f8f7585ccde18b41e26d810843715ebc3656a4c'
-    'scripts/Resolve-PythonWheelClosure.py' = 'f9fcd99c408849f98564fbc4c30f3d7e6ad8148b60cb4d8f58fc29b040c4519c'
-    'scripts/Resolve-StandardValidationTool.ps1' = '71e6d5b191b74202e96f34a856d3317efb18662e17c8368d112d89b7d6795b15'
+    'scripts/Invoke-StandardAuthorityGate.ps1' = '72dd032005a6d810f5de4ce492f964585678087a54f921e4fcb90cf5875effe1'
+    'scripts/Resolve-PythonWheelClosure.py' = 'a17989f409f8394af2c851db4d33e9a5b003d0dc17a9689de8de0542c0862ca8'
+    'scripts/Resolve-StandardValidationTool.ps1' = 'e51c78847aa706dd4bed92fa1e91e1c992e0b1e8d938aaa605c4c7389b66b8f5'
     'docs/standards/schemas/standard-validation-adapter-v1.schema.json' = '11aa88fc25716d748bd4f514f1a44f02390ad1745dd5a5c5beee07f642fd5639'
-    'docs/standards/schemas/standard-validation-evidence-v1.schema.json' = '8ed4a9d7158273d7a1e9d898acf07f57e9170822cb7cbb70f1e2eec7195867ee'
-    'docs/standards/standard-validation-contract-v1.json' = '707edf8945ad9a7097df1dfb22a8f05ce47d0e0a66e2e44381036d630e854da0'
+    'docs/standards/schemas/standard-validation-evidence-v1.schema.json' = '2e8cad8361447baba45b16c47ef685ad2de4a7f27848dd8ddd3fd83e500f23bf'
+    'docs/standards/standard-validation-contract-v1.json' = 'f39b2e40c5e9f5eed0abc0d033deea751c8ee978499a86dc4fde3beb65c65242'
     'docs/standards/pr12-source-merge-adoption.json' = '4c5262f2a11d228195230c15fa4faaf9614af6b59f110e5d9c08f242ce809175'
     'docs/standards/trust-anchors/human-approval-public-key.xml' = '1e46153b72d02f3ce2fb26becd449df4f1590d8e5cb441b1954006a5602bbd9b'
     'docs/standards/trust-anchors/trusted-supervisor-public-key.xml' = '4d550851f43405920156f40c9fc648d99a69dd73efc200f6968d8a837e7fbf27'
-    'scripts/Invoke-StandardValidation.ps1' = 'a4ee880810171428a6abd2e8fd5db2da1eaeda4abc0fc6c72dc259b4a709174b'
+    'scripts/Invoke-StandardValidation.ps1' = '106e75f8882e8a3121c09605c986afaac97c33db94d64b145297fc3370ac6bc5'
     'docs/standards/schemas/standard-semantic-consent-evidence-v2.schema.json' = '109091979d0a47e2035d3d8b20963fcdb85680e5da737bf1f27121608115d430'
-    'scripts/StandardSemanticBridge.psm1' = 'daf90f703898cc56fc3310e1eec462bafa6552edcac0de4f08a3cd4b9f63a429'
+    'scripts/StandardSemanticBridge.psm1' = '6de6746465fce2e3a9636207b7c3a6298c405fdd2d7e8544cf0eada8922767ea'
     'docs/standards/schemas/upstream-adapter-v1.schema.json' = '3cff6246463188a91cc54c6a46315a949314767a759c6214e5b28e4db95ac8d7'
     'docs/standards/upstream-adapter.json' = 'c4f5133b24841bb9c66182dc3d5a027596f864ec28e410d47249a67b3b97ad31'
     'scripts/Validate-UpstreamAdapter.ps1' = '3b6e6474690b1ae9f9486544b68f50ca29b96f5dbe6aa8d6c6cd8570afad500b'
-    'docs/standards/standard-core-validation-v2.json' = '2ba91aec827a642517fd90d294524e0dfc3fed9ae19c27d867d442d73b4915d6'
+    'docs/standards/standard-core-validation-v2.json' = 'dd3c3d1bb83a439895ed35a949ff376b9d59d25e69063c86714eb42edaad84df'
     'docs/standards/schemas/standard-core-adapter-v2.schema.json' = '7399980e8765528b759a3734a133447eb9581ac24a9c4780dc8faadd6af0c1c5'
-    'docs/standards/schemas/standard-core-evidence-v2.schema.json' = '4a8c61f32484bfe928e4f15f6422de7dc7b63d9d1fc95bca4f8f5c4c37334d24'
+    'docs/standards/schemas/standard-core-evidence-v2.schema.json' = '7c083b9603b75518220e7e70e5704728a7e3dee0d5b5cf09dc9c755f49d64153'
     'docs/standards/third-party-raw-skill-sources.md' = '18649fd56eada4a94a5d47de778669b0ebcecfb85b84f5c581d283b21979f7ac'
     'docs/standards/schemas/third-party-raw-skill-source-v1.schema.json' = '9d8585d95c606486f947a3f89e39341af840335376e86910eb7f4ed25bdc16ed'
     'docs/standards/examples/third-party-raw-skill-source-v1.json' = 'decbf276cbeea33c60d8b36b7b16838babe951cd84d13ae4a8a7a8261dc6d9c8'
+    'docs/standards/static-parser-host-ownership.json' = '994acd989327d094d22ce2c68ca20eceec609f4e494f4e5d252cfcdef742de2c'
+    'docs/standards/schemas/static-parser-host-ownership-v1.schema.json' = '7f8d766b7e36052b68d924c5886157734e9969c198b03b2dadf3a63bebc95bb3'
+    'docs/standards/schemas/static-parser-profile-execution-v1.schema.json' = '6353bcd130093ffcdb7b6f979f8d115c02a31efae41e63f8a956e82935ab8887'
+    'scripts/platform-runtime.psd1' = 'df700c6c1c3c8dd2e1b24e617fabd8f4dac25e44c06d26875083ce3ce1746a91'
+    'scripts/platform-runtime.psm1' = '3f0f09fede0ead288289058251264bec672cb3948ae7d9b0cd47eba97a494a01'
+    'scripts/installer-safe-mutation.psm1' = 'ac1e73ffb1b8ea1b95fdc3a177449442281d3d485f62ec42e464f6f5f38ba359'
+    'scripts/platform/Linux.psm1' = '82e7a6412abd51da98f7eb1777518dc9714dcaa3a72954af8a8ba5e959d3d879'
+    'scripts/platform/MacOS.psm1' = '8764dfdec8e65f452a1cb4edd9dcaa221d7ad901a6eab75427b585541343b770'
+    'scripts/platform/OwnedProcess.cs' = '097061ad5902f896ff74b3f60b0ecaf63f3d58f357aed8fdbf80a8586564de58'
+    'scripts/platform/PlatformNative.cs' = 'e6a19e6793728a5bb72628faa3926abb6d58ffbee7847a07b53349ee18e6fbf3'
+    'scripts/platform/RuntimePreparation.psm1' = 'dc254c04e7e2caf280726e66f67434776bc7df12a210a38c80596e41344fd077'
+    'scripts/platform/Unix.psm1' = '6199e45d01293d970f33195368cdef0630b1392a4eb00a289ef85c10eda1eef0'
+    'scripts/platform/UnixNative.cs' = 'dd95835adcc4c19509fab6df017ad8f9db1aa7d61468c3dc687547cd2cb11b79'
+    'scripts/platform/UnixProcess.cs' = '125d2b3eecdad6a6c201d5f5d61a6efd0ad55ba93822c7b83a679a5397005db1'
+    'scripts/platform/Windows.psm1' = 'bb916f529ebf99c7893f541749e91ae7b4b22bd66f2c2f2efce91a8b4977d7cd'
+    'scripts/platform/WindowsNative.cs' = '3c4eca15ee608d72b3985db1ab34ad9558243385b2cbe84d909b8cd219482181'
+    'scripts/platform/WindowsProcess.cs' = '7b8a0cddd3b9809b861801fe1d6a618684e2ca6fa13f9334825c5c9da5b2d8d6'
 }
 
 function Assert-KnowledgeContentExactPropertySet {
@@ -63,7 +80,7 @@ function Assert-KnowledgeContentExactPropertySet {
 function Get-KnowledgeContentPreparedAuthorityPin {
     [CmdletBinding()]
     param(
-        [ValidateSet('ff85d5f80fe795b96354e753074b5ce59ad04ecd', '8e627baf54bd6e47862e6291b25e71cc45a2f2b7', IgnoreCase = $false)]
+        [ValidateSet('6cee5b8e43fe4e327fedc788865f931c561d6e89', IgnoreCase = $false)]
         [string] $Commit = $script:KnowledgeContentPreparedAuthorityCommit
     )
 
@@ -72,13 +89,6 @@ function Get-KnowledgeContentPreparedAuthorityPin {
         $files[[string]$entry.Key] = [string]$entry.Value
     }
     $archiveSha256 = $script:KnowledgeContentPreparedAuthorityArchiveSha256
-    if ($Commit -ceq '8e627baf54bd6e47862e6291b25e71cc45a2f2b7') {
-        # The other 29 ordered members are byte-identical in the two approved snapshots.
-        $archiveSha256 = '9aa4a7fc8fc7c7f0ff9e774c79c77a64077b4003212a523dda519d034ff99989'
-        $files['docs/standards/skill-repository-standard.md'] = 'f7457bc6dbc13b475bcffc532b75961ff838e8d184162188dbbb1c766fd17e98'
-        $files['scripts/Invoke-StandardAuthorityGate.ps1'] = 'c4609b7f88f9b88be8583cc52f939837d49f2fa5e784977156cfe3d7c752082e'
-        $files['scripts/Invoke-StandardValidation.ps1'] = 'd13cea68b471aea60142665ee787a1bb2111d5ea7f8d45dfea14e0a2a59409b8'
-    }
     return [pscustomobject][ordered]@{
         repository = $script:KnowledgeContentPreparedAuthorityRepository
         commit = $Commit
@@ -272,8 +282,20 @@ function New-KnowledgeContentCoreAuthoritySnapshot {
 
     # Use an isolated, no-hardlink Git clone so the child test process can bind
     # its authority root to the exact prepared revision without sharing files.
-    & $GitPath -c "core.hooksPath=$hooksRoot" -c core.autocrlf=false -c core.longpaths=true clone --quiet --local --no-hardlinks --no-checkout -- $SourceRoot $snapshotRoot
+    & $GitPath -c "core.hooksPath=$hooksRoot" -c maintenance.auto=false -c gc.auto=0 -c core.autocrlf=false -c core.longpaths=true clone --quiet --local --no-hardlinks --no-checkout -- $SourceRoot $snapshotRoot
     if ($LASTEXITCODE -ne 0) { throw 'Could not materialize the no-hardlink authority Git snapshot for Core Pester.' }
+    & $GitPath -C $snapshotRoot config --local maintenance.auto false
+    if ($LASTEXITCODE -ne 0) { throw 'Could not disable maintenance.auto in the Core Pester authority snapshot.' }
+    & $GitPath -C $snapshotRoot config --local maintenance.autoDetach false
+    if ($LASTEXITCODE -ne 0) { throw 'Could not disable maintenance.autoDetach in the Core Pester authority snapshot.' }
+    & $GitPath -C $snapshotRoot config --local gc.auto 0
+    if ($LASTEXITCODE -ne 0) { throw 'Could not disable gc.auto in the Core Pester authority snapshot.' }
+    & $GitPath -C $snapshotRoot config --local gc.autoDetach false
+    if ($LASTEXITCODE -ne 0) { throw 'Could not disable gc.autoDetach in the Core Pester authority snapshot.' }
+    if (([string](& $GitPath -C $snapshotRoot config --local --get maintenance.auto)).Trim() -cne 'false' -or
+        ([string](& $GitPath -C $snapshotRoot config --local --get gc.auto)).Trim() -cne '0') {
+        throw 'Core Pester authority snapshot Git maintenance configuration was not applied.'
+    }
     & $GitPath -C $snapshotRoot config --local core.autocrlf false
     if ($LASTEXITCODE -ne 0) { throw 'Could not disable line-ending conversion in the Core Pester authority snapshot.' }
     & $GitPath -C $snapshotRoot config --local core.longpaths true
@@ -441,10 +463,12 @@ function Assert-KnowledgeContentSourceReceiptClosureFrozen {
             throw 'Source tool receipts must identify each approved tool exactly once.'
         }
         $pairs = [Collections.Generic.List[object]]::new()
-        $pairs.Add(@('executablePath', 'executableSha256'))
         if ($toolName -ceq 'skill-tools') {
             $pairs.Add(@('entryPointPath', 'entryPointSha256'))
             $pairs.Add(@('nodePath', 'nodeSha256'))
+        }
+        else {
+            $pairs.Add(@('executablePath', 'executableSha256'))
         }
         foreach ($pair in $pairs) {
             $pathProperty = $receipt.PSObject.Properties[[string]$pair[0]]
@@ -455,15 +479,29 @@ function Assert-KnowledgeContentSourceReceiptClosureFrozen {
                 -not [IO.Path]::IsPathRooted([string]$pathProperty.Value)) {
                 throw "Source $toolName receipt has an invalid $($pair[0]) frozen identity."
             }
-            $matches = @($FrozenFiles | Where-Object {
+            $frozenMatches = @($FrozenFiles | Where-Object {
                 (Test-KnowledgeContentPathEqual -Left ([string]$_.path) -Right ([string]$pathProperty.Value)) -and
                 [string]$_.sha256 -ceq [string]$hashProperty.Value
             })
-            if ($matches.Count -ne 1) {
+            if ($frozenMatches.Count -ne 1) {
                 throw "Source $toolName receipt $($pair[0]) is not frozen exactly once."
             }
         }
     }
+}
+
+function Write-KnowledgeContentSourceSetupArtifact {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string] $Path,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string] $Text,
+        [AllowEmptyString()][string] $ProtectedToken
+    )
+
+    if (-not [string]::IsNullOrEmpty($ProtectedToken) -and $Text.Contains($ProtectedToken, [StringComparison]::Ordinal)) {
+        throw 'Source setup artifact content contains the protected resolver credential.'
+    }
+    Write-KnowledgeContentUtf8CreateNew -Path $Path -Text $Text
 }
 
 function New-KnowledgeContentSourceToolSetup {
@@ -478,9 +516,11 @@ function New-KnowledgeContentSourceToolSetup {
         [Parameter(Mandatory = $true)][string] $SourceCheckoutRoot,
         [Parameter(Mandatory = $true)][string] $PreparedPath,
         [Parameter(Mandatory = $true)][string] $GoVersion,
-        [Parameter(Mandatory = $true)][int] $LimitSeconds
+        [Parameter(Mandatory = $true)][int] $LimitSeconds,
+        [hashtable] $ResolverEnvironment = @{}
     )
 
+    $protectedToken = if ($ResolverEnvironment.ContainsKey('STANDARD_VALIDATION_GITHUB_API_TOKEN')) { [string]$ResolverEnvironment['STANDARD_VALIDATION_GITHUB_API_TOKEN'] } else { '' }
     $setupId = [guid]::NewGuid().ToString('N')
     $owned = [IO.Path]::GetFullPath((Join-Path $Root "source-tools-$setupId"))
     if (Test-Path -LiteralPath $owned) { throw 'Source setup root already exists.' }
@@ -498,8 +538,8 @@ function New-KnowledgeContentSourceToolSetup {
     foreach ($tool in @('skill-validator', 'skill-tools', 'skillspector')) {
         $receiptPath = Join-Path $owned "receipt-$tool.json"
         $resolverArguments = @('-NoProfile', '-NonInteractive', '-File', $resolver, '-PolicyPath', $policy, '-ToolName', $tool, '-Install', '-InstallRoot', (Join-Path $owned 'installed'), '-ExpectedGoRuntimeVersion', $GoVersion, '-RunId', $setupId, '-OutputPath', $receiptPath)
-        $result = Invoke-StandardValidationProcess -Command $PowerShell -Arguments $resolverArguments -WorkingDirectory $owned -Environment @{} -TimeoutSeconds $LimitSeconds -CoreLifecycleOnly
-        Write-KnowledgeContentUtf8CreateNew -Path (Join-Path $owned "setup-$tool-process.json") -Text (($result | ConvertTo-Json -Depth 30) + [Environment]::NewLine)
+        $result = Invoke-StandardValidationProcess -Command $PowerShell -Arguments $resolverArguments -WorkingDirectory $owned -Environment $ResolverEnvironment -TimeoutSeconds $LimitSeconds -CoreLifecycleOnly
+        Write-KnowledgeContentSourceSetupArtifact -Path (Join-Path $owned "setup-$tool-process.json") -Text (($result | ConvertTo-Json -Depth 30) + [Environment]::NewLine) -ProtectedToken $protectedToken
         if ($result.status -cne 'passed' -or $result.exitCode -ne 0 -or -not $result.cleanedUp) {
             throw "Source setup $tool failed: $($result.status), exit=$($result.exitCode), cleanup=$($result.cleanedUp). $($result.stderr)"
         }
@@ -526,15 +566,15 @@ function New-KnowledgeContentSourceToolSetup {
         skillSpectorReceiptSha256 = [string]$receiptBindings[2].sha256
     }
     $toolchainPath = Join-Path $owned 'toolchain.json'
-    Write-KnowledgeContentUtf8CreateNew -Path $toolchainPath -Text (($toolchain | ConvertTo-Json -Depth 20) + [Environment]::NewLine)
+    Write-KnowledgeContentSourceSetupArtifact -Path $toolchainPath -Text (($toolchain | ConvertTo-Json -Depth 20) + [Environment]::NewLine) -ProtectedToken $protectedToken
 
     $wrapper = Join-Path $owned 'Invoke-KnowledgeContentValidationChild.ps1'
-    Write-KnowledgeContentUtf8CreateNew -Path $wrapper -Text $childRunnerText
+    Write-KnowledgeContentSourceSetupArtifact -Path $wrapper -Text $childRunnerText -ProtectedToken $protectedToken
     $archive = Join-Path $owned 'candidate.zip'
     & $Git -C $SourceCheckoutRoot archive --format=zip "--output=$archive" $CandidateRevision
     if ($LASTEXITCODE -ne 0) { throw 'Source setup could not archive the exact candidate.' }
     $arguments = @('-NoProfile', '-NonInteractive', '-File', $wrapper, '-ToolchainPath', $toolchainPath, '-ToolchainSha256', (Get-FileSha256 -Path $toolchainPath), '-SourceRepository', $script:SourceRepository, '-SourceRevision', $CandidateRevision, '-ArchiveSha256', (Get-FileSha256 -Path $archive))
-    $frozenPaths = @($PowerShell, $wrapper, $toolchainPath, $runner, $toolchain.upstreamAdapterValidatorPath, $toolchain.upstreamPolicyPath, $toolchain.skillValidatorPath, [string]$receipts.'skill-tools'.executablePath, $toolchain.skillToolsNodePath, $toolchain.skillToolsEntryPointPath, $toolchain.skillSpectorPath) + @($receiptBindings | ForEach-Object { [string]$_.path })
+    $frozenPaths = @($PowerShell, $wrapper, $toolchainPath, $runner, $toolchain.upstreamAdapterValidatorPath, $toolchain.upstreamPolicyPath, $toolchain.skillValidatorPath, $toolchain.skillToolsNodePath, $toolchain.skillToolsEntryPointPath, $toolchain.skillSpectorPath) + @($receiptBindings | ForEach-Object { [string]$_.path })
     $frozen = @(foreach ($file in @($frozenPaths | Select-Object -Unique)) {
         [pscustomobject]@{ path = [IO.Path]::GetFullPath($file); sha256 = Get-FileSha256 -Path $file }
     })
@@ -559,7 +599,7 @@ function New-KnowledgeContentSourceToolSetup {
         ownedRoot = $owned
         sourceValidation = $dispatch
     }
-    Write-KnowledgeContentUtf8CreateNew -Path $PreparedPath -Text (($prepared | ConvertTo-Json -Depth 40) + [Environment]::NewLine)
+    Write-KnowledgeContentSourceSetupArtifact -Path $PreparedPath -Text (($prepared | ConvertTo-Json -Depth 40) + [Environment]::NewLine) -ProtectedToken $protectedToken
 }
 
 function Test-KnowledgeContentPathEqual {
@@ -730,6 +770,21 @@ function Read-KnowledgeContentSourceToolSetup {
     return $prepared
 }
 
+function Get-KnowledgeContentSourceResolverEnvironment {
+    [CmdletBinding()]
+    param([switch] $IncludeSetupToken)
+
+    $environment = @{}
+    if ($IncludeSetupToken) {
+        $sourceSetupGitHubToken = [Environment]::GetEnvironmentVariable('KC_SOURCE_SETUP_GITHUB_TOKEN', 'Process')
+        if (-not [string]::IsNullOrWhiteSpace($sourceSetupGitHubToken)) {
+            $environment['STANDARD_VALIDATION_GITHUB_API_TOKEN'] = $sourceSetupGitHubToken
+        }
+    }
+    Remove-Item -LiteralPath 'Env:KC_SOURCE_SETUP_GITHUB_TOKEN', 'Env:GITHUB_TOKEN', 'Env:GH_TOKEN' -Force -ErrorAction SilentlyContinue
+    return $environment
+}
+
 function Invoke-KnowledgeContentSourcePurpose {
     [CmdletBinding()]
     param(
@@ -746,6 +801,8 @@ function Invoke-KnowledgeContentSourcePurpose {
         [string] $OutputPath,
         [int] $TimeoutSeconds = 900
     )
+
+    $resolverEnvironment = Get-KnowledgeContentSourceResolverEnvironment -IncludeSetupToken:($Mode -ceq 'prepare-source-tools')
 
     $repoRoot = [IO.Path]::GetFullPath($RepositoryRoot)
     if (-not (Test-Path -LiteralPath $repoRoot -PathType Container)) { throw "RepositoryRoot does not exist: $repoRoot" }
@@ -790,7 +847,7 @@ function Invoke-KnowledgeContentSourcePurpose {
         $goVersion = Resolve-GoRuntimeVersion -Expected $ExpectedGoRuntimeVersion
         New-KnowledgeContentSourceToolSetup -Root $artifactsRootFull -AuthorityRoot $authorityCheckout.root -AuthorityPin $AuthorityPin `
             -PowerShell $pwshPath -CandidateRevision $candidateCommit -Git $gitPath -SourceCheckoutRoot $repoRoot `
-            -PreparedPath $preparedPath -GoVersion $goVersion -LimitSeconds $TimeoutSeconds
+            -PreparedPath $preparedPath -GoVersion $goVersion -LimitSeconds $TimeoutSeconds -ResolverEnvironment $resolverEnvironment
         return 0
     }
 
@@ -836,6 +893,13 @@ function Invoke-KnowledgeContentSourcePurpose {
         . $centralRunnerPath -DefineFunctionsOnly -CandidateRoot $repoRoot -AdapterPath $adapterPath -ArtifactsRoot $coreArtifactsRoot `
             -SourceRepository $script:SourceRepository -SourceRevision $candidateCommit -BaseRevision $baseRevision `
             -AuthorityRevision ([string]$AuthorityPin.commit) -RunId $runId -EventName $eventName -TimeoutSeconds $TimeoutSeconds
+        $validationSecurityPolicy = Read-JsonFile -Path (Join-Path $authoritySnapshot.root 'docs/standards/validation-security-gate.json') `
+            -Context 'Prepared authority validation security policy'
+        $skillSpectorStages = @($validationSecurityPolicy.stages | Where-Object { [string]$_.id -ceq 'skillspector-static' })
+        if ($skillSpectorStages.Count -ne 1 -or $null -eq $skillSpectorStages[0].platformUnavailableException) {
+            throw 'Prepared authority validation security policy has no unique SkillSpector platform exception contract.'
+        }
+        $skillSpectorPlatformPolicy = $skillSpectorStages[0].platformUnavailableException
         $arguments = @(
             '-CandidateRoot', $repoRoot,
             '-AdapterPath', $adapterPath,
@@ -865,7 +929,7 @@ function Invoke-KnowledgeContentSourcePurpose {
         $report = Read-JsonFile -Path $outputFull -Context 'Source validation report projection'
         [void](Assert-StandardCoreSourceCheckReport -Report $report -ExpectedSourceRevision $candidateCommit -ExpectedBaseRevision $baseRevision `
             -ExpectedAuthorityRevision ([string]$AuthorityPin.commit) -ExpectedEventName $eventName -ArtifactsRoot $coreArtifactsRoot `
-            -OutputPath $outputFull -ProcessExitCode $centralExitCode)
+            -OutputPath $outputFull -ProcessExitCode $centralExitCode -ValidationSecurityPolicy $skillSpectorPlatformPolicy)
         if ((Get-FileSha256 -Path $outputFull) -cne $reportHashBeforeProjection) { throw 'Source validation report bytes changed during final projection.' }
         return 0
     }

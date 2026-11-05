@@ -11,6 +11,16 @@ $script:expectedMetadataEntries = @(
     'Pester.nuspec'
 )
 
+function Get-CorePesterPathComparison {
+    if ($IsWindows) { return [StringComparison]::OrdinalIgnoreCase }
+    return [StringComparison]::Ordinal
+}
+
+function Get-CorePesterPathComparer {
+    if ($IsWindows) { return [StringComparer]::OrdinalIgnoreCase }
+    return [StringComparer]::Ordinal
+}
+
 function Assert-CorePesterObjectKeys {
     param(
         [Parameter(Mandatory)][System.Collections.IDictionary] $Object,
@@ -135,11 +145,24 @@ function Get-CorePesterRuntimeModuleRoot {
     param([Parameter(Mandatory)][string] $ExecutablePath)
 
     $fullExecutable = [IO.Path]::GetFullPath($ExecutablePath)
-    if ([IO.Path]::GetFileName($fullExecutable) -ine 'pwsh.exe' -or -not (Test-Path -LiteralPath $fullExecutable -PathType Leaf)) {
-        throw 'Verified PowerShell executable path must name an existing pwsh.exe.'
+    $expectedName = if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' }
+    if ([IO.Path]::GetFileName($fullExecutable) -cne $expectedName -or -not (Test-Path -LiteralPath $fullExecutable -PathType Leaf)) {
+        throw "Verified PowerShell executable path must name an existing $expectedName."
     }
     $runtimeRoot = Split-Path -Parent $fullExecutable
     return [IO.Path]::GetFullPath((Join-Path $runtimeRoot 'Modules/Pester/6.2.0'))
+}
+
+function Assert-NoLegacyCorePesterBootstrapEnvironment {
+    [CmdletBinding()]
+    param()
+
+    $processEnvironment = [Environment]::GetEnvironmentVariables([EnvironmentVariableTarget]::Process)
+    foreach ($name in @('STANDARD_VALIDATION_BOOTSTRAP_RELEASE_PATH', 'STANDARD_VALIDATION_BOOTSTRAP_COMMAND')) {
+        if ($processEnvironment.Contains($name)) {
+            throw "Core Pester received unexpected legacy bootstrap transport variable '$name'."
+        }
+    }
 }
 
 function Get-VerifiedCoreAuthoritySnapshotPath {
@@ -181,8 +204,11 @@ function Get-VerifiedCoreAuthoritySnapshotPath {
         if ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) {
             throw 'Core Pester run-owned authority snapshot contains a reparse ancestor.'
         }
+        if ($cursor.Equals($adapterRoot, (Get-CorePesterPathComparison))) { break }
         $parent = Split-Path -Parent $cursor
-        if ($parent -ceq $cursor) { break }
+        if ([string]::IsNullOrWhiteSpace($parent) -or $parent.Equals($cursor, (Get-CorePesterPathComparison))) {
+            throw 'Core Pester run-owned authority snapshot escaped its adapter boundary.'
+        }
         $cursor = $parent
     }
     return $authorityRoot
@@ -204,8 +230,9 @@ function Test-CorePesterPathBoundary {
     else {
         $fullBoundary + [IO.Path]::DirectorySeparatorChar
     }
-    if (-not $fullPath.Equals($fullBoundary, [StringComparison]::OrdinalIgnoreCase) -and
-        -not $fullPath.StartsWith($boundaryPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+    $pathComparison = Get-CorePesterPathComparison
+    if (-not $fullPath.Equals($fullBoundary, $pathComparison) -and
+        -not $fullPath.StartsWith($boundaryPrefix, $pathComparison)) {
         $errors.Add('Path escaped its registered boundary.')
         return [pscustomobject]@{ IsValid = $false; Path = $fullPath; Boundary = $fullBoundary; Errors = @($errors.ToArray()) }
     }
@@ -226,7 +253,11 @@ function Test-CorePesterPathBoundary {
         if ($null -ne $item -and $item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
             $errors.Add("Path ancestry contains a reparse point: $cursorPath")
         }
-        if ($cursorPath.Equals([IO.Path]::GetPathRoot($cursorPath), [StringComparison]::OrdinalIgnoreCase)) { break }
+        if ($cursorPath.Equals($fullBoundary, $pathComparison)) { break }
+        if ($cursorPath.Equals([IO.Path]::GetPathRoot($cursorPath), $pathComparison)) {
+            $errors.Add('Path ancestry escaped its registered boundary.')
+            break
+        }
         $cursor = $cursor.Parent
     }
 
@@ -274,7 +305,7 @@ function Test-CorePesterClosure {
             if ($item.PSIsContainer) { continue }
             $fullPath = [IO.Path]::GetFullPath($item.FullName)
             $prefix = $root.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
-            if (-not $fullPath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+            if (-not $fullPath.StartsWith($prefix, (Get-CorePesterPathComparison))) {
                 $errors.Add("Pester closure file escaped its module root: $fullPath")
                 continue
             }
@@ -328,7 +359,7 @@ function Test-CorePesterModuleCandidates {
             continue
         }
         $path = [IO.Path]::GetFullPath([string]$pathProperty.Value)
-        if ($path.Equals($expected, [StringComparison]::OrdinalIgnoreCase)) { $expectedCount++ }
+        if ($path.Equals($expected, (Get-CorePesterPathComparison))) { $expectedCount++ }
         else { $errors.Add("An ambient Pester 6.2.0 module candidate exists outside the verified runtime: $path") }
     }
     if ($expectedCount -ne 1) { $errors.Add('The verified runtime must expose exactly one Pester 6.2.0 manifest candidate.') }
@@ -346,7 +377,7 @@ function Get-CorePesterExpectedLoadedModulePath {
     $fullRoot = [IO.Path]::GetFullPath($ModuleRoot)
     $fullManifest = [IO.Path]::GetFullPath($ManifestPath)
     $expectedManifest = [IO.Path]::GetFullPath((Join-Path $fullRoot ([string]$Lock.runtime.manifestRelativePath)))
-    if (-not $fullManifest.Equals($expectedManifest, [StringComparison]::OrdinalIgnoreCase)) {
+    if (-not $fullManifest.Equals($expectedManifest, (Get-CorePesterPathComparison))) {
         throw 'Pester loaded-module identity was requested from a manifest outside the locked module root.'
     }
     $manifestItem = Get-Item -LiteralPath $fullManifest -Force -ErrorAction Stop
@@ -366,7 +397,7 @@ function Get-CorePesterExpectedLoadedModulePath {
 
     $fullLoadedModulePath = [IO.Path]::GetFullPath((Join-Path $fullRoot ($relativeRootModule.Replace('/', [IO.Path]::DirectorySeparatorChar))))
     $rootPrefix = $fullRoot.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
-    if (-not $fullLoadedModulePath.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+    if (-not $fullLoadedModulePath.StartsWith($rootPrefix, (Get-CorePesterPathComparison))) {
         throw 'Pester manifest RootModule escaped the locked module root.'
     }
     return $fullLoadedModulePath
@@ -393,11 +424,11 @@ function Test-CorePesterLoadedModuleIdentity {
         if ([string]$module.Name -cne 'Pester') { $errors.Add('The loaded Core test module name is not Pester.') }
         if ([version]$module.Version -ne $expectedVersionValue) { $errors.Add('Loaded Pester module version differs from the locked version.') }
         if ([string]::IsNullOrWhiteSpace([string]$module.Path) -or
-            -not [IO.Path]::GetFullPath([string]$module.Path).Equals($expectedPathValue, [StringComparison]::OrdinalIgnoreCase)) {
+            -not [IO.Path]::GetFullPath([string]$module.Path).Equals($expectedPathValue, (Get-CorePesterPathComparison))) {
             $errors.Add('Loaded Pester module path differs from the manifest RootModule entry point.')
         }
         if ([string]::IsNullOrWhiteSpace([string]$module.ModuleBase) -or
-            -not [IO.Path]::GetFullPath([string]$module.ModuleBase).Equals($expectedBaseValue, [StringComparison]::OrdinalIgnoreCase)) {
+            -not [IO.Path]::GetFullPath([string]$module.ModuleBase).Equals($expectedBaseValue, (Get-CorePesterPathComparison))) {
             $errors.Add('Loaded Pester module base differs from the verified runtime module root.')
         }
     }
@@ -525,50 +556,6 @@ function Test-CorePesterShardUnion {
     return [pscustomobject]@{ IsValid = $errors.Count -eq 0; Errors = @($errors.ToArray()); DiscoveryCount = $discovered.Count; UnionCount = $union.Count }
 }
 
-function Remove-CorePesterConsumedBootstrapSignal {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)][string] $CandidateRoot,
-        [Parameter(Mandatory)][string] $ReleasePath,
-        [Parameter(Mandatory)][string] $BootstrapCommand,
-        [Parameter(Mandatory)][string] $VerifiedPowerShellExecutable
-    )
-
-    # The supervisor consumed this one-shot signal before invoking this child.
-    # Its idempotent cleanup accepts an absent signal. Keep the full snapshot:
-    # remove only this consumed transport artifact, never exclude source files.
-    $root = [IO.Path]::GetFullPath($CandidateRoot)
-    if (-not [IO.Path]::IsPathFullyQualified($ReleasePath) -or
-        -not [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($ReleasePath)).Equals($root, [StringComparison]::OrdinalIgnoreCase) -or
-        [IO.Path]::GetFileName($ReleasePath) -cnotmatch '^b-[0-9a-f]{32}\.sig$') {
-        throw 'Core Pester bootstrap signal is not the exact candidate-root transport file.'
-    }
-    if (-not [IO.Path]::IsPathFullyQualified($BootstrapCommand) -or
-        -not [IO.Path]::GetFullPath($BootstrapCommand).Equals([IO.Path]::GetFullPath($VerifiedPowerShellExecutable), [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'Core Pester bootstrap command differs from the verified PowerShell executable.'
-    }
-    $signal = [IO.Path]::GetFullPath($ReleasePath)
-    $cursor = $signal
-    while (-not [string]::IsNullOrWhiteSpace($cursor)) {
-        if (-not (Test-Path -LiteralPath $cursor)) { throw 'Core Pester bootstrap signal or its ancestry is missing.' }
-        $item = Get-Item -LiteralPath $cursor -Force -ErrorAction Stop
-        if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
-            ($cursor -ceq $signal -and $item.PSIsContainer)) {
-            throw 'Core Pester bootstrap signal must be a regular file with non-reparse ancestry.'
-        }
-        $parent = [IO.Path]::GetDirectoryName($cursor)
-        if ($parent -ceq $cursor) { break }
-        $cursor = $parent
-    }
-    $expected = [Text.UTF8Encoding]::new($false).GetBytes('release' + [Environment]::NewLine)
-    $actual = [IO.File]::ReadAllBytes($signal)
-    if (-not [Linq.Enumerable]::SequenceEqual[byte]($actual, $expected)) {
-        throw 'Core Pester bootstrap signal bytes differ from the consumed release payload.'
-    }
-    [IO.File]::Delete($signal)
-    if (Test-Path -LiteralPath $signal) { throw 'Core Pester bootstrap signal cleanup failed.' }
-}
-
 function Get-CorePesterTreeSnapshot {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string] $Root)
@@ -576,7 +563,7 @@ function Get-CorePesterTreeSnapshot {
     $fullRoot = [IO.Path]::GetFullPath($Root)
     $errors = [System.Collections.Generic.List[string]]::new()
     $files = [System.Collections.Generic.List[object]]::new()
-    $fileKeys = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $fileKeys = [System.Collections.Generic.HashSet[string]]::new((Get-CorePesterPathComparer))
     if (-not (Test-Path -LiteralPath $fullRoot -PathType Container)) {
         return [pscustomobject]@{ IsValid = $false; Root = $fullRoot; Sha256 = $null; Files = @(); Errors = @('Candidate snapshot root is missing.') }
     }
@@ -590,7 +577,7 @@ function Get-CorePesterTreeSnapshot {
         if ($item.PSIsContainer) { continue }
         $path = [IO.Path]::GetFullPath($item.FullName)
         $prefix = $fullRoot.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
-        if (-not $path.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+        if (-not $path.StartsWith($prefix, (Get-CorePesterPathComparison))) {
             $errors.Add("Candidate snapshot file escaped its root: $path")
             continue
         }
@@ -715,4 +702,4 @@ function Test-CorePesterPackageArchive {
     }
 }
 
-Export-ModuleMember -Function Read-CorePesterClosureLock, Get-CorePesterRuntimeModuleRoot, Get-VerifiedCoreAuthoritySnapshotPath, Test-CorePesterPathBoundary, Test-CorePesterClosure, Test-CorePesterModuleCandidates, Get-CorePesterExpectedLoadedModulePath, Test-CorePesterLoadedModuleIdentity, Get-CorePesterCaseIdentity, ConvertFrom-CorePesterProgressLine, Test-CorePesterCaseIdentityPartition, Test-CorePesterShardUnion, Remove-CorePesterConsumedBootstrapSignal, Get-CorePesterTreeSnapshot, Test-CorePesterPackageArchive
+Export-ModuleMember -Function Read-CorePesterClosureLock, Get-CorePesterRuntimeModuleRoot, Assert-NoLegacyCorePesterBootstrapEnvironment, Get-VerifiedCoreAuthoritySnapshotPath, Test-CorePesterPathBoundary, Test-CorePesterClosure, Test-CorePesterModuleCandidates, Get-CorePesterExpectedLoadedModulePath, Test-CorePesterLoadedModuleIdentity, Get-CorePesterCaseIdentity, ConvertFrom-CorePesterProgressLine, Test-CorePesterCaseIdentityPartition, Test-CorePesterShardUnion, Get-CorePesterTreeSnapshot, Test-CorePesterPackageArchive

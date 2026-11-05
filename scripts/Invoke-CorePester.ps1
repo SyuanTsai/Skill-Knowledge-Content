@@ -12,6 +12,7 @@ $ErrorActionPreference = 'Stop'
 
 $integrityModulePath = Join-Path $PSScriptRoot 'CorePesterIntegrity.psm1'
 Import-Module -Name $integrityModulePath -Force -ErrorAction Stop
+Assert-NoLegacyCorePesterBootstrapEnvironment
 $closureLockPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../config/pester-6.2.0-closure.lock.json'))
 $closureLockRecord = Read-CorePesterClosureLock -LiteralPath $closureLockPath
 $verifiedPowerShellExecutable = [IO.Path]::GetFullPath([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
@@ -43,10 +44,6 @@ if (-not (Test-Path -LiteralPath $testRoot -PathType Container)) {
     throw "Canonical Pester test root is missing: $testRoot"
 }
 $candidateSnapshotRoot = [IO.Path]::GetFullPath((Get-Location).Path)
-Remove-CorePesterConsumedBootstrapSignal -CandidateRoot $candidateSnapshotRoot `
-    -ReleasePath ([Environment]::GetEnvironmentVariable('STANDARD_VALIDATION_BOOTSTRAP_RELEASE_PATH', 'Process')) `
-    -BootstrapCommand ([Environment]::GetEnvironmentVariable('STANDARD_VALIDATION_BOOTSTRAP_COMMAND', 'Process')) `
-    -VerifiedPowerShellExecutable $verifiedPowerShellExecutable
 $candidateSnapshotBefore = Get-CorePesterTreeSnapshot -Root $candidateSnapshotRoot
 if (-not $candidateSnapshotBefore.IsValid) { throw ('Core Pester candidate snapshot could not be bound: ' + (@($candidateSnapshotBefore.Errors) -join '; ')) }
 $previousErrorActionPreference = $ErrorActionPreference
@@ -105,7 +102,12 @@ try {
 }
 finally {
     $ErrorActionPreference = $previousErrorActionPreference
-    [Environment]::SetEnvironmentVariable('SYP154_CANDIDATE_AUTHORITY_ROOT', $previousCandidateAuthorityRoot, 'Process')
+    if ($null -eq $previousCandidateAuthorityRoot) {
+        [Environment]::SetEnvironmentVariable('SYP154_CANDIDATE_AUTHORITY_ROOT', [NullString]::Value, 'Process')
+    }
+    else {
+        [Environment]::SetEnvironmentVariable('SYP154_CANDIDATE_AUTHORITY_ROOT', $previousCandidateAuthorityRoot, 'Process')
+    }
 }
 if ($null -eq $result) { throw 'Pester did not return a result object.' }
 $postRunClosure = Test-CorePesterClosure -ModuleRoot $verifiedPesterModuleRoot -Lock $closureLockRecord.Value
@@ -160,7 +162,8 @@ function New-CorePesterCaseInventoryRow {
         $extent = $scriptBlockProperty.Value.Ast.Extent
         $sourcePath = [IO.Path]::GetFullPath([string]$extent.File)
         $rootPrefix = $TestRoot + [IO.Path]::DirectorySeparatorChar
-        if (-not $sourcePath.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+        if (-not $sourcePath.StartsWith($rootPrefix, $comparison)) {
             throw 'the Pester case source file is outside the complete tests tree.'
         }
         if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
@@ -291,7 +294,8 @@ foreach ($container in $containerItems) {
     try {
         $containerFullPath = [IO.Path]::GetFullPath([string]$containerNameProperty.Value)
         $containerRootPrefix = $caseInventoryTestRoot + [IO.Path]::DirectorySeparatorChar
-        if (-not $containerFullPath.StartsWith($containerRootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+        if (-not $containerFullPath.StartsWith($containerRootPrefix, $comparison)) {
             throw 'container source file is outside the candidate tests tree.'
         }
         $containerRelativePath = [IO.Path]::GetRelativePath($caseInventoryTestRoot, $containerFullPath).Replace('\', '/')

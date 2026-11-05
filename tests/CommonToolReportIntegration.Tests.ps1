@@ -6,6 +6,20 @@ Describe 'Knowledge child uses central package tool report rules' {
         $script:validationSource = Get-Content -LiteralPath $validationPath -Raw
         $script:childMatch = [regex]::Match($script:validationSource, '(?ms)^\$childRunnerText = @''\r?\n(?<body>.*?)^''@')
         if (-not $script:childMatch.Success) { throw 'Knowledge child runner source was not found.' }
+        $sourceHelperPath = Join-Path (Split-Path -Parent $validationPath) 'StandardCoreSourceValidation.ps1'
+        $quotedSourceHelperPath = ([IO.Path]::GetFullPath($sourceHelperPath)).Replace("'", "''")
+        $script:driverPrefix = $script:validationSource.Substring(0, $script:childMatch.Index).Replace(
+            ". (Join-Path `$PSScriptRoot 'StandardCoreSourceValidation.ps1')",
+            ". '$quotedSourceHelperPath'"
+        )
+
+        function Assert-TestThrowsLike {
+            param([scriptblock] $ScriptBlock, [string] $Pattern)
+            $caught = $null
+            try { & $ScriptBlock } catch { $caught = $_ }
+            $caught | Should -Not -BeNullOrEmpty
+            ([string]$caught.Exception.Message) | Should -BeLike $Pattern
+        }
         $script:candidateRoot = Split-Path -Parent $PSScriptRoot
         function Get-KnowledgeCandidateBytesFingerprint {
             param([Parameter(Mandatory = $true)][string] $Root)
@@ -34,6 +48,15 @@ Describe 'Knowledge child uses central package tool report rules' {
             }
             finally { Set-Location -LiteralPath $previousLocation }
         }
+        function Resolve-KnowledgeTestPhysicalPath {
+            param([Parameter(Mandatory = $true)][string] $Path)
+            if ($IsWindows) { return [IO.Path]::GetFullPath($Path) }
+            $resolved = @(& realpath $Path)
+            if ($LASTEXITCODE -ne 0 -or $resolved.Count -ne 1 -or [string]::IsNullOrWhiteSpace([string]$resolved[0])) {
+                throw "Could not resolve physical integration-test path: $Path"
+            }
+            return ([string]$resolved[0]).Trim()
+        }
         $script:testRoot = Join-Path ([IO.Path]::GetTempPath()) ('syp154-report-' + [guid]::NewGuid().ToString('N'))
         $script:skillRoot = Join-Path $script:testRoot 'skills/demo'
         [void](New-Item -ItemType Directory -Path $script:skillRoot -Force)
@@ -43,7 +66,7 @@ Describe 'Knowledge child uses central package tool report rules' {
         $script:fakeToolPath = Join-Path $script:testRoot 'skill-validator.ps1'
         [IO.File]::WriteAllText($script:fakeToolPath, 'Get-Content -LiteralPath $env:SYP154_TEST_TOOL_REPORT -Raw; $global:LASTEXITCODE = 0')
         $script:fakeStaticToolPath = Join-Path $script:testRoot 'skillspector.ps1'
-        $script:fakeStaticFailureToolPath = Join-Path $script:testRoot 'skillspector-failure.cmd'
+        $script:fakeStaticFailureToolPath = Join-Path $script:testRoot $(if ($IsWindows) { 'skillspector-failure.cmd' } else { 'skillspector-failure' })
         $script:fakeStaticFailureChildPath = Join-Path $script:testRoot 'skillspector-failure-child.ps1'
         $fakeStaticTool = @'
 [IO.File]::WriteAllText($env:SYP154_STATIC_ARGUMENTS, ($args | ConvertTo-Json -Compress), [Text.UTF8Encoding]::new($false))
@@ -67,12 +90,18 @@ $global:LASTEXITCODE = 0
 '@
         [IO.File]::WriteAllText($script:fakeStaticToolPath, $fakeStaticTool, [Text.UTF8Encoding]::new($false))
         [IO.File]::WriteAllText($script:fakeStaticFailureChildPath, "[Console]::Error.WriteLine('SkillSpector fixture stderr diagnostic')`nexit 73", [Text.UTF8Encoding]::new($false))
-        $fakeStaticFailureWrapper = @'
+        $fakeStaticFailureWrapper = if ($IsWindows) { @'
 @echo off
 "%SYP154_TEST_PWSH%" -NoProfile -NonInteractive -File "%~dp0skillspector-failure-child.ps1" %*
 exit /b %ERRORLEVEL%
 '@
+        } else { "#!/bin/sh`nprintf '%s\n' 'SkillSpector fixture stderr diagnostic' >&2`nexit 73`n"
+        }
         [IO.File]::WriteAllText($script:fakeStaticFailureToolPath, $fakeStaticFailureWrapper, [Text.UTF8Encoding]::new($false))
+        if (-not $IsWindows) {
+            & chmod 755 $script:fakeStaticFailureToolPath
+            if ($LASTEXITCODE -ne 0) { throw 'Could not mark the POSIX SkillSpector failure fixture executable.' }
+        }
         if ([string]::IsNullOrWhiteSpace($env:SYP154_CANDIDATE_AUTHORITY_ROOT)) {
             # Run the actual candidate driver against its immutable authority,
             # including when the protected CI driver still uses an older pin.
@@ -227,7 +256,7 @@ exit /b %ERRORLEVEL%
         $recordedArguments | Should -Not -Contain '--output'
         $envelope = ($child.output -join "`n") | ConvertFrom-Json -Depth 20
         $nativeReport = @($envelope.nativeReports)[0]
-        $nativeReport.path | Should -BeExactly ([IO.Path]::GetFullPath($reportPath))
+        $nativeReport.path | Should -BeExactly (Resolve-KnowledgeTestPhysicalPath -Path $reportPath)
         $nativeReport.sha256 | Should -BeExactly ((Get-FileHash -LiteralPath $reportPath -Algorithm SHA256).Hash.ToLowerInvariant())
     }
 
@@ -254,12 +283,11 @@ exit /b %ERRORLEVEL%
     # counting its rejection cases as coverage.
     It 'UnitT35_accepts_exact_candidate_authority_config' {
         $config = Get-Content -LiteralPath (Join-Path (Split-Path -Parent $PSScriptRoot) 'config/standard-v1.json') -Raw | ConvertFrom-Json
-        $prefix = $script:validationSource.Substring(0, $script:childMatch.Index)
         & {
             param($DriverPrefix, $CandidateConfig)
             . ([scriptblock]::Create($DriverPrefix))
             Assert-AuthorityConfig -Config $CandidateConfig
-        } $prefix $config
+        } $script:driverPrefix $config
     }
 
     # Scenario: candidate authority config substitutes commit, archive or member identity.
@@ -283,13 +311,12 @@ exit /b %ERRORLEVEL%
         elseif ($Field -eq 'member') { $config.authority.files[0].sha256 = '0' * 64 }
         elseif ($Field -eq 'commit') { $config.authority.commit = '0' * 40 }
         else { $config.authority.archiveSha256 = '0' * 64 }
-        $prefix = $script:validationSource.Substring(0, $script:childMatch.Index)
-        {
+        Assert-TestThrowsLike {
             & {
                 param($DriverPrefix, $CandidateConfig)
                 . ([scriptblock]::Create($DriverPrefix))
                 Assert-AuthorityConfig -Config $CandidateConfig
-            } $prefix $config
-        } | Should -Throw -ExpectedMessage $(if ($Field -eq 'member' -or $Field.Contains('/')) { '*authority file identity mismatch*' } else { '*exact approved P02 authority snapshot*' })
+            } $script:driverPrefix $config
+        } $(if ($Field -eq 'member' -or $Field.Contains('/')) { '*authority file identity mismatch*' } else { '*exact approved P02 authority snapshot*' })
     }
 }

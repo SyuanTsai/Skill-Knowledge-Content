@@ -12,6 +12,30 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Get-RepositoryGitPhysicalPath {
+    $command = Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1
+    $commandPath = [IO.Path]::GetFullPath([string]$command.Path)
+    $commandItem = Get-Item -LiteralPath $commandPath -Force -ErrorAction Stop
+    if ($commandItem.PSIsContainer) { throw 'Resolved Git command path must be a file.' }
+    if ($IsWindows) {
+        if (($commandItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw 'Resolved Git command path must be a plain, non-reparse file on Windows.'
+        }
+        return $commandPath
+    }
+    $resolvedTarget = if (($commandItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        [IO.File]::ResolveLinkTarget($commandPath, $true)
+    }
+    else { $commandItem }
+    if ($null -eq $resolvedTarget) { throw 'Resolved Git command path symbolic link could not be resolved.' }
+    $physicalPath = [IO.Path]::GetFullPath([string]$resolvedTarget.FullName)
+    $physicalItem = Get-Item -LiteralPath $physicalPath -Force -ErrorAction Stop
+    if ($physicalItem.PSIsContainer -or ($physicalItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw 'Resolved Git physical target must be a regular, non-link file.'
+    }
+    return $physicalPath
+}
+
 function Assert-ExactPropertySet {
     param(
         [Parameter(Mandatory = $true)] $Value,
@@ -403,9 +427,9 @@ function Get-ContentInventory {
         return [pscustomobject][ordered]@{ skillId = $SkillId; contentSha256 = $contentSha256; files = $files }
     }
 
-    $git = Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1
+    $gitPath = Get-RepositoryGitPhysicalPath
     $tracked = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
-    $gitLines = @(& $git.Path -C $RepositoryRoot ls-files -s -- "skills/$SkillId")
+    $gitLines = @(& $gitPath -C $RepositoryRoot ls-files -s -- "skills/$SkillId")
     if ($LASTEXITCODE -ne 0) { throw "Git inventory lookup failed for '$SkillId'." }
     foreach ($line in $gitLines) {
         if ([string]$line -cnotmatch '^(?<mode>[0-9]{6}) (?<objectId>[0-9a-f]{40}) (?<stage>[0-3])\t(?<path>.+)$') {
@@ -434,12 +458,12 @@ function Get-ContentInventory {
     foreach ($path in $sortedPaths) {
         $repositoryPath = "skills/$SkillId/$path"
         $workingObjectId = ([string](@(
-            & $git.Path -C $RepositoryRoot hash-object "--path=$repositoryPath" -- $pathToFile[$path].FullName
+            & $gitPath -C $RepositoryRoot hash-object "--path=$repositoryPath" -- $pathToFile[$path].FullName
         ) | Select-Object -First 1)).Trim()
         if ($LASTEXITCODE -ne 0 -or $workingObjectId -cnotmatch '^[0-9a-f]{40}$' -or $workingObjectId -cne $tracked[$path]) {
             throw "Skill '$SkillId' working-tree content is not bound to its Git index entry '$path'."
         }
-        $sha256 = Get-GitBlobSha256 -GitPath $git.Path -RepositoryRoot $RepositoryRoot -ObjectId $tracked[$path]
+        $sha256 = Get-GitBlobSha256 -GitPath $gitPath -RepositoryRoot $RepositoryRoot -ObjectId $tracked[$path]
         $files += [pscustomobject][ordered]@{ path = $path; sha256 = $sha256 }
         [void]$canonical.Append($path).Append("`t").Append($sha256).Append("`n")
     }

@@ -19,18 +19,47 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   canonical-validation:
-    name: Knowledge & Content Standard v1
-    # Keep action references as YAML scalar aliases. The immutable P02 authority
+    name: Knowledge & Content Standard v1 (${{ matrix.platform }})
+    # Keep reusable action references as YAML scalar aliases. The immutable authority
     # inventory classifies a literal `actions/checkout` token as a local `check`
-    # command; GitHub resolves the aliases before execution.
+    # command; GitHub resolves the aliases before execution. Every reference is a
+    # reviewed full commit SHA.
     env:
       CHECKOUT_ACTION_REFERENCE: &checkout-action-reference actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      CACHE_ACTION_REFERENCE: &cache-action-reference actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
       UPLOAD_ARTIFACT_ACTION_REFERENCE: &upload-artifact-reference actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-    runs-on: windows-latest
+      DOWNLOAD_ARTIFACT_ACTION_REFERENCE: &download-artifact-reference actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+      SETUP_PYTHON_ACTION_REFERENCE: &setup-python-action-reference actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+            architecture: x64
+            executable: pwsh.exe
+            assetTemplate: PowerShell-{0}-win-x64.zip
+          - os: ubuntu-latest
+            platform: linux
+            architecture: x64
+            executable: pwsh
+            assetTemplate: powershell-{0}-linux-x64.tar.gz
+          - os: macos-latest
+            platform: macos
+            architecture: arm64
+            executable: pwsh
+            assetTemplate: powershell-{0}-osx-arm64.tar.gz
     steps:
       - name: Preserve committed bytes before checkout
+        id: preserve_checkout_bytes
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -42,6 +71,7 @@ jobs:
           }
 
       - name: Checkout exact event candidate
+        id: checkout_candidate
         uses: *checkout-action-reference # actions/checkout v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -49,16 +79,18 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Checkout exact 8e62 authority
+      - name: Checkout exact 6cee5b8 authority
+        id: checkout_authority
         uses: *checkout-action-reference
         with:
           repository: SyuanTsai/SyuanTsai-AI-Instructions
-          ref: 8e627baf54bd6e47862e6291b25e71cc45a2f2b7
+          ref: 6cee5b8e43fe4e327fedc788865f931c561d6e89
           path: authority
           fetch-depth: 0
           persist-credentials: false
 
       - name: Checkout exact event-base protected driver
+        id: checkout_driver
         uses: *checkout-action-reference
         with:
           ref: ${{ github.event.pull_request.base.sha || github.event.before || inputs.base_commit }}
@@ -84,12 +116,34 @@ jobs:
               -not (Test-Path -LiteralPath $driverRoot -PathType Container)) {
             throw 'Candidate, protected driver, or authority checkout is missing.'
           }
+          function Resolve-RunnerExecutable {
+            param([Parameter(Mandatory = $true)][string] $CommandPath, [Parameter(Mandatory = $true)][string] $Name)
+            $fullCommandPath = [IO.Path]::GetFullPath($CommandPath)
+            $commandItem = Get-Item -LiteralPath $fullCommandPath -Force -ErrorAction Stop
+            if ($commandItem.PSIsContainer) { throw "$Name command path must be a file." }
+            if ($IsWindows) {
+              if (($commandItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "$Name command path must be a plain, non-reparse file on Windows."
+              }
+              return $fullCommandPath
+            }
+            $resolvedTarget = if (($commandItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+              [IO.File]::ResolveLinkTarget($CommandPath, $true)
+            } else { $commandItem }
+            if ($null -eq $resolvedTarget) { throw "$Name command path symbolic link could not be resolved." }
+            $physicalPath = [IO.Path]::GetFullPath([string]$resolvedTarget.FullName)
+            $physicalItem = Get-Item -LiteralPath $physicalPath -Force -ErrorAction Stop
+            if ($physicalItem.PSIsContainer -or ($physicalItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+              throw "$Name resolved physical target must be a regular, non-link file."
+            }
+            return $physicalPath
+          }
           $gitCommand = Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1
-          $gitExecutable = [IO.Path]::GetFullPath([string]$gitCommand.Path)
+          $gitCommandPath = [IO.Path]::GetFullPath([string]$gitCommand.Path)
+          $gitExecutable = Resolve-RunnerExecutable -CommandPath $gitCommandPath -Name 'Git'
           $gitExecutableItem = Get-Item -LiteralPath $gitExecutable -Force -ErrorAction Stop
-          if ($gitExecutableItem.PSIsContainer -or
-              ($gitExecutableItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-            throw 'Resolved Git executable must be a plain file.'
+          if ($gitExecutableItem.PSIsContainer -or ($gitExecutableItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw 'Resolved Git physical executable must be a plain file.'
           }
           $gitExecutableSha256 = (Get-FileHash -LiteralPath $gitExecutable -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
 
@@ -182,8 +236,8 @@ jobs:
           $protectedHelperSha256 = (Get-FileHash -LiteralPath $protectedHelperPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
 
           $authorityHead = Get-GitValue -Root $authorityRoot -Arguments @('rev-parse', '--verify', 'HEAD^{commit}')
-          if ($authorityHead -cne '8e627baf54bd6e47862e6291b25e71cc45a2f2b7') {
-            throw 'Authority checkout HEAD differs from the exact prepared 8e62 commit.'
+          if ($authorityHead -cne '6cee5b8e43fe4e327fedc788865f931c561d6e89') {
+            throw 'Authority checkout HEAD differs from the exact prepared 6cee5b8 commit.'
           }
           $authorityDirty = @(& $gitExecutable -C $authorityRoot status --porcelain=v1 --untracked-files=all)
           if ($LASTEXITCODE -ne 0 -or $authorityDirty.Count -ne 0) { throw 'Authority checkout is not clean.' }
@@ -195,7 +249,7 @@ jobs:
           $runNonce = [guid]::NewGuid().ToString('N')
           $ownedRoot = Join-Path $env:RUNNER_TEMP "kc-$runNonce"
           $runtimeRoot = Join-Path $ownedRoot 'runtime'
-          $artifactsRoot = Join-Path ([IO.Path]::GetPathRoot($env:RUNNER_TEMP)) "a-$runNonce"
+          $artifactsRoot = if ($IsWindows) { Join-Path ([IO.Path]::GetPathRoot($env:RUNNER_TEMP)) "a-$runNonce" } else { Join-Path $env:RUNNER_TEMP "a-$runNonce" }
           foreach ($path in @($ownedRoot, $runtimeRoot, $artifactsRoot)) {
             if (Test-Path -LiteralPath $path) { throw "Run-owned path unexpectedly exists: $path" }
           }
@@ -214,6 +268,7 @@ jobs:
             "KC_OWNED_ROOT=$ownedRoot",
             "KC_RUNTIME_ROOT=$runtimeRoot",
             "KC_ARTIFACTS_ROOT=$artifactsRoot",
+            "KC_PESTER_PACKAGE_CACHE=$(Join-Path $env:RUNNER_TEMP 'kc-pester-package-cache')",
             "KC_SOURCE_TOOLS_PATH=$sourceToolsPath",
             "KC_RUN_NONCE=$runNonce",
             "RUN_OWNED_ROOT=$ownedRoot",
@@ -221,10 +276,12 @@ jobs:
           )) {
             [IO.File]::AppendAllText($env:GITHUB_ENV, $entry + "`n", $githubEnv)
           }
-          [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "protected_helper_sha256=$protectedHelperSha256`nrun_nonce=$runNonce`ngit_path=$gitExecutable`ngit_sha256=$gitExecutableSha256`n", [Text.UTF8Encoding]::new($false))
+          [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "protected_helper_sha256=$protectedHelperSha256`nrun_nonce=$runNonce`ngit_command_path=$gitCommandPath`ngit_path=$gitExecutable`ngit_sha256=$gitExecutableSha256`n", [Text.UTF8Encoding]::new($false))
+          Write-Host "Git command path=$gitCommandPath physical path=$gitExecutable"
           Write-Host "Candidate=$candidateHead Base=$baseRevision Authority=$authorityHead"
 
       - name: Set up approved Go runtime
+        id: setup_go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: 'stable'
@@ -232,6 +289,7 @@ jobs:
           cache: false
 
       - name: Capture resolved stable Go runtime
+        id: capture_go
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -243,22 +301,123 @@ jobs:
           [IO.File]::AppendAllText($env:GITHUB_ENV, "STANDARD_GO_RUNTIME_VERSION=$($Matches.version)`n", [Text.UTF8Encoding]::new($false))
           Write-Host "Verified Go runtime: $($Matches.version)"
 
+      - name: Set up approved Python runtime
+        id: setup_python
+        uses: *setup-python-action-reference # v7.1.0
+        with:
+          python-version: '3.12'
+          check-latest: false
+
+      - name: Capture and verify Python runtime before source setup
+        id: capture_python
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function Resolve-RunnerExecutable {
+            param([Parameter(Mandatory = $true)][string] $CommandPath, [Parameter(Mandatory = $true)][string] $Name)
+            $fullCommandPath = [IO.Path]::GetFullPath($CommandPath)
+            $commandItem = Get-Item -LiteralPath $fullCommandPath -Force -ErrorAction Stop
+            if ($commandItem.PSIsContainer) { throw "$Name command path must be a file." }
+            if ($IsWindows) {
+              if (($commandItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "$Name command path must be a plain, non-reparse file on Windows."
+              }
+              return $fullCommandPath
+            }
+            $resolvedTarget = if (($commandItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+              [IO.File]::ResolveLinkTarget($CommandPath, $true)
+            } else { $commandItem }
+            if ($null -eq $resolvedTarget) { throw "$Name command path symbolic link could not be resolved." }
+            $physicalPath = [IO.Path]::GetFullPath([string]$resolvedTarget.FullName)
+            $physicalItem = Get-Item -LiteralPath $physicalPath -Force -ErrorAction Stop
+            if ($physicalItem.PSIsContainer -or ($physicalItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+              throw "$Name resolved physical target must be a regular, non-link file."
+            }
+            return $physicalPath
+          }
+          $pythonCommand = Get-Command python -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          $pythonCommandPath = [IO.Path]::GetFullPath([string]$pythonCommand.Source)
+          $pythonExecutablePath = Resolve-RunnerExecutable -CommandPath $pythonCommandPath -Name 'Python'
+          $pythonOutput = @(& $pythonCommandPath -I -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')
+          $pythonExitCode = $LASTEXITCODE
+          $pythonVersion = if ($pythonOutput.Count -eq 1) { ([string]$pythonOutput[0]).Trim() } else { $null }
+          if ($pythonExitCode -ne 0 -or $pythonVersion -cnotmatch '^3\.12\.[0-9]+$') {
+            throw "setup-python did not provide the approved Python 3.12 interpreter through the authority resolver's 'python' command."
+          }
+          $python3CommandPath = $null
+          $python3ExecutablePath = $null
+          if (-not $IsWindows) {
+            $python3Command = Get-Command python3 -CommandType Application -ErrorAction Stop | Select-Object -First 1
+            $python3CommandPath = [IO.Path]::GetFullPath([string]$python3Command.Source)
+            $python3ExecutablePath = Resolve-RunnerExecutable -CommandPath $python3CommandPath -Name 'Python3'
+            $python3Output = @(& $python3CommandPath -I -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')
+            $python3ExitCode = $LASTEXITCODE
+            if ($python3ExitCode -ne 0 -or $python3Output.Count -ne 1 -or
+                ([string]$python3Output[0]).Trim() -cne $pythonVersion -or
+                $python3ExecutablePath -cne $pythonExecutablePath) {
+              throw 'Unix python3 does not resolve to the approved Python 3.12 toolcache interpreter selected as python.'
+            }
+          }
+          $pythonExecutableSha256 = (Get-FileHash -LiteralPath $pythonExecutablePath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+          $pythonRuntimeEvidence = [ordered]@{
+            schemaVersion = 1
+            report = 'approved-python-runtime-before-source-setup-v1'
+            capturedAtUtc = [DateTime]::UtcNow.ToString('O', [Globalization.CultureInfo]::InvariantCulture)
+            pythonVersion = $pythonVersion
+            pythonCommandPath = $pythonCommandPath
+            pythonExecutablePath = $pythonExecutablePath
+            pythonExecutableSha256 = $pythonExecutableSha256
+            python3CommandPath = $python3CommandPath
+            python3ExecutablePath = $python3ExecutablePath
+          }
+          $pythonRuntimeEvidencePath = Join-Path $env:KC_ARTIFACTS_ROOT 'python-runtime-before-source-setup.json'
+          [IO.File]::WriteAllText($pythonRuntimeEvidencePath, (($pythonRuntimeEvidence | ConvertTo-Json -Depth 8) + "`n"), [Text.UTF8Encoding]::new($false))
+          Write-Host "Verified authority resolver Python $pythonVersion command=$pythonCommandPath physical=$pythonExecutablePath"
+
       - name: Set up approved Node runtime
+        id: setup_node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24.21.0'
 
       - name: Capture and verify Node runtime before source setup
+        id: capture_node
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $nodeCommand = Get-Command node.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
-          $nodeExecutablePath = [IO.Path]::GetFullPath([string]$nodeCommand.Source)
-          $nodeRoot = Split-Path -Parent $nodeExecutablePath
-          $npmCommand = Get-Command npm.cmd -CommandType Application -ErrorAction Stop | Select-Object -First 1
-          $npmLauncherPath = [IO.Path]::GetFullPath([string]$npmCommand.Source)
-          $npmPackageJsonPath = Join-Path $nodeRoot 'node_modules/npm/package.json'
-          $npmCliPath = Join-Path $nodeRoot 'node_modules/npm/bin/npm-cli.js'
+          function Resolve-RunnerExecutable {
+            param([Parameter(Mandatory = $true)][string] $CommandPath, [Parameter(Mandatory = $true)][string] $Name)
+            $fullCommandPath = [IO.Path]::GetFullPath($CommandPath)
+            $commandItem = Get-Item -LiteralPath $fullCommandPath -Force -ErrorAction Stop
+            if ($commandItem.PSIsContainer) { throw "$Name command path must be a file." }
+            if ($IsWindows) {
+              if (($commandItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "$Name command path must be a plain, non-reparse file on Windows."
+              }
+              return $fullCommandPath
+            }
+            $resolvedTarget = if (($commandItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+              [IO.File]::ResolveLinkTarget($CommandPath, $true)
+            } else { $commandItem }
+            if ($null -eq $resolvedTarget) { throw "$Name command path symbolic link could not be resolved." }
+            $physicalPath = [IO.Path]::GetFullPath([string]$resolvedTarget.FullName)
+            $physicalItem = Get-Item -LiteralPath $physicalPath -Force -ErrorAction Stop
+            if ($physicalItem.PSIsContainer -or ($physicalItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+              throw "$Name resolved physical target must be a regular, non-link file."
+            }
+            return $physicalPath
+          }
+          $nodeCommand = Get-Command node -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          $nodeCommandPath = [IO.Path]::GetFullPath([string]$nodeCommand.Source)
+          $nodeExecutablePath = Resolve-RunnerExecutable -CommandPath $nodeCommandPath -Name 'Node'
+          $nodeBinRoot = Split-Path -Parent $nodeExecutablePath
+          $nodeInstallRoot = if ($IsWindows) { $nodeBinRoot } else { Split-Path -Parent $nodeBinRoot }
+          $npmCommand = Get-Command npm -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          $npmCommandPath = [IO.Path]::GetFullPath([string]$npmCommand.Source)
+          $npmLauncherPath = Resolve-RunnerExecutable -CommandPath $npmCommandPath -Name 'npm'
+          $npmPackageRoot = if ($IsWindows) { Join-Path $nodeInstallRoot 'node_modules/npm' } else { Join-Path $nodeInstallRoot 'lib/node_modules/npm' }
+          $npmPackageJsonPath = Join-Path $npmPackageRoot 'package.json'
+          $npmCliPath = Join-Path $npmPackageRoot 'bin/npm-cli.js'
           $nodeVersionOutput = @(& $nodeExecutablePath --version)
           $nodeExitCode = $LASTEXITCODE
           $nodeVersion = if ($nodeVersionOutput.Count -eq 1) { ([string]$nodeVersionOutput[0]).Trim() } else { $null }
@@ -287,9 +446,11 @@ jobs:
             report = 'approved-node-runtime-before-source-setup-v1'
             capturedAtUtc = [DateTime]::UtcNow.ToString('O', [Globalization.CultureInfo]::InvariantCulture)
             nodeVersion = $nodeVersion
+            nodeCommandPath = $nodeCommandPath
             nodeExecutablePath = $nodeExecutablePath
             nodeExecutableSha256 = $nodeExecutableSha256
             npmVersion = $npmVersion
+            npmCommandPath = $npmCommandPath
             npmLauncherPath = $npmLauncherPath
             npmLauncherSha256 = $npmLauncherSha256
             npmCliPath = $npmCliPath
@@ -300,122 +461,101 @@ jobs:
           }
           $nodeRuntimeEvidencePath = Join-Path $env:KC_ARTIFACTS_ROOT 'node-runtime-before-source-setup.json'
           [IO.File]::WriteAllText($nodeRuntimeEvidencePath, (($nodeRuntimeEvidence | ConvertTo-Json -Depth 8) + "`n"), [Text.UTF8Encoding]::new($false))
-          $expectedNpmLauncherPath = [IO.Path]::GetFullPath((Join-Path $nodeRoot 'npm.cmd'))
+          $expectedNpmCommandPath = [IO.Path]::GetFullPath((Join-Path $nodeBinRoot $(if ($IsWindows) { 'npm.cmd' } else { 'npm' })))
+          $pathComparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+          $nodeInstallPrefix = $nodeInstallRoot.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
           if ($nodeExitCode -ne 0 -or $nodeVersion -cne 'v24.21.0' -or
               $npmExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($npmPackageVersion) -or
               $npmVersion -cne $npmPackageVersion -or
-              -not $npmLauncherPath.Equals($expectedNpmLauncherPath, [StringComparison]::OrdinalIgnoreCase) -or
+              -not $npmCommandPath.Equals($expectedNpmCommandPath, $pathComparison) -or
+              (-not $IsWindows -and -not $npmLauncherPath.StartsWith($nodeInstallPrefix, [StringComparison]::Ordinal)) -or
               [string]::IsNullOrWhiteSpace($nodeExecutableSha256) -or
               [string]::IsNullOrWhiteSpace($npmLauncherSha256) -or
               [string]::IsNullOrWhiteSpace($npmCliSha256) -or
               [string]::IsNullOrWhiteSpace($npmPackageJsonSha256)) {
             throw 'Approved Node runtime or its bundled npm does not match the captured runtime evidence.'
           }
-          Write-Host "Verified Node $nodeVersion with its bundled npm $npmVersion from $nodeRoot"
+          Write-Host "Node command path=$nodeCommandPath physical path=$nodeExecutablePath"
+          Write-Host "npm command path=$npmCommandPath physical path=$npmLauncherPath"
+          Write-Host "Verified Node $nodeVersion with its bundled npm $npmVersion from $nodeInstallRoot"
 
-      - name: Install and verify latest official PowerShell
+      - name: Resolve latest official PowerShell release metadata
+        id: powershell_release
         shell: pwsh
+        env:
+          KC_MATRIX_PLATFORM: ${{ matrix.platform }}
+          KC_MATRIX_ARCHITECTURE: ${{ matrix.architecture }}
+          KC_MATRIX_EXECUTABLE: ${{ matrix.executable }}
+          KC_MATRIX_ASSET_TEMPLATE: ${{ matrix.assetTemplate }}
+          KC_GITHUB_API_TOKEN: ${{ github.token }}
         run: |
-          $ErrorActionPreference = 'Stop'
-          if ([Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne [Runtime.InteropServices.Architecture]::X64) {
-            throw 'The protected source gate requires the x64 Windows runner architecture.'
-          }
-          $releaseUri = [Uri]'https://api.github.com/repos/PowerShell/PowerShell/releases/latest'
-          $release = Invoke-RestMethod -Uri $releaseUri -Headers @{
-            Accept = 'application/vnd.github+json'
-            'X-GitHub-Api-Version' = '2022-11-28'
-            'User-Agent' = 'Skill-Knowledge-Content-Source-Validation'
-          } -TimeoutSec 60 -ErrorAction Stop
-          $tagName = [string]$release.tag_name
-          if ($release.draft -or $release.prerelease -or $tagName -cnotmatch '^v(?<version>[0-9]+\.[0-9]+\.[0-9]+)$') {
-            throw 'PowerShell latest release is not a stable semantic-version release.'
-          }
-          $version = [string]$Matches.version
-          $zipName = "PowerShell-$version-win-x64.zip"
-          $zipAssets = @($release.assets | Where-Object { [string]$_.name -ceq $zipName })
-          $hashAssets = @($release.assets | Where-Object { [string]$_.name -ceq 'hashes.sha256' })
-          if ($zipAssets.Count -ne 1 -or $hashAssets.Count -ne 1) {
-            throw 'Latest official PowerShell release must expose one exact x64 zip and one hashes.sha256 manifest.'
-          }
-          $expectedReleasePrefix = "https://github.com/PowerShell/PowerShell/releases/download/$tagName/"
-          foreach ($asset in @($zipAssets[0], $hashAssets[0])) {
-            $assetUri = [Uri][string]$asset.browser_download_url
-            if ($assetUri.Scheme -cne 'https' -or $assetUri.Host -cne 'github.com' -or
-                -not $assetUri.AbsoluteUri.StartsWith($expectedReleasePrefix, [StringComparison]::Ordinal)) {
-              throw 'PowerShell release asset URL is outside its official tagged GitHub release.'
-            }
-          }
-          $downloadRoot = Join-Path $env:KC_OWNED_ROOT 'downloads'
-          [void](New-Item -ItemType Directory -Path $downloadRoot -ErrorAction Stop)
-          $zipPath = Join-Path $downloadRoot $zipName
-          $hashesPath = Join-Path $downloadRoot 'hashes.sha256'
-          Invoke-WebRequest -Uri ([string]$zipAssets[0].browser_download_url) -OutFile $zipPath -MaximumRedirection 3 -TimeoutSec 300 -ErrorAction Stop
-          Invoke-WebRequest -Uri ([string]$hashAssets[0].browser_download_url) -OutFile $hashesPath -MaximumRedirection 3 -TimeoutSec 60 -ErrorAction Stop
-          $hashPattern = '^(?<hash>[0-9a-fA-F]{64})\s+\*?' + [regex]::Escape($zipName) + '\s*$'
-          $hashMatches = @(
-            foreach ($line in [IO.File]::ReadAllLines($hashesPath)) {
-              if ($line -match $hashPattern) { $Matches.hash.ToLowerInvariant() }
-            }
-          )
-          if ($hashMatches.Count -ne 1) { throw 'Official PowerShell hash manifest must contain one exact x64 zip digest.' }
-          $observedZipSha256 = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
-          if ($observedZipSha256 -cne [string]$hashMatches[0]) { throw 'Latest official PowerShell zip SHA-256 differs from hashes.sha256.' }
-          if (-not [string]::IsNullOrWhiteSpace([string]$zipAssets[0].digest)) {
-            if ([string]$zipAssets[0].digest -cnotmatch '^sha256:(?<hash>[0-9a-f]{64})$' -or $Matches.hash -cne $observedZipSha256) {
-              throw 'Latest official PowerShell asset digest differs from the downloaded zip.'
-            }
-          }
+          & (Join-Path $env:KC_DRIVER_ROOT 'scripts/Prepare-WorkflowPowerShell.ps1') -Mode Resolve `
+            -Platform ([string]$env:KC_MATRIX_PLATFORM) -ExpectedArchitecture ([string]$env:KC_MATRIX_ARCHITECTURE) `
+            -ExecutableName ([string]$env:KC_MATRIX_EXECUTABLE) -AssetTemplate ([string]$env:KC_MATRIX_ASSET_TEMPLATE)
 
-          if ((Get-ChildItem -LiteralPath $env:KC_RUNTIME_ROOT -Force -ErrorAction Stop).Count -ne 0) {
-            throw 'Verified PowerShell runtime root must be fresh and empty.'
-          }
-          Expand-Archive -LiteralPath $zipPath -DestinationPath $env:KC_RUNTIME_ROOT -ErrorAction Stop
-          $powerShellExecutable = Join-Path $env:KC_RUNTIME_ROOT 'pwsh.exe'
-          if (-not (Test-Path -LiteralPath $powerShellExecutable -PathType Leaf)) { throw 'Official PowerShell archive did not contain pwsh.exe at its root.' }
-          $signature = Get-AuthenticodeSignature -LiteralPath $powerShellExecutable
-          if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or
-              $null -eq $signature.SignerCertificate -or $signature.SignerCertificate.Subject -notmatch 'CN=Microsoft Corporation') {
-            throw 'PowerShell executable Authenticode signature is not valid and Microsoft-signed.'
-          }
-          $versionOutput = @(& $powerShellExecutable -NoProfile -NonInteractive -Command '$PSVersionTable.PSVersion.ToString()')
-          if ($LASTEXITCODE -ne 0 -or $versionOutput.Count -ne 1 -or ([string]$versionOutput[0]).Trim() -cne $version) {
-            throw 'Installed PowerShell executable version differs from the exact latest stable release tag.'
-          }
+      - name: Restore PowerShell release bytes cache
+        id: restore_powershell_cache
+        uses: *cache-action-reference # actions/cache v4.2.3
+        with:
+          path: ${{ runner.temp }}/kc-pwsh-release-cache
+          key: pwsh-${{ runner.os }}-${{ runner.arch }}-${{ steps.powershell_release.outputs.version }}-${{ steps.powershell_release.outputs.official_sha256 }}
 
-          $runtimeReceipt = [ordered]@{
-            schemaVersion = 1
-            report = 'verified-latest-official-powershell-runtime-v1'
-            sourceRepository = 'https://github.com/PowerShell/PowerShell'
-            releaseApi = $releaseUri.AbsoluteUri
-            releaseTag = $tagName
-            version = $version
-            architecture = 'win-x64'
-            archiveUri = [string]$zipAssets[0].browser_download_url
-            hashesManifestUri = [string]$hashAssets[0].browser_download_url
-            officialArchiveSha256 = [string]$hashMatches[0]
-            observedArchiveSha256 = $observedZipSha256
-            executablePath = [IO.Path]::GetFullPath($powerShellExecutable)
-            executableAuthenticodeStatus = [string]$signature.Status
-            executableSignerSubject = [string]$signature.SignerCertificate.Subject
-            executableSignerThumbprint = [string]$signature.SignerCertificate.Thumbprint
-          }
-          $runtimeReceiptPath = Join-Path $env:KC_OWNED_ROOT 'powershell-runtime-setup.json'
-          [IO.File]::WriteAllText($runtimeReceiptPath, (($runtimeReceipt | ConvertTo-Json -Depth 8) + "`n"), [Text.UTF8Encoding]::new($false))
-          [IO.File]::Copy($runtimeReceiptPath, (Join-Path $env:KC_ARTIFACTS_ROOT 'powershell-runtime-setup.json'), $false)
-          [IO.File]::Copy($hashesPath, (Join-Path $env:KC_ARTIFACTS_ROOT 'powershell-release-hashes.sha256'), $false)
-          [IO.File]::AppendAllText($env:GITHUB_ENV, "KC_POWERSHELL_EXECUTABLE=$([IO.Path]::GetFullPath($powerShellExecutable))`n", [Text.UTF8Encoding]::new($false))
-          [IO.File]::AppendAllText($env:GITHUB_PATH, "$env:KC_RUNTIME_ROOT`n", [Text.UTF8Encoding]::new($false))
-          Write-Host "Verified official PowerShell $version, archive SHA256 $observedZipSha256, signer $($signature.SignerCertificate.Subject)"
+      - name: Install verified latest official PowerShell
+        id: install_powershell
+        shell: pwsh
+        env:
+          KC_MATRIX_PLATFORM: ${{ matrix.platform }}
+          KC_MATRIX_ARCHITECTURE: ${{ matrix.architecture }}
+          KC_MATRIX_EXECUTABLE: ${{ matrix.executable }}
+          KC_POWERSHELL_VERSION_INPUT: ${{ steps.powershell_release.outputs.version }}
+          KC_POWERSHELL_RELEASE_TAG: ${{ steps.powershell_release.outputs.tag }}
+          KC_POWERSHELL_ASSET: ${{ steps.powershell_release.outputs.asset }}
+          KC_POWERSHELL_ARCHIVE_URL: ${{ steps.powershell_release.outputs.archive_url }}
+          KC_POWERSHELL_HASHES_URL: ${{ steps.powershell_release.outputs.hashes_url }}
+          KC_POWERSHELL_OFFICIAL_ARCHIVE_SHA256: ${{ steps.powershell_release.outputs.official_sha256 }}
+          KC_POWERSHELL_HASHES_MANIFEST_SHA256: ${{ steps.powershell_release.outputs.hashes_sha256 }}
+          KC_POWERSHELL_FRESH_HASHES_PATH: ${{ steps.powershell_release.outputs.fresh_hashes_path }}
+        run: |
+          & (Join-Path $env:KC_DRIVER_ROOT 'scripts/Prepare-WorkflowPowerShell.ps1') -Mode Install `
+            -Platform ([string]$env:KC_MATRIX_PLATFORM) -ExpectedArchitecture ([string]$env:KC_MATRIX_ARCHITECTURE) -ExecutableName ([string]$env:KC_MATRIX_EXECUTABLE) `
+            -RuntimeRoot $env:KC_RUNTIME_ROOT -OwnedRoot $env:KC_OWNED_ROOT -ArtifactsRoot $env:KC_ARTIFACTS_ROOT `
+            -CacheRoot (Join-Path $env:RUNNER_TEMP 'kc-pwsh-release-cache') `
+            -Version ([string]$env:KC_POWERSHELL_VERSION_INPUT) -ReleaseTag ([string]$env:KC_POWERSHELL_RELEASE_TAG) `
+            -AssetName ([string]$env:KC_POWERSHELL_ASSET) -ArchiveUrl ([string]$env:KC_POWERSHELL_ARCHIVE_URL) `
+            -HashesUrl ([string]$env:KC_POWERSHELL_HASHES_URL) `
+            -OfficialArchiveSha256 ([string]$env:KC_POWERSHELL_OFFICIAL_ARCHIVE_SHA256) `
+            -HashesManifestSha256 ([string]$env:KC_POWERSHELL_HASHES_MANIFEST_SHA256) `
+            -FreshHashesPath ([string]$env:KC_POWERSHELL_FRESH_HASHES_PATH)
+
+      - name: Verify selected PowerShell runtime
+        id: verify_runtime
+        shell: pwsh
+        env:
+          KC_MATRIX_PLATFORM: ${{ matrix.platform }}
+          KC_MATRIX_ARCHITECTURE: ${{ matrix.architecture }}
+          KC_MATRIX_EXECUTABLE: ${{ matrix.executable }}
+        run: |
+          & (Join-Path $env:KC_DRIVER_ROOT 'scripts/Prepare-WorkflowPowerShell.ps1') -Mode Verify `
+            -Platform ([string]$env:KC_MATRIX_PLATFORM) -ExpectedArchitecture ([string]$env:KC_MATRIX_ARCHITECTURE) -ExecutableName ([string]$env:KC_MATRIX_EXECUTABLE)
+
+      - name: Restore Pester package bytes cache
+        id: restore_pester_cache
+        uses: *cache-action-reference # actions/cache v4.2.3
+        with:
+          path: ${{ runner.temp }}/kc-pester-package-cache
+          key: pester-${{ runner.os }}-${{ hashFiles('driver/config/pester-*-closure.lock.json') }}
 
       - name: Prepare locked Pester runtime under verified PowerShell
         id: prepare_pester_runtime
         shell: pwsh
+        env:
+          KC_MATRIX_PLATFORM: ${{ matrix.platform }}
+          KC_MATRIX_ARCHITECTURE: ${{ matrix.architecture }}
+          KC_MATRIX_EXECUTABLE: ${{ matrix.executable }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $actualExecutable = [IO.Path]::GetFullPath([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
-          if (-not $actualExecutable.Equals([IO.Path]::GetFullPath($env:KC_POWERSHELL_EXECUTABLE), [StringComparison]::OrdinalIgnoreCase)) {
-            throw 'The Pester setup workflow step is not running under the verified latest PowerShell executable.'
-          }
+          & (Join-Path $env:KC_DRIVER_ROOT 'scripts/Prepare-WorkflowPowerShell.ps1') -Mode Verify `
+            -Platform ([string]$env:KC_MATRIX_PLATFORM) -ExpectedArchitecture ([string]$env:KC_MATRIX_ARCHITECTURE) -ExecutableName ([string]$env:KC_MATRIX_EXECUTABLE)
           $env:RUN_OWNED_ROOT = $env:KC_OWNED_ROOT
           & $env:KC_POWERSHELL_EXECUTABLE -NoProfile -NonInteractive -File (Join-Path $env:KC_DRIVER_ROOT 'scripts/Prepare-PesterRuntime.ps1') `
             -RuntimeExecutable $env:KC_POWERSHELL_EXECUTABLE -OwnedRoot $env:KC_OWNED_ROOT
@@ -428,12 +568,15 @@ jobs:
       - name: Prepare source tool receipts through the canonical validator
         id: prepare_source_tools
         shell: pwsh
+        env:
+          KC_MATRIX_PLATFORM: ${{ matrix.platform }}
+          KC_MATRIX_ARCHITECTURE: ${{ matrix.architecture }}
+          KC_MATRIX_EXECUTABLE: ${{ matrix.executable }}
+          KC_SOURCE_SETUP_GITHUB_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $actualExecutable = [IO.Path]::GetFullPath([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
-          if (-not $actualExecutable.Equals([IO.Path]::GetFullPath($env:KC_POWERSHELL_EXECUTABLE), [StringComparison]::OrdinalIgnoreCase)) {
-            throw 'Source-tool preparation is not running under the verified PowerShell executable.'
-          }
+          & (Join-Path $env:KC_DRIVER_ROOT 'scripts/Prepare-WorkflowPowerShell.ps1') -Mode Verify `
+            -Platform ([string]$env:KC_MATRIX_PLATFORM) -ExpectedArchitecture ([string]$env:KC_MATRIX_ARCHITECTURE) -ExecutableName ([string]$env:KC_MATRIX_EXECUTABLE)
           if (Test-Path -LiteralPath $env:KC_SOURCE_TOOLS_PATH) { throw 'Fresh source-tools output path unexpectedly exists before protected preparation.' }
           & $env:KC_POWERSHELL_EXECUTABLE -NoProfile -NonInteractive -File (Join-Path $env:KC_DRIVER_ROOT 'scripts/Validate.ps1') `
             -RepositoryRoot $env:KC_CANDIDATE_ROOT -PrepareSourceTools -ArtifactsRoot $env:KC_ARTIFACTS_ROOT `
@@ -444,8 +587,8 @@ jobs:
           $setupRunId = [string]$preparedTools.runId
           if ($setupRunId -cnotmatch '^[0-9a-f]{32}$' -or
               [string]$preparedTools.sourceRevision -cne $env:KC_HEAD_COMMIT -or
-              [string]$preparedTools.authorityRevision -cne '8e627baf54bd6e47862e6291b25e71cc45a2f2b7') {
-            throw 'Protected source setup receipt does not bind a fresh run to the exact candidate and 8e62 authority.'
+              [string]$preparedTools.authorityRevision -cne '6cee5b8e43fe4e327fedc788865f931c561d6e89') {
+            throw 'Protected source setup receipt does not bind a fresh run to the exact candidate and 6cee5b8 authority.'
           }
           $sourceToolsSha256 = (Get-FileHash -LiteralPath $env:KC_SOURCE_TOOLS_PATH -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
           $setupBinding = [ordered]@{
@@ -456,7 +599,7 @@ jobs:
             sourceToolsPath = [IO.Path]::GetFullPath($env:KC_SOURCE_TOOLS_PATH)
             sourceToolsSha256 = $sourceToolsSha256
             candidateRevision = [string]$env:KC_HEAD_COMMIT
-            authorityRevision = '8e627baf54bd6e47862e6291b25e71cc45a2f2b7'
+            authorityRevision = '6cee5b8e43fe4e327fedc788865f931c561d6e89'
           }
           [IO.File]::WriteAllText((Join-Path $env:KC_ARTIFACTS_ROOT 'source-tools-setup-binding.json'), (($setupBinding | ConvertTo-Json -Depth 5) + "`n"), [Text.UTF8Encoding]::new($false))
           [IO.File]::AppendAllText($env:GITHUB_ENV, "KC_SOURCE_TOOLS_RUN_ID=$setupRunId`nKC_SOURCE_TOOLS_SHA256=$sourceToolsSha256`n", [Text.UTF8Encoding]::new($false))
@@ -467,6 +610,9 @@ jobs:
         shell: pwsh
         env:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
+          KC_MATRIX_PLATFORM: ${{ matrix.platform }}
+          KC_MATRIX_ARCHITECTURE: ${{ matrix.architecture }}
+          KC_MATRIX_EXECUTABLE: ${{ matrix.executable }}
         run: |
           $sourceTimer = [Diagnostics.Stopwatch]::StartNew()
           $sourceStartedAtUtc = [DateTime]::UtcNow
@@ -474,10 +620,8 @@ jobs:
           $sourcePhaseState = 'failed'
           try {
             $ErrorActionPreference = 'Stop'
-            $actualExecutable = [IO.Path]::GetFullPath([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
-            if (-not $actualExecutable.Equals([IO.Path]::GetFullPath($env:KC_POWERSHELL_EXECUTABLE), [StringComparison]::OrdinalIgnoreCase)) {
-              throw 'Protected source validation is not running under the verified PowerShell executable.'
-            }
+            & (Join-Path $env:KC_DRIVER_ROOT 'scripts/Prepare-WorkflowPowerShell.ps1') -Mode Verify `
+              -Platform ([string]$env:KC_MATRIX_PLATFORM) -ExpectedArchitecture ([string]$env:KC_MATRIX_ARCHITECTURE) -ExecutableName ([string]$env:KC_MATRIX_EXECUTABLE)
             & $env:KC_POWERSHELL_EXECUTABLE -NoProfile -NonInteractive -File (Join-Path $env:KC_DRIVER_ROOT 'scripts/Validate.ps1') `
               -RepositoryRoot $env:KC_CANDIDATE_ROOT -SourceValidation -ArtifactsRoot $env:KC_ARTIFACTS_ROOT `
               -SourceToolsPath $env:KC_SOURCE_TOOLS_PATH -AuthorityRepositoryRoot $env:KC_AUTHORITY_ROOT `
@@ -500,7 +644,7 @@ jobs:
               elapsedSeconds = [Math]::Round($sourceTimer.Elapsed.TotalSeconds, 3)
               candidateRevision = [string]$env:KC_HEAD_COMMIT
               baseRevision = [string]$env:KC_BASE_COMMIT
-              authorityRevision = '8e627baf54bd6e47862e6291b25e71cc45a2f2b7'
+              authorityRevision = '6cee5b8e43fe4e327fedc788865f931c561d6e89'
               observedProcessExitCode = if ($null -ne $sourceProcessExitCode) { [int]$sourceProcessExitCode } else { $null }
             }
             [IO.File]::WriteAllText((Join-Path $env:KC_ARTIFACTS_ROOT 'source-phase-timing.json'), (($phaseTiming | ConvertTo-Json -Depth 5) + "`n"), [Text.UTF8Encoding]::new($false))
@@ -518,6 +662,7 @@ jobs:
           EXPECTED_EVENT_BASE: ${{ github.event.pull_request.base.sha || github.event.before || inputs.base_commit }}
           EXPECTED_HELPER_SHA256: ${{ steps.bind_identities.outputs.protected_helper_sha256 }}
           EXPECTED_RUN_NONCE: ${{ steps.bind_identities.outputs.run_nonce }}
+          EXPECTED_GIT_COMMAND_PATH: ${{ steps.bind_identities.outputs.git_command_path }}
           EXPECTED_GIT_PATH: ${{ steps.bind_identities.outputs.git_path }}
           EXPECTED_GIT_SHA256: ${{ steps.bind_identities.outputs.git_sha256 }}
           EXPECTED_SOURCE_TOOLS_RUN_ID: ${{ steps.prepare_source_tools.outputs.run_id }}
@@ -525,8 +670,23 @@ jobs:
           PREPARE_PESTER_OUTCOME: ${{ steps.prepare_pester_runtime.outcome }}
           PREPARE_SOURCE_TOOLS_OUTCOME: ${{ steps.prepare_source_tools.outcome }}
           SOURCE_VALIDATION_OUTCOME: ${{ steps.source_validation.outcome }}
+          KC_MATRIX_PLATFORM: ${{ matrix.platform }}
+          KC_MATRIX_ARCHITECTURE: ${{ matrix.architecture }}
+          KC_MATRIX_EXECUTABLE: ${{ matrix.executable }}
         run: |
           $ErrorActionPreference = 'Stop'
+          foreach ($requiredName in @(
+            'KC_DRIVER_ROOT', 'KC_POWERSHELL_EXECUTABLE', 'KC_POWERSHELL_VERSION', 'KC_POWERSHELL_ARCHIVE_SHA256',
+            'PROTECTED_GITHUB_WORKSPACE', 'PROTECTED_RUNNER_TEMP', 'EXPECTED_EVENT_HEAD', 'EXPECTED_EVENT_BASE',
+            'EXPECTED_HELPER_SHA256', 'EXPECTED_RUN_NONCE', 'EXPECTED_GIT_COMMAND_PATH', 'EXPECTED_GIT_PATH',
+            'EXPECTED_GIT_SHA256', 'EXPECTED_SOURCE_TOOLS_RUN_ID', 'EXPECTED_SOURCE_TOOLS_SHA256'
+          )) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($requiredName, 'Process'))) {
+              throw "Required workflow value '$requiredName' is missing before final source evidence verification."
+            }
+          }
+          & (Join-Path $env:KC_DRIVER_ROOT 'scripts/Prepare-WorkflowPowerShell.ps1') -Mode Verify `
+            -Platform ([string]$env:KC_MATRIX_PLATFORM) -ExpectedArchitecture ([string]$env:KC_MATRIX_ARCHITECTURE) -ExecutableName ([string]$env:KC_MATRIX_EXECUTABLE)
           function Get-FileSha256 {
             param([Parameter(Mandatory = $true)][string] $Path)
             return (Get-FileHash -LiteralPath $Path -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
@@ -550,10 +710,33 @@ jobs:
             }
           }
           # PROTECTED_SOURCE_BINDING_GUARD_BEGIN
+          $pathComparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+          function Resolve-RunnerExecutable {
+            param([Parameter(Mandatory = $true)][string] $CommandPath, [Parameter(Mandatory = $true)][string] $Name)
+            $fullCommandPath = [IO.Path]::GetFullPath($CommandPath)
+            $commandItem = Get-Item -LiteralPath $fullCommandPath -Force -ErrorAction Stop
+            if ($commandItem.PSIsContainer) { throw "$Name command path must be a file." }
+            if ($IsWindows) {
+              if (($commandItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "$Name command path must be a plain, non-reparse file on Windows."
+              }
+              return $fullCommandPath
+            }
+            $resolvedTarget = if (($commandItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+              [IO.File]::ResolveLinkTarget($CommandPath, $true)
+            } else { $commandItem }
+            if ($null -eq $resolvedTarget) { throw "$Name command path symbolic link could not be resolved." }
+            $physicalPath = [IO.Path]::GetFullPath([string]$resolvedTarget.FullName)
+            $physicalItem = Get-Item -LiteralPath $physicalPath -Force -ErrorAction Stop
+            if ($physicalItem.PSIsContainer -or ($physicalItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+              throw "$Name resolved physical target must be a regular, non-link file."
+            }
+            return $physicalPath
+          }
           function Assert-WorkflowPathBinding {
             param([Parameter(Mandatory = $true)][string] $Observed, [Parameter(Mandatory = $true)][string] $Expected, [Parameter(Mandatory = $true)][string] $Name)
             if ([string]::IsNullOrWhiteSpace($Observed) -or
-                -not [IO.Path]::GetFullPath($Observed).Equals([IO.Path]::GetFullPath($Expected), [StringComparison]::OrdinalIgnoreCase)) {
+                -not [IO.Path]::GetFullPath($Observed).Equals([IO.Path]::GetFullPath($Expected), $pathComparison)) {
               throw "$Name differs from its immutable workflow binding."
             }
           }
@@ -575,6 +758,7 @@ jobs:
               $expectedHeadCommit -cnotmatch '^[0-9a-f]{40}$' -or
               $expectedRunNonce -cnotmatch '^[0-9a-f]{32}$' -or
               [string]$env:EXPECTED_HELPER_SHA256 -cnotmatch '^[0-9a-f]{64}$' -or
+              [string]::IsNullOrWhiteSpace([string]$env:EXPECTED_GIT_COMMAND_PATH) -or
               [string]$env:EXPECTED_GIT_SHA256 -cnotmatch '^[0-9a-f]{64}$' -or
               [string]$env:EXPECTED_SOURCE_TOOLS_RUN_ID -cnotmatch '^[0-9a-f]{32}$' -or
               [string]$env:EXPECTED_SOURCE_TOOLS_SHA256 -cnotmatch '^[0-9a-f]{64}$') {
@@ -582,7 +766,7 @@ jobs:
           }
           $expectedOwnedRoot = Join-Path $env:PROTECTED_RUNNER_TEMP "kc-$expectedRunNonce"
           $expectedRuntimeRoot = Join-Path $expectedOwnedRoot 'runtime'
-          $expectedArtifactsRoot = Join-Path ([IO.Path]::GetPathRoot($env:PROTECTED_RUNNER_TEMP)) "a-$expectedRunNonce"
+          $expectedArtifactsRoot = if ($IsWindows) { Join-Path ([IO.Path]::GetPathRoot($env:PROTECTED_RUNNER_TEMP)) "a-$expectedRunNonce" } else { Join-Path $env:PROTECTED_RUNNER_TEMP "a-$expectedRunNonce" }
           $expectedSourceToolsPath = Join-Path $expectedArtifactsRoot 'source-tools.json'
           foreach ($binding in @(
             @{ Name = 'Candidate root'; Observed = [string]$env:KC_CANDIDATE_ROOT; Expected = $expectedCandidateRoot },
@@ -603,7 +787,15 @@ jobs:
               [string]$env:KC_SOURCE_TOOLS_SHA256 -cne [string]$env:EXPECTED_SOURCE_TOOLS_SHA256) {
             throw 'Protected source environment identity differs from immutable event or setup outputs.'
           }
-          $gitPath = [IO.Path]::GetFullPath([string]$env:EXPECTED_GIT_PATH)
+          $currentGitCommand = Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          $currentGitCommandPath = [IO.Path]::GetFullPath([string]$currentGitCommand.Path)
+          if (-not $currentGitCommandPath.Equals([IO.Path]::GetFullPath([string]$env:EXPECTED_GIT_COMMAND_PATH), $pathComparison)) {
+            throw 'Protected Git command path changed after identity binding.'
+          }
+          $gitPath = Resolve-RunnerExecutable -CommandPath $currentGitCommandPath -Name 'Git'
+          if (-not $gitPath.Equals([IO.Path]::GetFullPath([string]$env:EXPECTED_GIT_PATH), $pathComparison)) {
+            throw 'Protected Git resolved physical path changed after identity binding.'
+          }
           Assert-WorkflowPlainFile -Path $gitPath -Name 'Protected Git executable'
           if ((Get-FileHash -LiteralPath $gitPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant() -cne [string]$env:EXPECTED_GIT_SHA256) {
             throw 'Protected Git executable bytes changed after identity binding.'
@@ -646,7 +838,7 @@ jobs:
             if ([string]$phaseTiming.phase -cne 'source-validation' -or
                 [string]$phaseTiming.candidateRevision -cne $env:KC_HEAD_COMMIT -or
                 [string]$phaseTiming.baseRevision -cne $env:KC_BASE_COMMIT -or
-                [string]$phaseTiming.authorityRevision -cne '8e627baf54bd6e47862e6291b25e71cc45a2f2b7') {
+                [string]$phaseTiming.authorityRevision -cne '6cee5b8e43fe4e327fedc788865f931c561d6e89') {
               throw 'Source-validation timing record does not bind the exact candidate, base, and authority.'
             }
             if ($null -eq $phaseTiming.observedProcessExitCode -or [int]$phaseTiming.observedProcessExitCode -ne 0) {
@@ -665,7 +857,7 @@ jobs:
             report = 'protected-source-total-timing-v1'
             candidateRevision = [string]$env:KC_HEAD_COMMIT
             baseRevision = [string]$env:KC_BASE_COMMIT
-            authorityRevision = '8e627baf54bd6e47862e6291b25e71cc45a2f2b7'
+            authorityRevision = '6cee5b8e43fe4e327fedc788865f931c561d6e89'
             startedAtUtc = $runStartedAtUtc.ToString('O', [Globalization.CultureInfo]::InvariantCulture)
             sourceValidationCompletedAtUtc = $sourceCompletedAtUtc.ToString('O', [Globalization.CultureInfo]::InvariantCulture)
             completedAtUtc = [DateTime]::UtcNow.ToString('O', [Globalization.CultureInfo]::InvariantCulture)
@@ -686,6 +878,7 @@ jobs:
           $requiredFiles = @(
             (Join-Path $env:KC_ARTIFACTS_ROOT 'source-tools.json'),
             (Join-Path $env:KC_ARTIFACTS_ROOT 'source-tools-setup-binding.json'),
+            (Join-Path $env:KC_ARTIFACTS_ROOT 'python-runtime-before-source-setup.json'),
             (Join-Path $env:KC_ARTIFACTS_ROOT 'node-runtime-before-source-setup.json'),
             (Join-Path $env:KC_ARTIFACTS_ROOT 'powershell-runtime-setup.json'),
             (Join-Path $env:KC_ARTIFACTS_ROOT 'powershell-release-hashes.sha256'),
@@ -696,6 +889,67 @@ jobs:
               throw "Protected source evidence is missing or empty: $path"
             }
           }
+          $pythonEvidencePath = Join-Path $env:KC_ARTIFACTS_ROOT 'python-runtime-before-source-setup.json'
+          $pythonEvidence = Get-Content -LiteralPath $pythonEvidencePath -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 20 -ErrorAction Stop
+          $currentPythonCommand = Get-Command python -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          $currentPythonCommandPath = [IO.Path]::GetFullPath([string]$currentPythonCommand.Source)
+          $currentPythonPhysicalPath = Resolve-RunnerExecutable -CommandPath $currentPythonCommandPath -Name 'Python'
+          if ([string]$pythonEvidence.report -cne 'approved-python-runtime-before-source-setup-v1' -or
+              [string]$pythonEvidence.pythonVersion -cnotmatch '^3\.12\.[0-9]+$' -or
+              -not $currentPythonCommandPath.Equals([IO.Path]::GetFullPath([string]$pythonEvidence.pythonCommandPath), $pathComparison) -or
+              -not $currentPythonPhysicalPath.Equals([IO.Path]::GetFullPath([string]$pythonEvidence.pythonExecutablePath), $pathComparison)) {
+            throw 'Approved Python runtime identity differs from its captured source-setup evidence.'
+          }
+          Assert-WorkflowPlainFile -Path $currentPythonPhysicalPath -Name 'Approved Python physical executable'
+          if ((Get-FileSha256 -Path $currentPythonPhysicalPath) -cne [string]$pythonEvidence.pythonExecutableSha256) {
+            throw 'Approved Python runtime physical executable bytes changed after capture.'
+          }
+          $verifiedPythonVersion = @(& $currentPythonCommandPath -I -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')
+          if ($LASTEXITCODE -ne 0 -or $verifiedPythonVersion.Count -ne 1 -or
+              ([string]$verifiedPythonVersion[0]).Trim() -cne [string]$pythonEvidence.pythonVersion) {
+            throw 'Approved Python runtime version changed after capture.'
+          }
+          $nodeEvidencePath = Join-Path $env:KC_ARTIFACTS_ROOT 'node-runtime-before-source-setup.json'
+          $nodeEvidence = Get-Content -LiteralPath $nodeEvidencePath -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 20 -ErrorAction Stop
+          $currentNodeCommand = Get-Command node -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          $currentNodeCommandPath = [IO.Path]::GetFullPath([string]$currentNodeCommand.Source)
+          $currentNodePhysicalPath = Resolve-RunnerExecutable -CommandPath $currentNodeCommandPath -Name 'Node'
+          $currentNpmCommand = Get-Command npm -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          $currentNpmCommandPath = [IO.Path]::GetFullPath([string]$currentNpmCommand.Source)
+          $currentNpmPhysicalPath = Resolve-RunnerExecutable -CommandPath $currentNpmCommandPath -Name 'npm'
+          foreach ($binding in @(
+            @{ Name = 'Node command path'; Observed = $currentNodeCommandPath; Expected = [string]$nodeEvidence.nodeCommandPath },
+            @{ Name = 'Node resolved physical path'; Observed = $currentNodePhysicalPath; Expected = [string]$nodeEvidence.nodeExecutablePath },
+            @{ Name = 'npm command path'; Observed = $currentNpmCommandPath; Expected = [string]$nodeEvidence.npmCommandPath },
+            @{ Name = 'npm resolved physical path'; Observed = $currentNpmPhysicalPath; Expected = [string]$nodeEvidence.npmLauncherPath }
+          )) {
+            if ([string]::IsNullOrWhiteSpace($binding.Expected) -or
+                -not [IO.Path]::GetFullPath($binding.Observed).Equals([IO.Path]::GetFullPath($binding.Expected), $pathComparison)) {
+              throw "$($binding.Name) differs from the captured approved Node runtime evidence."
+            }
+          }
+          Assert-WorkflowPlainFile -Path $currentNodePhysicalPath -Name 'Approved Node physical executable'
+          Assert-WorkflowPlainFile -Path $currentNpmPhysicalPath -Name 'Approved npm physical launcher'
+          Assert-WorkflowPlainFile -Path ([string]$nodeEvidence.npmCliPath) -Name 'Approved npm CLI'
+          Assert-WorkflowPlainFile -Path ([string]$nodeEvidence.npmPackageJsonPath) -Name 'Approved npm package manifest'
+          if ((Get-FileSha256 -Path $currentNodePhysicalPath) -cne [string]$nodeEvidence.nodeExecutableSha256) {
+            throw 'Approved Node runtime physical executable bytes changed after capture.'
+          }
+          if ((Get-FileSha256 -Path $currentNpmPhysicalPath) -cne [string]$nodeEvidence.npmLauncherSha256 -or
+              (Get-FileSha256 -Path ([string]$nodeEvidence.npmCliPath)) -cne [string]$nodeEvidence.npmCliSha256 -or
+              (Get-FileSha256 -Path ([string]$nodeEvidence.npmPackageJsonPath)) -cne [string]$nodeEvidence.npmPackageJsonSha256) {
+            throw 'Approved npm runtime bytes changed after capture.'
+          }
+          $verifiedNodeVersion = @(& $currentNodePhysicalPath --version)
+          $nodeVerificationExitCode = $LASTEXITCODE
+          $verifiedNpmVersion = @(& $currentNpmPhysicalPath --version)
+          $npmVerificationExitCode = $LASTEXITCODE
+          if ($nodeVerificationExitCode -ne 0 -or $verifiedNodeVersion.Count -ne 1 -or
+              ([string]$verifiedNodeVersion[0]).Trim() -cne [string]$nodeEvidence.nodeVersion -or
+              $npmVerificationExitCode -ne 0 -or $verifiedNpmVersion.Count -ne 1 -or
+              ([string]$verifiedNpmVersion[0]).Trim() -cne [string]$nodeEvidence.npmVersion) {
+            throw 'Approved Node or npm runtime version changed after capture.'
+          }
           $sourceTools = Get-Content -LiteralPath (Join-Path $env:KC_ARTIFACTS_ROOT 'source-tools.json') -Raw | ConvertFrom-Json -Depth 50
           $runId = [string]$sourceTools.runId
           if ($env:SOURCE_VALIDATION_OUTCOME -cne 'success' -or $env:PREPARE_PESTER_OUTCOME -cne 'success' -or
@@ -704,8 +958,8 @@ jobs:
           }
           if ($runId -cnotmatch '^[0-9a-f]{32}$' -or $runId -cne [string]$env:KC_SOURCE_TOOLS_RUN_ID -or
               [string]$sourceTools.sourceRevision -cne $env:KC_HEAD_COMMIT -or
-              [string]$sourceTools.authorityRevision -cne '8e627baf54bd6e47862e6291b25e71cc45a2f2b7') {
-            throw 'Source tools receipt has no fresh run identity bound to the exact candidate and 8e62 authority.'
+              [string]$sourceTools.authorityRevision -cne '6cee5b8e43fe4e327fedc788865f931c561d6e89') {
+            throw 'Source tools receipt has no fresh run identity bound to the exact candidate and 6cee5b8 authority.'
           }
           $sourceToolsPath = Join-Path $env:KC_ARTIFACTS_ROOT 'source-tools.json'
           $sourceToolsSha256Before = (Get-FileHash -LiteralPath $sourceToolsPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
@@ -717,7 +971,7 @@ jobs:
               [string]$setupBinding.runId -cne $runId -or
               [string]$setupBinding.sourceToolsSha256 -cne $sourceToolsSha256Before -or
               [string]$setupBinding.candidateRevision -cne $env:KC_HEAD_COMMIT -or
-              [string]$setupBinding.authorityRevision -cne '8e627baf54bd6e47862e6291b25e71cc45a2f2b7') {
+              [string]$setupBinding.authorityRevision -cne '6cee5b8e43fe4e327fedc788865f931c561d6e89') {
             throw 'Protected source setup binding differs from the fresh prepared receipt.'
           }
           $sourceValidationRoot = Join-Path $env:KC_ARTIFACTS_ROOT "source-validation-$runId"
@@ -739,22 +993,28 @@ jobs:
           }
 
           . $protectedHelperPath
-          $authorityPin = Get-KnowledgeContentPreparedAuthorityPin -Commit '8e627baf54bd6e47862e6291b25e71cc45a2f2b7'
+          $authorityPin = Get-KnowledgeContentPreparedAuthorityPin -Commit '6cee5b8e43fe4e327fedc788865f931c561d6e89'
           $verifiedAuthority = Assert-KnowledgeContentPreparedAuthorityCheckout -GitPath $gitPath -AuthorityRoot $env:KC_AUTHORITY_ROOT -AuthorityPin $authorityPin
-          if ([string]$verifiedAuthority.revision -cne '8e627baf54bd6e47862e6291b25e71cc45a2f2b7') {
-            throw 'Raw 32-file authority verification did not retain the exact 8e62 revision.'
+          if ([string]$verifiedAuthority.revision -cne '6cee5b8e43fe4e327fedc788865f931c561d6e89') {
+            throw 'Raw 49-file authority verification did not retain the exact 6cee5b8 revision.'
           }
           $authorityRunnerPath = [string]$verifiedAuthority.runnerPath
           . $authorityRunnerPath -DefineFunctionsOnly -CandidateRoot $env:KC_CANDIDATE_ROOT `
             -AdapterPath $adapterSnapshotPath -ArtifactsRoot $sourceValidationRoot `
             -SourceRepository 'https://github.com/SyuanTsai/Skill-Knowledge-Content.git' `
             -SourceRevision $env:KC_HEAD_COMMIT -BaseRevision $env:KC_BASE_COMMIT `
-            -AuthorityRevision '8e627baf54bd6e47862e6291b25e71cc45a2f2b7'
+            -AuthorityRevision '6cee5b8e43fe4e327fedc788865f931c561d6e89'
+          $validationSecurityPolicy = Get-Content -LiteralPath (Join-Path $env:KC_AUTHORITY_ROOT 'docs/standards/validation-security-gate.json') -Raw | ConvertFrom-Json -Depth 100
+          $skillSpectorStages = @($validationSecurityPolicy.stages | Where-Object { [string]$_.id -ceq 'skillspector-static' })
+          if ($skillSpectorStages.Count -ne 1 -or $null -eq $skillSpectorStages[0].platformUnavailableException) {
+            throw 'Authority validation security policy has no unique SkillSpector platform exception contract.'
+          }
           [void](Assert-StandardCoreSourceCheckReport -Report $report `
             -ExpectedSourceRevision $env:KC_HEAD_COMMIT -ExpectedBaseRevision $env:KC_BASE_COMMIT `
-            -ExpectedAuthorityRevision '8e627baf54bd6e47862e6291b25e71cc45a2f2b7' `
+            -ExpectedAuthorityRevision '6cee5b8e43fe4e327fedc788865f931c561d6e89' `
             -ExpectedEventName $env:GITHUB_EVENT_NAME -ArtifactsRoot $sourceValidationRoot `
-            -OutputPath $sourceReport -ProcessExitCode $observedSourceExitCode)
+            -OutputPath $sourceReport -ProcessExitCode $observedSourceExitCode `
+            -ValidationSecurityPolicy $skillSpectorStages[0].platformUnavailableException)
           $sourceReportSha256After = (Get-FileHash -LiteralPath $sourceReport -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
           if ($sourceReportSha256After -cne $sourceReportSha256Before) {
             throw 'Canonical source report bytes changed during final protected authority assertion.'
@@ -768,76 +1028,281 @@ jobs:
           $totalTiming.twentyMinuteTargetMet = ($totalTiming.totalSeconds -le 1200)
           $totalTiming.reportAssertionOutcome = 'passed'
           [IO.File]::WriteAllText($totalTimingPath, (($totalTiming | ConvertTo-Json -Depth 10) + "`n"), [Text.UTF8Encoding]::new($false))
-          Write-Host "Final 8e62 source report assertion passed; report SHA256 $sourceReportSha256After"
+          Write-Host "Final 6cee5b8 source report assertion passed; report SHA256 $sourceReportSha256After"
           Write-Host "Fresh source-tools receipt SHA256 remained $sourceToolsSha256After"
           Write-Host "Source inventory timing SHA256 $((Get-FileHash -LiteralPath $timingSidecar -Algorithm SHA256).Hash.ToLowerInvariant())"
           Write-Host "Setup/source/total timing sidecar: $totalTimingPath"
+
+      - name: Write platform leg receipt
+        id: write_leg_receipt
+        if: always()
+        shell: pwsh
+        env:
+          EXPECTED_CANDIDATE: ${{ github.event.pull_request.head.sha || github.sha }}
+          EXPECTED_BASE: ${{ github.event.pull_request.base.sha || github.event.before || inputs.base_commit }}
+          PRESERVE_OUTCOME: ${{ steps.preserve_checkout_bytes.outcome }}
+          CANDIDATE_CHECKOUT_OUTCOME: ${{ steps.checkout_candidate.outcome }}
+          AUTHORITY_CHECKOUT_OUTCOME: ${{ steps.checkout_authority.outcome }}
+          DRIVER_CHECKOUT_OUTCOME: ${{ steps.checkout_driver.outcome }}
+          BIND_OUTCOME: ${{ steps.bind_identities.outcome }}
+          GO_SETUP_OUTCOME: ${{ steps.setup_go.outcome }}
+          GO_CAPTURE_OUTCOME: ${{ steps.capture_go.outcome }}
+          PYTHON_SETUP_OUTCOME: ${{ steps.setup_python.outcome }}
+          PYTHON_CAPTURE_OUTCOME: ${{ steps.capture_python.outcome }}
+          NODE_SETUP_OUTCOME: ${{ steps.setup_node.outcome }}
+          NODE_CAPTURE_OUTCOME: ${{ steps.capture_node.outcome }}
+          RELEASE_OUTCOME: ${{ steps.powershell_release.outcome }}
+          POWERSHELL_CACHE_OUTCOME: ${{ steps.restore_powershell_cache.outcome }}
+          INSTALL_OUTCOME: ${{ steps.install_powershell.outcome }}
+          RUNTIME_OUTCOME: ${{ steps.verify_runtime.outcome }}
+          PESTER_CACHE_OUTCOME: ${{ steps.restore_pester_cache.outcome }}
+          PESTER_OUTCOME: ${{ steps.prepare_pester_runtime.outcome }}
+          TOOL_SETUP_OUTCOME: ${{ steps.prepare_source_tools.outcome }}
+          SOURCE_OUTCOME: ${{ steps.source_validation.outcome }}
+          EVIDENCE_OUTCOME: ${{ steps.verify_source_evidence.outcome }}
+          KC_MATRIX_PLATFORM: ${{ matrix.platform }}
+          KC_MATRIX_OS: ${{ matrix.os }}
+          KC_MATRIX_ARCHITECTURE: ${{ matrix.architecture }}
+          KC_RUNNER_OS: ${{ runner.os }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sourceReportSha256 = $null
+          $setupSeconds = $null; $sourceSeconds = $null; $totalSeconds = $null
+          $pythonEvidence = $null
+          if (-not [string]::IsNullOrWhiteSpace([string]$env:KC_ARTIFACTS_ROOT) -and
+              (Test-Path -LiteralPath $env:KC_ARTIFACTS_ROOT -PathType Container)) {
+            $pythonEvidencePath = Join-Path $env:KC_ARTIFACTS_ROOT 'python-runtime-before-source-setup.json'
+            if (Test-Path -LiteralPath $pythonEvidencePath -PathType Leaf) {
+              $pythonEvidence = Get-Content -LiteralPath $pythonEvidencePath -Raw | ConvertFrom-Json -Depth 20
+            }
+            $reports = @(Get-ChildItem -LiteralPath $env:KC_ARTIFACTS_ROOT -Recurse -File -Filter 'knowledge-content-source-validation.json' -ErrorAction SilentlyContinue)
+            if ($reports.Count -eq 1) { $sourceReportSha256 = (Get-FileHash -LiteralPath $reports[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
+            $timings = @(Get-ChildItem -LiteralPath $env:KC_ARTIFACTS_ROOT -File -Filter 'source-workflow-timing-*.json' -ErrorAction SilentlyContinue)
+            if ($timings.Count -eq 1) {
+              $timing = Get-Content -LiteralPath $timings[0].FullName -Raw | ConvertFrom-Json -Depth 20
+              $setupSeconds = $timing.setupAndInstallSeconds
+              $sourceSeconds = $timing.sourceValidationSeconds
+              $totalSeconds = $timing.totalSeconds
+            }
+          }
+          $receipt = [ordered]@{
+            schemaVersion = 1
+            receipt = 'knowledge-content-platform-leg-v1'
+            platform = [string]$env:KC_MATRIX_PLATFORM
+            os = [string]$env:KC_MATRIX_OS
+            arch = [string]$env:KC_MATRIX_ARCHITECTURE
+            runnerOs = [string]$env:KC_RUNNER_OS
+            runId = [string]$env:GITHUB_RUN_ID
+            runAttempt = [string]$env:GITHUB_RUN_ATTEMPT
+            eventName = [string]$env:GITHUB_EVENT_NAME
+            candidateSha = [string]$env:EXPECTED_CANDIDATE
+            baseSha = [string]$env:EXPECTED_BASE
+            authoritySha = '6cee5b8e43fe4e327fedc788865f931c561d6e89'
+            pythonVersion = [string]$pythonEvidence.pythonVersion
+            powerShell = [ordered]@{ version = [string]$env:KC_POWERSHELL_VERSION; archiveSha256 = [string]$env:KC_POWERSHELL_ARCHIVE_SHA256 }
+            outcomes = [ordered]@{
+              preserveCheckoutBytes = [string]$env:PRESERVE_OUTCOME
+              candidateCheckout = [string]$env:CANDIDATE_CHECKOUT_OUTCOME
+              authorityCheckout = [string]$env:AUTHORITY_CHECKOUT_OUTCOME
+              driverCheckout = [string]$env:DRIVER_CHECKOUT_OUTCOME
+              identityBinding = [string]$env:BIND_OUTCOME
+              goSetup = [string]$env:GO_SETUP_OUTCOME
+              goCapture = [string]$env:GO_CAPTURE_OUTCOME
+              pythonSetup = [string]$env:PYTHON_SETUP_OUTCOME
+              pythonCapture = [string]$env:PYTHON_CAPTURE_OUTCOME
+              nodeSetup = [string]$env:NODE_SETUP_OUTCOME
+              nodeCapture = [string]$env:NODE_CAPTURE_OUTCOME
+              powerShellRelease = [string]$env:RELEASE_OUTCOME
+              powerShellCache = [string]$env:POWERSHELL_CACHE_OUTCOME
+              powerShellInstall = [string]$env:INSTALL_OUTCOME
+              powerShellRuntime = [string]$env:RUNTIME_OUTCOME
+              pesterCache = [string]$env:PESTER_CACHE_OUTCOME
+              pesterPreparation = [string]$env:PESTER_OUTCOME
+              sourceToolPreparation = [string]$env:TOOL_SETUP_OUTCOME
+              sourceValidation = [string]$env:SOURCE_OUTCOME
+              finalEvidence = [string]$env:EVIDENCE_OUTCOME
+            }
+            sourceReportSha256 = $sourceReportSha256
+            timing = [ordered]@{ setupSeconds = $setupSeconds; sourceValidationSeconds = $sourceSeconds; totalSeconds = $totalSeconds }
+          }
+          $receiptPath = Join-Path $env:RUNNER_TEMP ("kc-leg-receipt-{0}.json" -f [string]$env:KC_MATRIX_PLATFORM)
+          [IO.File]::WriteAllText($receiptPath, (($receipt | ConvertTo-Json -Depth 10) + "`n"), [Text.UTF8Encoding]::new($false))
+          [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "path=$receiptPath`n", [Text.UTF8Encoding]::new($false))
 
       - name: Upload complete protected source evidence
         if: always()
         uses: *upload-artifact-reference # actions/upload-artifact v7.0.2
         with:
-          name: standard-v1-source-validation-${{ github.run_id }}-${{ github.run_attempt }}
+          name: standard-v1-source-validation-${{ matrix.platform }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.KC_ARTIFACTS_ROOT }}
           if-no-files-found: warn
           include-hidden-files: true
 
-  # These jobs preserve the repository's existing required status contexts while
-  # keeping the canonical Standard v1 gate as the only validation policy.
+      - name: Upload platform leg receipt
+        if: always()
+        uses: *upload-artifact-reference # actions/upload-artifact v7.0.2
+        with:
+          name: kc-leg-receipt-${{ matrix.platform }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.write_leg_receipt.outputs.path }}
+          if-no-files-found: error
+
+  canonical-aggregate:
+    name: Knowledge & Content Standard v1 aggregate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: canonical-validation
+    if: ${{ always() }}
+    steps:
+      - name: Download all platform leg receipts
+        uses: *download-artifact-reference # actions/download-artifact v8.0.2
+        with:
+          pattern: kc-leg-receipt-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: receipts
+          merge-multiple: true
+
+      - name: Verify complete three-platform receipt set
+        if: always()
+        shell: pwsh
+        env:
+          MATRIX_RESULT: ${{ needs['canonical-validation'].result }}
+          EXPECTED_CANDIDATE: ${{ github.event.pull_request.head.sha || github.sha }}
+          EXPECTED_BASE: ${{ github.event.pull_request.base.sha || github.event.before || inputs.base_commit }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $problems = [Collections.Generic.List[string]]::new()
+          $rows = [Collections.Generic.List[object]]::new()
+          if ([string]$env:MATRIX_RESULT -cne 'success') {
+            $problems.Add("canonical-validation matrix result is '$env:MATRIX_RESULT', expected 'success'.")
+          }
+          $files = @(Get-ChildItem -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'receipts') -File -Filter 'kc-leg-receipt-*.json' -ErrorAction SilentlyContinue)
+          if ($files.Count -ne 3) { $problems.Add("Expected exactly three leg receipt files; found $($files.Count).") }
+          $receipts = [Collections.Generic.List[object]]::new()
+          foreach ($file in $files) {
+            try { $receipts.Add((Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json -Depth 20 -ErrorAction Stop)) }
+            catch { $problems.Add("Receipt '$($file.Name)' is invalid JSON: $($_.Exception.Message)") }
+          }
+          $expected = [ordered]@{
+            windows = [ordered]@{ os = 'windows-latest'; arch = 'x64'; runnerOs = 'Windows' }
+            linux = [ordered]@{ os = 'ubuntu-latest'; arch = 'x64'; runnerOs = 'Linux' }
+            macos = [ordered]@{ os = 'macos-latest'; arch = 'arm64'; runnerOs = 'macOS' }
+          }
+          $expectedOutcomes = @(
+            'preserveCheckoutBytes', 'candidateCheckout', 'authorityCheckout', 'driverCheckout', 'identityBinding',
+            'goSetup', 'goCapture', 'pythonSetup', 'pythonCapture', 'nodeSetup', 'nodeCapture', 'powerShellRelease', 'powerShellCache',
+            'powerShellInstall', 'powerShellRuntime', 'pesterCache', 'pesterPreparation',
+            'sourceToolPreparation', 'sourceValidation', 'finalEvidence'
+          )
+          foreach ($platform in $expected.Keys) {
+            $platformReceipts = @($receipts | Where-Object { [string]$_.platform -ceq $platform })
+            if ($platformReceipts.Count -ne 1) {
+              $problems.Add("Platform '$platform' must have exactly one receipt; found $($platformReceipts.Count).")
+              $rows.Add([pscustomobject]@{ platform = $platform; setup = '-'; source = '-'; total = '-'; status = 'missing/duplicate' })
+              continue
+            }
+            $receipt = $platformReceipts[0]
+            $platformExpected = $expected[$platform]
+            foreach ($binding in @(
+              @{ name = 'schemaVersion'; actual = [string]$receipt.schemaVersion; wanted = '1' },
+              @{ name = 'receipt'; actual = [string]$receipt.receipt; wanted = 'knowledge-content-platform-leg-v1' },
+              @{ name = 'os'; actual = [string]$receipt.os; wanted = [string]$platformExpected.os },
+              @{ name = 'arch'; actual = [string]$receipt.arch; wanted = [string]$platformExpected.arch },
+              @{ name = 'runnerOs'; actual = [string]$receipt.runnerOs; wanted = [string]$platformExpected.runnerOs },
+              @{ name = 'runId'; actual = [string]$receipt.runId; wanted = [string]$env:GITHUB_RUN_ID },
+              @{ name = 'runAttempt'; actual = [string]$receipt.runAttempt; wanted = [string]$env:GITHUB_RUN_ATTEMPT },
+              @{ name = 'eventName'; actual = [string]$receipt.eventName; wanted = [string]$env:GITHUB_EVENT_NAME },
+              @{ name = 'candidateSha'; actual = [string]$receipt.candidateSha; wanted = [string]$env:EXPECTED_CANDIDATE },
+              @{ name = 'baseSha'; actual = [string]$receipt.baseSha; wanted = [string]$env:EXPECTED_BASE },
+              @{ name = 'authoritySha'; actual = [string]$receipt.authoritySha; wanted = '6cee5b8e43fe4e327fedc788865f931c561d6e89' }
+            )) {
+              if ($binding.actual -cne $binding.wanted) { $problems.Add("$platform receipt $($binding.name)='$($binding.actual)', expected '$($binding.wanted)'.") }
+            }
+            if ([string]$receipt.pythonVersion -cnotmatch '^3\.12\.[0-9]+$') { $problems.Add("$platform receipt has no approved Python 3.12 version.") }
+            if ([string]$receipt.powerShell.version -cnotmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { $problems.Add("$platform receipt has no verified PowerShell version.") }
+            if ([string]$receipt.powerShell.archiveSha256 -cnotmatch '^[0-9a-f]{64}$') { $problems.Add("$platform receipt has no verified PowerShell archive SHA-256.") }
+            $outcomeNames = @($receipt.outcomes.PSObject.Properties.Name)
+            if (($outcomeNames -join "`n") -cne ($expectedOutcomes -join "`n")) {
+              $problems.Add("$platform receipt protected-step inventory is incomplete or reordered.")
+            }
+            foreach ($outcome in $receipt.outcomes.PSObject.Properties) {
+              if ([string]$outcome.Value -cne 'success') { $problems.Add("$platform protected step '$($outcome.Name)' outcome is '$($outcome.Value)'.") }
+            }
+            if ([string]$receipt.sourceReportSha256 -cnotmatch '^[0-9a-f]{64}$') { $problems.Add("$platform receipt has no source report SHA-256.") }
+            $rows.Add([pscustomobject]@{
+              platform = $platform
+              setup = if ($null -eq $receipt.timing.setupSeconds) { '-' } else { [string]$receipt.timing.setupSeconds }
+              source = if ($null -eq $receipt.timing.sourceValidationSeconds) { '-' } else { [string]$receipt.timing.sourceValidationSeconds }
+              total = if ($null -eq $receipt.timing.totalSeconds) { '-' } else { [string]$receipt.timing.totalSeconds }
+              status = if (@($receipt.outcomes.PSObject.Properties | Where-Object { [string]$_.Value -cne 'success' }).Count -eq 0) { 'success' } else { 'failed' }
+            })
+          }
+          $pythonMajorMinors = @($receipts | ForEach-Object {
+            $versionMatch = [regex]::Match([string]$_.pythonVersion, '^(?<majorMinor>[0-9]+\.[0-9]+)\.[0-9]+$')
+            if ($versionMatch.Success) { $versionMatch.Groups['majorMinor'].Value }
+          } | Sort-Object -Unique)
+          if ($pythonMajorMinors.Count -ne 1) {
+            $problems.Add('Python major.minor differs across platform receipts or is missing.')
+          }
+          foreach ($receipt in $receipts) {
+            if ([string]$receipt.platform -cnotin @('windows', 'linux', 'macos')) { $problems.Add("Unexpected receipt platform '$($receipt.platform)'.") }
+          }
+          $summary = [Collections.Generic.List[string]]::new()
+          $summary.Add('## Canonical validation timing')
+          $summary.Add('')
+          $summary.Add('| Platform | Setup (s) | Source validation (s) | Total (s) | Status |')
+          $summary.Add('|---|---:|---:|---:|---|')
+          foreach ($row in $rows) { $summary.Add("| $($row.platform) | $($row.setup) | $($row.source) | $($row.total) | $($row.status) |") }
+          $summary.Add('')
+          $summary.Add("Problems: $($problems.Count)")
+          [IO.File]::AppendAllLines($env:GITHUB_STEP_SUMMARY, $summary, [Text.UTF8Encoding]::new($false))
+          foreach ($problem in $problems) { Write-Output "::error::$problem" }
+          if ($problems.Count -gt 0) { throw "Canonical aggregate rejected $($problems.Count) problem(s)." }
+
+  # Preserve the existing required context names as pure all-leg status mirrors.
   repository-contract:
     name: repository-contract
     if: ${{ always() }}
-    needs:
-      - canonical-validation
-    runs-on: windows-latest
+    needs: [canonical-validation, canonical-aggregate]
+    runs-on: ubuntu-latest
     steps:
-      - name: Mirror canonical Standard v1 result
+      - name: Mirror complete canonical result
         shell: pwsh
         env:
-          CANONICAL_VALIDATION_RESULT: ${{ needs['canonical-validation'].result }}
+          MATRIX_RESULT: ${{ needs['canonical-validation'].result }}
+          AGGREGATE_RESULT: ${{ needs.canonical-aggregate.result }}
         run: |
-          $result = [string]$env:CANONICAL_VALIDATION_RESULT
-          if ($result -cne 'success') {
-            Write-Output "Canonical Standard v1 validation result: $result"
+          if ($env:MATRIX_RESULT -cne 'success' -or $env:AGGREGATE_RESULT -cne 'success') {
+            Write-Output "canonical-validation=$env:MATRIX_RESULT canonical-aggregate=$env:AGGREGATE_RESULT"
             exit 1
           }
-          Write-Output 'Canonical Standard v1 validation passed.'
-          exit 0
   skill-validator:
     name: skill-validator
     if: ${{ always() }}
-    needs:
-      - canonical-validation
-    runs-on: windows-latest
+    needs: [canonical-validation, canonical-aggregate]
+    runs-on: ubuntu-latest
     steps:
-      - name: Mirror canonical Standard v1 result
+      - name: Mirror complete canonical result
         shell: pwsh
         env:
-          CANONICAL_VALIDATION_RESULT: ${{ needs['canonical-validation'].result }}
+          MATRIX_RESULT: ${{ needs['canonical-validation'].result }}
+          AGGREGATE_RESULT: ${{ needs.canonical-aggregate.result }}
         run: |
-          $result = [string]$env:CANONICAL_VALIDATION_RESULT
-          if ($result -cne 'success') {
-            Write-Output "Canonical Standard v1 validation result: $result"
+          if ($env:MATRIX_RESULT -cne 'success' -or $env:AGGREGATE_RESULT -cne 'success') {
+            Write-Output "canonical-validation=$env:MATRIX_RESULT canonical-aggregate=$env:AGGREGATE_RESULT"
             exit 1
           }
-          Write-Output 'Canonical Standard v1 validation passed.'
-          exit 0
   skill-tools:
     name: skill-tools
     if: ${{ always() }}
-    needs:
-      - canonical-validation
-    runs-on: windows-latest
+    needs: [canonical-validation, canonical-aggregate]
+    runs-on: ubuntu-latest
     steps:
-      - name: Mirror canonical Standard v1 result
+      - name: Mirror complete canonical result
         shell: pwsh
         env:
-          CANONICAL_VALIDATION_RESULT: ${{ needs['canonical-validation'].result }}
+          MATRIX_RESULT: ${{ needs['canonical-validation'].result }}
+          AGGREGATE_RESULT: ${{ needs.canonical-aggregate.result }}
         run: |
-          $result = [string]$env:CANONICAL_VALIDATION_RESULT
-          if ($result -cne 'success') {
-            Write-Output "Canonical Standard v1 validation result: $result"
+          if ($env:MATRIX_RESULT -cne 'success' -or $env:AGGREGATE_RESULT -cne 'success') {
+            Write-Output "canonical-validation=$env:MATRIX_RESULT canonical-aggregate=$env:AGGREGATE_RESULT"
             exit 1
           }
-          Write-Output 'Canonical Standard v1 validation passed.'
-          exit 0
