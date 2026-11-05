@@ -44,9 +44,9 @@ BeforeAll {
 
     function New-ScopedAuthorityCandidate {
         $authority = New-PreparedAuthorityCandidate
-        $authority.commit = 'caabb681e508edfe2f01b41edea7fbc392ff6231'
-        $authority.archiveUrl = 'https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/caabb681e508edfe2f01b41edea7fbc392ff6231'
-        $authority.archiveSha256 = '6664af55fd27ba16af6a7fb1c8b54aafbf893320f5c4ad99b9f643c9d722184f'
+        $authority.commit = '4a2501581ab6d56c79e2c3d3d1e3cbe9ca4ee179'
+        $authority.archiveUrl = 'https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/4a2501581ab6d56c79e2c3d3d1e3cbe9ca4ee179'
+        $authority.archiveSha256 = '29b0f46585c4ee7ee7784063315ddbfaf938bc2105d446398c5b5a5c66173c22'
         return $authority
     }
 
@@ -220,18 +220,18 @@ throw 'source-import-probe-stop'
 }
 
 Describe 'Knowledge Content protected source driver preparation' {
-    # Scenario: the active public config selects the reviewed caabb authority through the prepared reader.
+    # Scenario: the active public config selects the reviewed 4a250 authority through the prepared reader.
     # Purpose: bind the active Standard v1 pin to the complete 49-file prepared source authority.
     It 'UnitT00_returns_the_complete_active_49_file_scoped_pin' {
         $config = Get-Content -LiteralPath (Join-Path $script:repositoryRoot 'config/standard-v1.json') -Raw | ConvertFrom-Json -Depth 20
-        $config.authority.commit | Should -Be 'caabb681e508edfe2f01b41edea7fbc392ff6231'
-        $config.authority.archiveSha256 | Should -Be '6664af55fd27ba16af6a7fb1c8b54aafbf893320f5c4ad99b9f643c9d722184f'
+        $config.authority.commit | Should -Be '4a2501581ab6d56c79e2c3d3d1e3cbe9ca4ee179'
+        $config.authority.archiveSha256 | Should -Be '29b0f46585c4ee7ee7784063315ddbfaf938bc2105d446398c5b5a5c66173c22'
 
         $pin = Get-KnowledgeContentPreparedAuthorityPin -Commit $config.authority.commit
         $pin.repository | Should -Be 'https://github.com/SyuanTsai/SyuanTsai-AI-Instructions.git'
-        $pin.commit | Should -Be 'caabb681e508edfe2f01b41edea7fbc392ff6231'
-        $pin.archiveUrl | Should -Be 'https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/caabb681e508edfe2f01b41edea7fbc392ff6231'
-        $pin.archiveSha256 | Should -Be '6664af55fd27ba16af6a7fb1c8b54aafbf893320f5c4ad99b9f643c9d722184f'
+        $pin.commit | Should -Be '4a2501581ab6d56c79e2c3d3d1e3cbe9ca4ee179'
+        $pin.archiveUrl | Should -Be 'https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/4a2501581ab6d56c79e2c3d3d1e3cbe9ca4ee179'
+        $pin.archiveSha256 | Should -Be '29b0f46585c4ee7ee7784063315ddbfaf938bc2105d446398c5b5a5c66173c22'
         @($config.authority.files).Count | Should -Be 49
         for ($index = 0; $index -lt $pin.files.Count; $index++) {
             $path = @($pin.files.Keys)[$index]
@@ -244,7 +244,7 @@ Describe 'Knowledge Content protected source driver preparation' {
         $pin.files['docs/standards/third-party-raw-skill-sources.md'] | Should -Be '18649fd56eada4a94a5d47de778669b0ebcecfb85b84f5c581d283b21979f7ac'
     }
 
-    # Scenario: the active candidate selects the complete reviewed caabb authority tuple.
+    # Scenario: the active candidate selects the complete reviewed 4a250 authority tuple.
     # Purpose: keep both protected source purposes on one exact approved pin.
     It 'UnitT01_accepts_exact_scoped_authority_with_all_49_members' {
         $authority = New-ScopedAuthorityCandidate
@@ -580,7 +580,7 @@ Describe 'Knowledge Content protected source driver preparation' {
         (Get-Content -LiteralPath $safePath -Raw) | Should -BeExactly '{"status":"passed"}'
     }
 
-    # Scenario: source validation is requested with the active caabb config, an obsolete config, or incomplete setup locations.
+    # Scenario: source validation is requested with the active 4a250 config, an obsolete config, or incomplete setup locations.
     # Purpose: accept only the complete active pin while continuing to reject stale receipts and missing trust roots.
     It 'UnitT55_accepts_active_scoped_pin_and_rejects_obsolete_or_incomplete_requests' {
         $activeAuthority = (Get-Content -LiteralPath (Join-Path $script:repositoryRoot 'config/standard-v1.json') -Raw | ConvertFrom-Json -Depth 20).authority
@@ -609,7 +609,7 @@ Describe 'Knowledge Content protected source driver preparation' {
         Assert-TestThrowsLike { Resolve-KnowledgeContentSourceRoute -BoundParameters @{ TrustedToolRoot = '' } } '*only valid for explicit source setup or validation*'
     }
 
-    # Scenario: setup and source execution are routed from the active caabb candidate config.
+    # Scenario: setup and source execution are routed from the active 4a250 candidate config.
     # Purpose: bind both explicit public modes to the exact active tuple without acquiring tools in this test.
     It 'UnitT70_routes_setup_and_validation_from_active_scoped_pin' {
         $activeAuthority = (Get-Content -LiteralPath (Join-Path $script:repositoryRoot 'config/standard-v1.json') -Raw | ConvertFrom-Json -Depth 20).authority
@@ -621,7 +621,7 @@ Describe 'Knowledge Content protected source driver preparation' {
         }
 
         $route.mode | Should -BeExactly 'prepare-source-tools'
-        $route.authority.commit | Should -BeExactly 'caabb681e508edfe2f01b41edea7fbc392ff6231'
+        $route.authority.commit | Should -BeExactly '4a2501581ab6d56c79e2c3d3d1e3cbe9ca4ee179'
         $activeAuthority.commit | Should -BeExactly $route.authority.commit
         { Resolve-KnowledgeContentSourceRoute -SourceValidation -SourceToolsPath $script:fixtureSourceToolsPath -AuthorityRepositoryRoot $script:fixtureAuthorityRoot -TrustedToolRoot $script:fixtureRuntimeRoot -CandidateAuthority $activeAuthority } | Should -Not -Throw
     }
@@ -772,9 +772,9 @@ Describe 'Knowledge Content protected source driver preparation' {
         }
     }
 
-    # Scenario: Three approved source-tool receipts bind the skill-tools launcher, JavaScript payload, and Node runtime.
-    # Purpose: Require the receipt and all three execution identities in the frozen source inventory.
-    It 'UnitT60_requires_every_source_receipt_and_skill_tools_launcher_payload_runtime_to_be_frozen' {
+    # Scenario: Three approved source-tool receipts bind executable tools plus the skill-tools JavaScript payload and Node runtime while its launcher shim remains outside the frozen inventory.
+    # Purpose: Accept the platform-specific npm launcher through receipt integrity without freezing its symlink or .cmd path, while retaining every executed file identity.
+    It 'UnitT60_accepts_the_skill_tools_launcher_outside_the_frozen_closure_but_requires_executed_files' {
         $root = Join-Path $TestDrive 'frozen-source-tools'
         [void](New-Item -ItemType Directory -Path $root)
         $toolPaths = [ordered]@{
@@ -801,16 +801,14 @@ Describe 'Knowledge Content protected source driver preparation' {
             $bindings += [pscustomobject]@{ path = $receiptPath; sha256 = $receiptHash }
             $frozen += [pscustomobject]@{ path = $receiptPath; sha256 = $receiptHash }
         }
-        foreach ($path in $toolPaths.Values) {
+        foreach ($path in @($toolPaths.validator, $toolPaths.entry, $toolPaths.node, $toolPaths.spector)) {
             $frozen += [pscustomobject]@{ path = $path; sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() }
         }
 
         { Assert-KnowledgeContentSourceReceiptClosureFrozen -Bindings $bindings -FrozenFiles $frozen } | Should -Not -Throw
-        foreach ($missingPath in @($toolPaths.shim, $toolPaths.entry, $toolPaths.node)) {
+        foreach ($missingPath in @($toolPaths.entry, $toolPaths.node, $toolPaths.validator, $toolPaths.spector)) {
             $withoutRequiredIdentity = @($frozen | Where-Object { [string]$_.path -cne $missingPath })
             Assert-TestThrowsLike { Assert-KnowledgeContentSourceReceiptClosureFrozen -Bindings $bindings -FrozenFiles $withoutRequiredIdentity } '*is not frozen exactly once*'
         }
-        $sourceDriver = Get-Content -LiteralPath $script:sourceDriverPath -Raw
-        $sourceDriver | Should -Match '\[string\]\$receipts\.\x27skill-tools\x27\.executablePath'
     }
 }

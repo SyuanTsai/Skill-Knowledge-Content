@@ -5,8 +5,8 @@
 Set-StrictMode -Version Latest
 
 $script:KnowledgeContentPreparedAuthorityRepository = 'https://github.com/SyuanTsai/SyuanTsai-AI-Instructions.git'
-$script:KnowledgeContentPreparedAuthorityCommit = 'caabb681e508edfe2f01b41edea7fbc392ff6231'
-$script:KnowledgeContentPreparedAuthorityArchiveSha256 = '6664af55fd27ba16af6a7fb1c8b54aafbf893320f5c4ad99b9f643c9d722184f'
+$script:KnowledgeContentPreparedAuthorityCommit = '4a2501581ab6d56c79e2c3d3d1e3cbe9ca4ee179'
+$script:KnowledgeContentPreparedAuthorityArchiveSha256 = '29b0f46585c4ee7ee7784063315ddbfaf938bc2105d446398c5b5a5c66173c22'
 $script:KnowledgeContentPreparedAuthorityFiles = [ordered]@{
     'docs/standards/README.md' = '69ddc46b4ca4aca06001aaa0fb5b078ef38168f67c21552f3b075548ea707441'
     'docs/standards/managed-skill-lifecycle.md' = '4e3f8595072d663f51d18aa28f42293fda5456362b49c0ea3f0157ae3dcf56dd'
@@ -21,16 +21,16 @@ $script:KnowledgeContentPreparedAuthorityFiles = [ordered]@{
     'docs/standards/validation-toolchain.json' = '1dddbf4c5736e22e56f6ecb298542f41d39e116ab00ca24ad18beb7a3eab40ed'
     'scripts/Invoke-StandardAuthorityGate.ps1' = '72dd032005a6d810f5de4ce492f964585678087a54f921e4fcb90cf5875effe1'
     'scripts/Resolve-PythonWheelClosure.py' = 'a17989f409f8394af2c851db4d33e9a5b003d0dc17a9689de8de0542c0862ca8'
-    'scripts/Resolve-StandardValidationTool.ps1' = '7b83154c8f8a37f1b32d968659e7fa4a1aeeaf7507ced136dde2cc162ef3b66d'
+    'scripts/Resolve-StandardValidationTool.ps1' = '419c519d6f25875b2e60ba910d7909bb84811aa295a110e1f737d300d0af1873'
     'docs/standards/schemas/standard-validation-adapter-v1.schema.json' = '11aa88fc25716d748bd4f514f1a44f02390ad1745dd5a5c5beee07f642fd5639'
     'docs/standards/schemas/standard-validation-evidence-v1.schema.json' = '2e8cad8361447baba45b16c47ef685ad2de4a7f27848dd8ddd3fd83e500f23bf'
     'docs/standards/standard-validation-contract-v1.json' = 'f39b2e40c5e9f5eed0abc0d033deea751c8ee978499a86dc4fde3beb65c65242'
     'docs/standards/pr12-source-merge-adoption.json' = '4c5262f2a11d228195230c15fa4faaf9614af6b59f110e5d9c08f242ce809175'
     'docs/standards/trust-anchors/human-approval-public-key.xml' = '1e46153b72d02f3ce2fb26becd449df4f1590d8e5cb441b1954006a5602bbd9b'
     'docs/standards/trust-anchors/trusted-supervisor-public-key.xml' = '4d550851f43405920156f40c9fc648d99a69dd73efc200f6968d8a837e7fbf27'
-    'scripts/Invoke-StandardValidation.ps1' = '9c4315b245f704e4fe5a713ed3a041fac601a5d9d5d74655571bb946935399de'
+    'scripts/Invoke-StandardValidation.ps1' = '0aeac3cc5e00f57774e92b74e3d0f9eb3b02eea99baf2e2778f767b1445ea51a'
     'docs/standards/schemas/standard-semantic-consent-evidence-v2.schema.json' = '109091979d0a47e2035d3d8b20963fcdb85680e5da737bf1f27121608115d430'
-    'scripts/StandardSemanticBridge.psm1' = '0089dad93fe2ee0143edff84f36b100cc5a3fdc8fea520c493936ae4d0b665d0'
+    'scripts/StandardSemanticBridge.psm1' = '62ffd8c635fa8edcb29407ac5760aad87136f6eaead200cb2109c67a4781d95f'
     'docs/standards/schemas/upstream-adapter-v1.schema.json' = '3cff6246463188a91cc54c6a46315a949314767a759c6214e5b28e4db95ac8d7'
     'docs/standards/upstream-adapter.json' = 'c4f5133b24841bb9c66182dc3d5a027596f864ec28e410d47249a67b3b97ad31'
     'scripts/Validate-UpstreamAdapter.ps1' = '3b6e6474690b1ae9f9486544b68f50ca29b96f5dbe6aa8d6c6cd8570afad500b'
@@ -43,7 +43,7 @@ $script:KnowledgeContentPreparedAuthorityFiles = [ordered]@{
     'docs/standards/static-parser-host-ownership.json' = '994acd989327d094d22ce2c68ca20eceec609f4e494f4e5d252cfcdef742de2c'
     'docs/standards/schemas/static-parser-host-ownership-v1.schema.json' = '7f8d766b7e36052b68d924c5886157734e9969c198b03b2dadf3a63bebc95bb3'
     'docs/standards/schemas/static-parser-profile-execution-v1.schema.json' = '6353bcd130093ffcdb7b6f979f8d115c02a31efae41e63f8a956e82935ab8887'
-    'scripts/platform-runtime.psd1' = '07ca38d14c6d1876ea30915e2cfe7467053f6eda70fd7eb589a01fc42fe82f39'
+    'scripts/platform-runtime.psd1' = '8813ca7122dbb424807fa44d2fb27b35a1f9712464838b7bf9617c43d9a3fcbe'
     'scripts/platform-runtime.psm1' = '3f0f09fede0ead288289058251264bec672cb3948ae7d9b0cd47eba97a494a01'
     'scripts/installer-safe-mutation.psm1' = 'ac1e73ffb1b8ea1b95fdc3a177449442281d3d485f62ec42e464f6f5f38ba359'
     'scripts/platform/Linux.psm1' = '82e7a6412abd51da98f7eb1777518dc9714dcaa3a72954af8a8ba5e959d3d879'
@@ -80,7 +80,7 @@ function Assert-KnowledgeContentExactPropertySet {
 function Get-KnowledgeContentPreparedAuthorityPin {
     [CmdletBinding()]
     param(
-        [ValidateSet('caabb681e508edfe2f01b41edea7fbc392ff6231', IgnoreCase = $false)]
+        [ValidateSet('4a2501581ab6d56c79e2c3d3d1e3cbe9ca4ee179', IgnoreCase = $false)]
         [string] $Commit = $script:KnowledgeContentPreparedAuthorityCommit
     )
 
@@ -451,10 +451,12 @@ function Assert-KnowledgeContentSourceReceiptClosureFrozen {
             throw 'Source tool receipts must identify each approved tool exactly once.'
         }
         $pairs = [Collections.Generic.List[object]]::new()
-        $pairs.Add(@('executablePath', 'executableSha256'))
         if ($toolName -ceq 'skill-tools') {
             $pairs.Add(@('entryPointPath', 'entryPointSha256'))
             $pairs.Add(@('nodePath', 'nodeSha256'))
+        }
+        else {
+            $pairs.Add(@('executablePath', 'executableSha256'))
         }
         foreach ($pair in $pairs) {
             $pathProperty = $receipt.PSObject.Properties[[string]$pair[0]]
@@ -560,7 +562,7 @@ function New-KnowledgeContentSourceToolSetup {
     & $Git -C $SourceCheckoutRoot archive --format=zip "--output=$archive" $CandidateRevision
     if ($LASTEXITCODE -ne 0) { throw 'Source setup could not archive the exact candidate.' }
     $arguments = @('-NoProfile', '-NonInteractive', '-File', $wrapper, '-ToolchainPath', $toolchainPath, '-ToolchainSha256', (Get-FileSha256 -Path $toolchainPath), '-SourceRepository', $script:SourceRepository, '-SourceRevision', $CandidateRevision, '-ArchiveSha256', (Get-FileSha256 -Path $archive))
-    $frozenPaths = @($PowerShell, $wrapper, $toolchainPath, $runner, $toolchain.upstreamAdapterValidatorPath, $toolchain.upstreamPolicyPath, $toolchain.skillValidatorPath, [string]$receipts.'skill-tools'.executablePath, $toolchain.skillToolsNodePath, $toolchain.skillToolsEntryPointPath, $toolchain.skillSpectorPath) + @($receiptBindings | ForEach-Object { [string]$_.path })
+    $frozenPaths = @($PowerShell, $wrapper, $toolchainPath, $runner, $toolchain.upstreamAdapterValidatorPath, $toolchain.upstreamPolicyPath, $toolchain.skillValidatorPath, $toolchain.skillToolsNodePath, $toolchain.skillToolsEntryPointPath, $toolchain.skillSpectorPath) + @($receiptBindings | ForEach-Object { [string]$_.path })
     $frozen = @(foreach ($file in @($frozenPaths | Select-Object -Unique)) {
         [pscustomobject]@{ path = [IO.Path]::GetFullPath($file); sha256 = Get-FileSha256 -Path $file }
     })

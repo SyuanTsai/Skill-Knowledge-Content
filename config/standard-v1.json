@@ -3,9 +3,9 @@
   "standardVersion": "v1",
   "authority": {
     "repository": "https://github.com/SyuanTsai/SyuanTsai-AI-Instructions.git",
-    "commit": "caabb681e508edfe2f01b41edea7fbc392ff6231",
-    "archiveUrl": "https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/caabb681e508edfe2f01b41edea7fbc392ff6231",
-    "archiveSha256": "6664af55fd27ba16af6a7fb1c8b54aafbf893320f5c4ad99b9f643c9d722184f",
+    "commit": "4a2501581ab6d56c79e2c3d3d1e3cbe9ca4ee179",
+    "archiveUrl": "https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/4a2501581ab6d56c79e2c3d3d1e3cbe9ca4ee179",
+    "archiveSha256": "29b0f46585c4ee7ee7784063315ddbfaf938bc2105d446398c5b5a5c66173c22",
     "files": [
       {
         "path": "docs/standards/README.md",
@@ -61,7 +61,7 @@
       },
       {
         "path": "scripts/Resolve-StandardValidationTool.ps1",
-        "sha256": "7b83154c8f8a37f1b32d968659e7fa4a1aeeaf7507ced136dde2cc162ef3b66d"
+        "sha256": "419c519d6f25875b2e60ba910d7909bb84811aa295a110e1f737d300d0af1873"
       },
       {
         "path": "docs/standards/schemas/standard-validation-adapter-v1.schema.json",
@@ -89,7 +89,7 @@
       },
       {
         "path": "scripts/Invoke-StandardValidation.ps1",
-        "sha256": "9c4315b245f704e4fe5a713ed3a041fac601a5d9d5d74655571bb946935399de"
+        "sha256": "0aeac3cc5e00f57774e92b74e3d0f9eb3b02eea99baf2e2778f767b1445ea51a"
       },
       {
         "path": "docs/standards/schemas/standard-semantic-consent-evidence-v2.schema.json",
@@ -97,7 +97,7 @@
       },
       {
         "path": "scripts/StandardSemanticBridge.psm1",
-        "sha256": "0089dad93fe2ee0143edff84f36b100cc5a3fdc8fea520c493936ae4d0b665d0"
+        "sha256": "62ffd8c635fa8edcb29407ac5760aad87136f6eaead200cb2109c67a4781d95f"
       },
       {
         "path": "docs/standards/schemas/upstream-adapter-v1.schema.json",
@@ -149,7 +149,7 @@
       },
       {
         "path": "scripts/platform-runtime.psd1",
-        "sha256": "07ca38d14c6d1876ea30915e2cfe7467053f6eda70fd7eb589a01fc42fe82f39"
+        "sha256": "8813ca7122dbb424807fa44d2fb27b35a1f9712464838b7bf9617c43d9a3fcbe"
       },
       {
         "path": "scripts/platform-runtime.psm1",
