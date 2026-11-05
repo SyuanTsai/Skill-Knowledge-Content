@@ -5,8 +5,8 @@
 Set-StrictMode -Version Latest
 
 $script:KnowledgeContentPreparedAuthorityRepository = 'https://github.com/SyuanTsai/SyuanTsai-AI-Instructions.git'
-$script:KnowledgeContentPreparedAuthorityCommit = '2f249f5c1acdb1e7b9eb03180a709d85408e9ac0'
-$script:KnowledgeContentPreparedAuthorityArchiveSha256 = 'a6c1ea639ec37ebc2fb754c4bfff1055d4eb3264dfd358472d5f24c57e5933ae'
+$script:KnowledgeContentPreparedAuthorityCommit = 'caabb681e508edfe2f01b41edea7fbc392ff6231'
+$script:KnowledgeContentPreparedAuthorityArchiveSha256 = '6664af55fd27ba16af6a7fb1c8b54aafbf893320f5c4ad99b9f643c9d722184f'
 $script:KnowledgeContentPreparedAuthorityFiles = [ordered]@{
     'docs/standards/README.md' = '69ddc46b4ca4aca06001aaa0fb5b078ef38168f67c21552f3b075548ea707441'
     'docs/standards/managed-skill-lifecycle.md' = '4e3f8595072d663f51d18aa28f42293fda5456362b49c0ea3f0157ae3dcf56dd'
@@ -15,26 +15,26 @@ $script:KnowledgeContentPreparedAuthorityFiles = [ordered]@{
     'docs/standards/schemas/source-inventory-v2.schema.json' = '084550944b4141ab5535f58fb6e99730a5c34b56103f6b59fd5a352679caa98e'
     'docs/standards/schemas/validation-security-gate-v1.schema.json' = 'b924b28a791f4d6eedcc0aa1c01fb62687ec863c0c17048093bfdd99aaa55b74'
     'docs/standards/skill-repository-review-matrix.md' = '360346bee26f24c2dad27ea0827415150b82b555332c0d7f3d4e27bb56cf3a49'
-    'docs/standards/skill-repository-standard.md' = '939ae44ed30f8009bc6849c10ddb30419aad0e2738d6c80255c8cf52f42ba584'
+    'docs/standards/skill-repository-standard.md' = 'eebd6c5fdedb5dce374663b046123d8c98c65d0e30c54759f97fc99381ddfb3b'
     'docs/standards/upstream-interoperability.md' = '8e48cc4831d151ffa4665433d79ad88e8871cb1d694861908dd0206406dcefe5'
     'docs/standards/validation-security-gate.json' = '1ab4c1208885a3aeb74654d8133426367134446e2b7519f06e63de3a53b16067'
     'docs/standards/validation-toolchain.json' = '1dddbf4c5736e22e56f6ecb298542f41d39e116ab00ca24ad18beb7a3eab40ed'
-    'scripts/Invoke-StandardAuthorityGate.ps1' = '25b7d7099d0c90603230810aa12d9af57fc6ddc1099a3a9f5a20e2496fea8fb9'
+    'scripts/Invoke-StandardAuthorityGate.ps1' = '72dd032005a6d810f5de4ce492f964585678087a54f921e4fcb90cf5875effe1'
     'scripts/Resolve-PythonWheelClosure.py' = 'a17989f409f8394af2c851db4d33e9a5b003d0dc17a9689de8de0542c0862ca8'
-    'scripts/Resolve-StandardValidationTool.ps1' = '26360b9e4b58e8fe22002c360191ac6a3e409279eb25bfcc571fdf7cdad08736'
+    'scripts/Resolve-StandardValidationTool.ps1' = '7b83154c8f8a37f1b32d968659e7fa4a1aeeaf7507ced136dde2cc162ef3b66d'
     'docs/standards/schemas/standard-validation-adapter-v1.schema.json' = '11aa88fc25716d748bd4f514f1a44f02390ad1745dd5a5c5beee07f642fd5639'
     'docs/standards/schemas/standard-validation-evidence-v1.schema.json' = '2e8cad8361447baba45b16c47ef685ad2de4a7f27848dd8ddd3fd83e500f23bf'
-    'docs/standards/standard-validation-contract-v1.json' = '6b43ae6ec9e8e9c74e27766dad7257cfca138c4b58fe5c397f7664f1d315be80'
+    'docs/standards/standard-validation-contract-v1.json' = 'f39b2e40c5e9f5eed0abc0d033deea751c8ee978499a86dc4fde3beb65c65242'
     'docs/standards/pr12-source-merge-adoption.json' = '4c5262f2a11d228195230c15fa4faaf9614af6b59f110e5d9c08f242ce809175'
     'docs/standards/trust-anchors/human-approval-public-key.xml' = '1e46153b72d02f3ce2fb26becd449df4f1590d8e5cb441b1954006a5602bbd9b'
     'docs/standards/trust-anchors/trusted-supervisor-public-key.xml' = '4d550851f43405920156f40c9fc648d99a69dd73efc200f6968d8a837e7fbf27'
-    'scripts/Invoke-StandardValidation.ps1' = 'c22f89d677a9dd193f742c55430e12be1be5308bd56f66c1f629ded8700183f9'
+    'scripts/Invoke-StandardValidation.ps1' = '9c4315b245f704e4fe5a713ed3a041fac601a5d9d5d74655571bb946935399de'
     'docs/standards/schemas/standard-semantic-consent-evidence-v2.schema.json' = '109091979d0a47e2035d3d8b20963fcdb85680e5da737bf1f27121608115d430'
-    'scripts/StandardSemanticBridge.psm1' = '337f7501326c3342f21738bdeafdc931630a77e426cc24d2ab27ca3e29caef47'
+    'scripts/StandardSemanticBridge.psm1' = '0089dad93fe2ee0143edff84f36b100cc5a3fdc8fea520c493936ae4d0b665d0'
     'docs/standards/schemas/upstream-adapter-v1.schema.json' = '3cff6246463188a91cc54c6a46315a949314767a759c6214e5b28e4db95ac8d7'
     'docs/standards/upstream-adapter.json' = 'c4f5133b24841bb9c66182dc3d5a027596f864ec28e410d47249a67b3b97ad31'
     'scripts/Validate-UpstreamAdapter.ps1' = '3b6e6474690b1ae9f9486544b68f50ca29b96f5dbe6aa8d6c6cd8570afad500b'
-    'docs/standards/standard-core-validation-v2.json' = '30aa73c26659ed2aa33d3eaafd1ea3a27342ec41b79eced9727ff10b35f142e1'
+    'docs/standards/standard-core-validation-v2.json' = 'dd3c3d1bb83a439895ed35a949ff376b9d59d25e69063c86714eb42edaad84df'
     'docs/standards/schemas/standard-core-adapter-v2.schema.json' = '7399980e8765528b759a3734a133447eb9581ac24a9c4780dc8faadd6af0c1c5'
     'docs/standards/schemas/standard-core-evidence-v2.schema.json' = '7c083b9603b75518220e7e70e5704728a7e3dee0d5b5cf09dc9c755f49d64153'
     'docs/standards/third-party-raw-skill-sources.md' = '18649fd56eada4a94a5d47de778669b0ebcecfb85b84f5c581d283b21979f7ac'
@@ -43,7 +43,7 @@ $script:KnowledgeContentPreparedAuthorityFiles = [ordered]@{
     'docs/standards/static-parser-host-ownership.json' = '994acd989327d094d22ce2c68ca20eceec609f4e494f4e5d252cfcdef742de2c'
     'docs/standards/schemas/static-parser-host-ownership-v1.schema.json' = '7f8d766b7e36052b68d924c5886157734e9969c198b03b2dadf3a63bebc95bb3'
     'docs/standards/schemas/static-parser-profile-execution-v1.schema.json' = '6353bcd130093ffcdb7b6f979f8d115c02a31efae41e63f8a956e82935ab8887'
-    'scripts/platform-runtime.psd1' = '8a8b9f4c5f41410659a8307ff3bcf53de7ecf3590e2e6237a8a2cb203f2d1fb3'
+    'scripts/platform-runtime.psd1' = '07ca38d14c6d1876ea30915e2cfe7467053f6eda70fd7eb589a01fc42fe82f39'
     'scripts/platform-runtime.psm1' = '3f0f09fede0ead288289058251264bec672cb3948ae7d9b0cd47eba97a494a01'
     'scripts/installer-safe-mutation.psm1' = 'ac1e73ffb1b8ea1b95fdc3a177449442281d3d485f62ec42e464f6f5f38ba359'
     'scripts/platform/Linux.psm1' = '82e7a6412abd51da98f7eb1777518dc9714dcaa3a72954af8a8ba5e959d3d879'
@@ -80,7 +80,7 @@ function Assert-KnowledgeContentExactPropertySet {
 function Get-KnowledgeContentPreparedAuthorityPin {
     [CmdletBinding()]
     param(
-        [ValidateSet('2f249f5c1acdb1e7b9eb03180a709d85408e9ac0', IgnoreCase = $false)]
+        [ValidateSet('caabb681e508edfe2f01b41edea7fbc392ff6231', IgnoreCase = $false)]
         [string] $Commit = $script:KnowledgeContentPreparedAuthorityCommit
     )
 
@@ -506,7 +506,7 @@ function New-KnowledgeContentSourceToolSetup {
         [hashtable] $ResolverEnvironment = @{}
     )
 
-    $protectedToken = if ($ResolverEnvironment.ContainsKey('GITHUB_TOKEN')) { [string]$ResolverEnvironment['GITHUB_TOKEN'] } else { '' }
+    $protectedToken = if ($ResolverEnvironment.ContainsKey('STANDARD_VALIDATION_GITHUB_API_TOKEN')) { [string]$ResolverEnvironment['STANDARD_VALIDATION_GITHUB_API_TOKEN'] } else { '' }
     $setupId = [guid]::NewGuid().ToString('N')
     $owned = [IO.Path]::GetFullPath((Join-Path $Root "source-tools-$setupId"))
     if (Test-Path -LiteralPath $owned) { throw 'Source setup root already exists.' }
@@ -764,7 +764,7 @@ function Get-KnowledgeContentSourceResolverEnvironment {
     if ($IncludeSetupToken) {
         $sourceSetupGitHubToken = [Environment]::GetEnvironmentVariable('KC_SOURCE_SETUP_GITHUB_TOKEN', 'Process')
         if (-not [string]::IsNullOrWhiteSpace($sourceSetupGitHubToken)) {
-            $environment['GITHUB_TOKEN'] = $sourceSetupGitHubToken
+            $environment['STANDARD_VALIDATION_GITHUB_API_TOKEN'] = $sourceSetupGitHubToken
         }
     }
     Remove-Item -LiteralPath 'Env:KC_SOURCE_SETUP_GITHUB_TOKEN', 'Env:GITHUB_TOKEN', 'Env:GH_TOKEN' -Force -ErrorAction SilentlyContinue

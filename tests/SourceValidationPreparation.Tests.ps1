@@ -44,9 +44,9 @@ BeforeAll {
 
     function New-ScopedAuthorityCandidate {
         $authority = New-PreparedAuthorityCandidate
-        $authority.commit = '2f249f5c1acdb1e7b9eb03180a709d85408e9ac0'
-        $authority.archiveUrl = 'https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/2f249f5c1acdb1e7b9eb03180a709d85408e9ac0'
-        $authority.archiveSha256 = 'a6c1ea639ec37ebc2fb754c4bfff1055d4eb3264dfd358472d5f24c57e5933ae'
+        $authority.commit = 'caabb681e508edfe2f01b41edea7fbc392ff6231'
+        $authority.archiveUrl = 'https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/caabb681e508edfe2f01b41edea7fbc392ff6231'
+        $authority.archiveSha256 = '6664af55fd27ba16af6a7fb1c8b54aafbf893320f5c4ad99b9f643c9d722184f'
         return $authority
     }
 
@@ -220,18 +220,18 @@ throw 'source-import-probe-stop'
 }
 
 Describe 'Knowledge Content protected source driver preparation' {
-    # Scenario: the active public config selects the reviewed 2f249 authority through the prepared reader.
+    # Scenario: the active public config selects the reviewed caabb authority through the prepared reader.
     # Purpose: bind the active Standard v1 pin to the complete 49-file prepared source authority.
     It 'UnitT00_returns_the_complete_active_49_file_scoped_pin' {
         $config = Get-Content -LiteralPath (Join-Path $script:repositoryRoot 'config/standard-v1.json') -Raw | ConvertFrom-Json -Depth 20
-        $config.authority.commit | Should -Be '2f249f5c1acdb1e7b9eb03180a709d85408e9ac0'
-        $config.authority.archiveSha256 | Should -Be 'a6c1ea639ec37ebc2fb754c4bfff1055d4eb3264dfd358472d5f24c57e5933ae'
+        $config.authority.commit | Should -Be 'caabb681e508edfe2f01b41edea7fbc392ff6231'
+        $config.authority.archiveSha256 | Should -Be '6664af55fd27ba16af6a7fb1c8b54aafbf893320f5c4ad99b9f643c9d722184f'
 
         $pin = Get-KnowledgeContentPreparedAuthorityPin -Commit $config.authority.commit
         $pin.repository | Should -Be 'https://github.com/SyuanTsai/SyuanTsai-AI-Instructions.git'
-        $pin.commit | Should -Be '2f249f5c1acdb1e7b9eb03180a709d85408e9ac0'
-        $pin.archiveUrl | Should -Be 'https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/2f249f5c1acdb1e7b9eb03180a709d85408e9ac0'
-        $pin.archiveSha256 | Should -Be 'a6c1ea639ec37ebc2fb754c4bfff1055d4eb3264dfd358472d5f24c57e5933ae'
+        $pin.commit | Should -Be 'caabb681e508edfe2f01b41edea7fbc392ff6231'
+        $pin.archiveUrl | Should -Be 'https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/caabb681e508edfe2f01b41edea7fbc392ff6231'
+        $pin.archiveSha256 | Should -Be '6664af55fd27ba16af6a7fb1c8b54aafbf893320f5c4ad99b9f643c9d722184f'
         @($config.authority.files).Count | Should -Be 49
         for ($index = 0; $index -lt $pin.files.Count; $index++) {
             $path = @($pin.files.Keys)[$index]
@@ -240,11 +240,11 @@ Describe 'Knowledge Content protected source driver preparation' {
         }
         @($pin.files.Keys).Count | Should -Be 49
         @($pin.files.Keys | Sort-Object -Unique -CaseSensitive).Count | Should -Be 49
-        $pin.files['docs/standards/standard-core-validation-v2.json'] | Should -Be '30aa73c26659ed2aa33d3eaafd1ea3a27342ec41b79eced9727ff10b35f142e1'
+        $pin.files['docs/standards/standard-core-validation-v2.json'] | Should -Be 'dd3c3d1bb83a439895ed35a949ff376b9d59d25e69063c86714eb42edaad84df'
         $pin.files['docs/standards/third-party-raw-skill-sources.md'] | Should -Be '18649fd56eada4a94a5d47de778669b0ebcecfb85b84f5c581d283b21979f7ac'
     }
 
-    # Scenario: the active candidate selects the complete reviewed 2f249 authority tuple.
+    # Scenario: the active candidate selects the complete reviewed caabb authority tuple.
     # Purpose: keep both protected source purposes on one exact approved pin.
     It 'UnitT01_accepts_exact_scoped_authority_with_all_49_members' {
         $authority = New-ScopedAuthorityCandidate
@@ -530,7 +530,7 @@ Describe 'Knowledge Content protected source driver preparation' {
     }
 
     # Scenario: the workflow supplies a dedicated GitHub token while ambient GitHub CLI credentials are also present.
-    # Purpose: consume the dedicated value once, remove every process-scoped credential immediately, and expose only GITHUB_TOKEN to resolvers.
+    # Purpose: consume the dedicated value once, remove every process-scoped credential immediately, and expose only the runner-namespaced API token to resolvers.
     It 'UnitT53_scopes_the_source_setup_token_to_the_resolver_environment' {
         $names = @('KC_SOURCE_SETUP_GITHUB_TOKEN', 'GITHUB_TOKEN', 'GH_TOKEN')
         $previous = @{}
@@ -542,8 +542,8 @@ Describe 'Knowledge Content protected source driver preparation' {
 
             $resolverEnvironment = Get-KnowledgeContentSourceResolverEnvironment -IncludeSetupToken
 
-            @($resolverEnvironment.Keys) | Should -Be @('GITHUB_TOKEN')
-            $resolverEnvironment['GITHUB_TOKEN'] | Should -BeExactly 'fixture-source-setup-token'
+            @($resolverEnvironment.Keys) | Should -Be @('STANDARD_VALIDATION_GITHUB_API_TOKEN')
+            $resolverEnvironment['STANDARD_VALIDATION_GITHUB_API_TOKEN'] | Should -BeExactly 'fixture-source-setup-token'
             foreach ($name in $names) {
                 [Environment]::GetEnvironmentVariable($name, 'Process') | Should -BeNullOrEmpty
             }
@@ -580,7 +580,7 @@ Describe 'Knowledge Content protected source driver preparation' {
         (Get-Content -LiteralPath $safePath -Raw) | Should -BeExactly '{"status":"passed"}'
     }
 
-    # Scenario: source validation is requested with the active 2f249 config, an obsolete config, or incomplete setup locations.
+    # Scenario: source validation is requested with the active caabb config, an obsolete config, or incomplete setup locations.
     # Purpose: accept only the complete active pin while continuing to reject stale receipts and missing trust roots.
     It 'UnitT55_accepts_active_scoped_pin_and_rejects_obsolete_or_incomplete_requests' {
         $activeAuthority = (Get-Content -LiteralPath (Join-Path $script:repositoryRoot 'config/standard-v1.json') -Raw | ConvertFrom-Json -Depth 20).authority
@@ -609,7 +609,7 @@ Describe 'Knowledge Content protected source driver preparation' {
         Assert-TestThrowsLike { Resolve-KnowledgeContentSourceRoute -BoundParameters @{ TrustedToolRoot = '' } } '*only valid for explicit source setup or validation*'
     }
 
-    # Scenario: setup and source execution are routed from the active 2f249 candidate config.
+    # Scenario: setup and source execution are routed from the active caabb candidate config.
     # Purpose: bind both explicit public modes to the exact active tuple without acquiring tools in this test.
     It 'UnitT70_routes_setup_and_validation_from_active_scoped_pin' {
         $activeAuthority = (Get-Content -LiteralPath (Join-Path $script:repositoryRoot 'config/standard-v1.json') -Raw | ConvertFrom-Json -Depth 20).authority
@@ -621,7 +621,7 @@ Describe 'Knowledge Content protected source driver preparation' {
         }
 
         $route.mode | Should -BeExactly 'prepare-source-tools'
-        $route.authority.commit | Should -BeExactly '2f249f5c1acdb1e7b9eb03180a709d85408e9ac0'
+        $route.authority.commit | Should -BeExactly 'caabb681e508edfe2f01b41edea7fbc392ff6231'
         $activeAuthority.commit | Should -BeExactly $route.authority.commit
         { Resolve-KnowledgeContentSourceRoute -SourceValidation -SourceToolsPath $script:fixtureSourceToolsPath -AuthorityRepositoryRoot $script:fixtureAuthorityRoot -TrustedToolRoot $script:fixtureRuntimeRoot -CandidateAuthority $activeAuthority } | Should -Not -Throw
     }
