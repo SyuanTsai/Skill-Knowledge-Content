@@ -275,6 +275,16 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
 
         & $gitCommandPath -C $candidateRoot init --quiet
         if ($LASTEXITCODE -ne 0) { throw 'Could not initialize the protected source-binding fixture repository.' }
+        & $gitCommandPath -C $candidateRoot config --local maintenance.auto false
+        if ($LASTEXITCODE -ne 0) { throw 'Could not disable maintenance.auto in the protected source-binding fixture.' }
+        & $gitCommandPath -C $candidateRoot config --local maintenance.autoDetach false
+        if ($LASTEXITCODE -ne 0) { throw 'Could not disable maintenance.autoDetach in the protected source-binding fixture.' }
+        & $gitCommandPath -C $candidateRoot config --local gc.auto 0
+        if ($LASTEXITCODE -ne 0) { throw 'Could not disable gc.auto in the protected source-binding fixture.' }
+        & $gitCommandPath -C $candidateRoot config --local gc.autoDetach false
+        if ($LASTEXITCODE -ne 0) { throw 'Could not disable gc.autoDetach in the protected source-binding fixture.' }
+        ([string](& $gitCommandPath -C $candidateRoot config --local --get maintenance.auto)).Trim() | Should -BeExactly 'false'
+        ([string](& $gitCommandPath -C $candidateRoot config --local --get gc.auto)).Trim() | Should -BeExactly '0'
         & $gitCommandPath -C $candidateRoot config user.name 'Conformance Fixture'
         if ($LASTEXITCODE -ne 0) { throw 'Could not configure the protected source-binding fixture repository.' }
         & $gitCommandPath -C $candidateRoot config user.email 'fixture@example.invalid'
@@ -302,8 +312,18 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         if ($LASTEXITCODE -ne 0) { throw 'Could not create the protected source-binding fixture candidate.' }
         $headCommit = ([string](& $gitCommandPath -C $candidateRoot rev-parse --verify 'HEAD^{commit}')).Trim()
         if ($LASTEXITCODE -ne 0) { throw 'Could not resolve the protected source-binding fixture candidate.' }
-        & $gitCommandPath -c core.autocrlf=false -c core.longpaths=true clone --quiet $candidateRoot $driverRoot
+        & $gitCommandPath -c maintenance.auto=false -c gc.auto=0 -c core.autocrlf=false -c core.longpaths=true clone --quiet $candidateRoot $driverRoot
         if ($LASTEXITCODE -ne 0) { throw 'Could not clone the protected source-binding fixture driver.' }
+        & $gitCommandPath -C $driverRoot config --local maintenance.auto false
+        if ($LASTEXITCODE -ne 0) { throw 'Could not disable maintenance.auto in the protected source-binding driver fixture.' }
+        & $gitCommandPath -C $driverRoot config --local maintenance.autoDetach false
+        if ($LASTEXITCODE -ne 0) { throw 'Could not disable maintenance.autoDetach in the protected source-binding driver fixture.' }
+        & $gitCommandPath -C $driverRoot config --local gc.auto 0
+        if ($LASTEXITCODE -ne 0) { throw 'Could not disable gc.auto in the protected source-binding driver fixture.' }
+        & $gitCommandPath -C $driverRoot config --local gc.autoDetach false
+        if ($LASTEXITCODE -ne 0) { throw 'Could not disable gc.autoDetach in the protected source-binding driver fixture.' }
+        ([string](& $gitCommandPath -C $driverRoot config --local --get maintenance.auto)).Trim() | Should -BeExactly 'false'
+        ([string](& $gitCommandPath -C $driverRoot config --local --get gc.auto)).Trim() | Should -BeExactly '0'
         & $gitCommandPath -C $driverRoot config --local core.longpaths true
         if ($LASTEXITCODE -ne 0) { throw 'Could not enable long paths in the protected source-binding driver fixture.' }
         & $gitCommandPath -C $driverRoot checkout --quiet --detach $baseCommit

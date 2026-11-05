@@ -151,6 +151,16 @@ throw 'source-import-probe-stop'
         $git = Get-ResolvedGitPath
         & $git -C $Path init --quiet
         if ($LASTEXITCODE -ne 0) { throw 'Could not initialize source-validation fixture repository.' }
+        & $git -C $Path config --local maintenance.auto false
+        if ($LASTEXITCODE -ne 0) { throw 'Could not disable maintenance.auto in the source-validation fixture.' }
+        & $git -C $Path config --local maintenance.autoDetach false
+        if ($LASTEXITCODE -ne 0) { throw 'Could not disable maintenance.autoDetach in the source-validation fixture.' }
+        & $git -C $Path config --local gc.auto 0
+        if ($LASTEXITCODE -ne 0) { throw 'Could not disable gc.auto in the source-validation fixture.' }
+        & $git -C $Path config --local gc.autoDetach false
+        if ($LASTEXITCODE -ne 0) { throw 'Could not disable gc.autoDetach in the source-validation fixture.' }
+        ([string](& $git -C $Path config --local --get maintenance.auto)).Trim() | Should -BeExactly 'false'
+        ([string](& $git -C $Path config --local --get gc.auto)).Trim() | Should -BeExactly '0'
         & $git -C $Path config --local core.autocrlf false
         & $git -C $Path config --local user.name 'Source Validation Test'
         & $git -C $Path config --local user.email 'source-validation-test@example.invalid'

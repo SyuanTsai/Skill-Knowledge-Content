@@ -22,6 +22,16 @@ Describe 'Knowledge & Content Standard v1 repository contract' {
         Copy-Item -LiteralPath (Join-Path $script:RepositoryRoot 'config') -Destination $script:FixtureRoot -Recurse
         Copy-Item -LiteralPath (Join-Path $script:RepositoryRoot 'skills') -Destination $script:FixtureRoot -Recurse
         & $script:GitPath -C $script:FixtureRoot init --quiet
+        & $script:GitPath -C $script:FixtureRoot config --local maintenance.auto false
+        if ($LASTEXITCODE -ne 0) { throw 'Could not disable maintenance.auto in the repository contract fixture.' }
+        & $script:GitPath -C $script:FixtureRoot config --local maintenance.autoDetach false
+        if ($LASTEXITCODE -ne 0) { throw 'Could not disable maintenance.autoDetach in the repository contract fixture.' }
+        & $script:GitPath -C $script:FixtureRoot config --local gc.auto 0
+        if ($LASTEXITCODE -ne 0) { throw 'Could not disable gc.auto in the repository contract fixture.' }
+        & $script:GitPath -C $script:FixtureRoot config --local gc.autoDetach false
+        if ($LASTEXITCODE -ne 0) { throw 'Could not disable gc.autoDetach in the repository contract fixture.' }
+        ([string](& $script:GitPath -C $script:FixtureRoot config --local --get maintenance.auto)).Trim() | Should -BeExactly 'false'
+        ([string](& $script:GitPath -C $script:FixtureRoot config --local --get gc.auto)).Trim() | Should -BeExactly '0'
         & $script:GitPath -C $script:FixtureRoot add -- catalog/source.json config skills
         if ($LASTEXITCODE -ne 0) { throw 'Could not prepare the repository contract fixture.' }
         $script:SkillId = 'capture-private-course-knowledge'

@@ -282,8 +282,20 @@ function New-KnowledgeContentCoreAuthoritySnapshot {
 
     # Use an isolated, no-hardlink Git clone so the child test process can bind
     # its authority root to the exact prepared revision without sharing files.
-    & $GitPath -c "core.hooksPath=$hooksRoot" -c core.autocrlf=false -c core.longpaths=true clone --quiet --local --no-hardlinks --no-checkout -- $SourceRoot $snapshotRoot
+    & $GitPath -c "core.hooksPath=$hooksRoot" -c maintenance.auto=false -c gc.auto=0 -c core.autocrlf=false -c core.longpaths=true clone --quiet --local --no-hardlinks --no-checkout -- $SourceRoot $snapshotRoot
     if ($LASTEXITCODE -ne 0) { throw 'Could not materialize the no-hardlink authority Git snapshot for Core Pester.' }
+    & $GitPath -C $snapshotRoot config --local maintenance.auto false
+    if ($LASTEXITCODE -ne 0) { throw 'Could not disable maintenance.auto in the Core Pester authority snapshot.' }
+    & $GitPath -C $snapshotRoot config --local maintenance.autoDetach false
+    if ($LASTEXITCODE -ne 0) { throw 'Could not disable maintenance.autoDetach in the Core Pester authority snapshot.' }
+    & $GitPath -C $snapshotRoot config --local gc.auto 0
+    if ($LASTEXITCODE -ne 0) { throw 'Could not disable gc.auto in the Core Pester authority snapshot.' }
+    & $GitPath -C $snapshotRoot config --local gc.autoDetach false
+    if ($LASTEXITCODE -ne 0) { throw 'Could not disable gc.autoDetach in the Core Pester authority snapshot.' }
+    if (([string](& $GitPath -C $snapshotRoot config --local --get maintenance.auto)).Trim() -cne 'false' -or
+        ([string](& $GitPath -C $snapshotRoot config --local --get gc.auto)).Trim() -cne '0') {
+        throw 'Core Pester authority snapshot Git maintenance configuration was not applied.'
+    }
     & $GitPath -C $snapshotRoot config --local core.autocrlf false
     if ($LASTEXITCODE -ne 0) { throw 'Could not disable line-ending conversion in the Core Pester authority snapshot.' }
     & $GitPath -C $snapshotRoot config --local core.longpaths true
