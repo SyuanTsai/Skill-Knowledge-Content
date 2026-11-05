@@ -105,9 +105,16 @@ Group 使用 `${{ github.workflow }}-${{ github.event.pull_request.number || git
 
 | 平台 | Setup 秒 | Source validation 秒 | Total 秒 | Job wall time |
 |---|---:|---:|---:|---:|
-| Windows |  |  |  |  |
-| Linux |  |  |  |  |
-| macOS |  |  |  |  |
+| Windows x64 | 238 | 174 | 434 | 8m11s |
+| Linux x64 | 141 | 157 | 317 | 5m58s |
+| macOS arm64 | 203 | 300 | 533 | 9m45s |
+
+來源：最終 `workflow_dispatch` run 42043960537（authority `6cee5b8`，PowerShell 7.6.9，Python 3.12），三個 leg、aggregate 與三個 context 全綠。
+
+- Workflow 從建立到完成共 10m22s，約等於最慢平台（macOS 9m45s）加上 aggregate 與 mirrors 約 30 秒，符合「總時間 ≈ 最慢平台」。
+- 前一輪 run 41995856474（authority `4a25015`）的耗時：Windows 374s / 7m14s、macOS 358s / 6m40s、Linux 302s / 5m47s，總計 7m36s。
+- macOS 的 source validation 波動最大（204s→300s），主要受共用 runner 負載影響。
+- Setup 秒數包含 cache restore 與 restore 後的完整重驗。
 
 ## 已知偏差與限制
 
