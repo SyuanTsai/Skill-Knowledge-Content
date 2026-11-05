@@ -60,7 +60,7 @@ Artifacts root 在 Windows 使用磁碟根目錄下的短路徑；Linux/macOS �
 
 ## Protected-driver bootstrap 注意事項
 
-引入新 workflow 的第一個 PR 仍由舊 base commit 的 `driver/` 驗證。舊 driver 不理解新 matrix／Core v2 contract 時，該 PR 的 required checks 無法變綠；這是 protected-base 模型的預期結果，不應改成執行 candidate driver。
+引入新 workflow 的第一個 PR 仍由舊 base commit 的 `driver/` 驗證。舊 driver 沒有新的 helper（例如 `scripts/Prepare-WorkflowPowerShell.ps1`），也不接受新的 authority pin，因此該 PR 的 required checks 無法變綠。合併後的第一次 `push` run 也一樣，因為它的 event base 是合併前的 main。這是 protected-base 模型的預期結果，不應改成執行 candidate driver。合併需要 repository 管理者的明確決定，例如暫時加入 ruleset bypass，合併後立即移除，並比對 ruleset 與修改前一致。之後以新 main 為 base 的 PR 才會由新 driver 驗證。
 
 合併含新 driver 的 commit 後，可建立一個較晚的 candidate commit，透過 `workflow_dispatch` 提供預合併三平台證據：
 
