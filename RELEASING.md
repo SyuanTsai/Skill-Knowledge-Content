@@ -22,7 +22,7 @@ Before release:
 
 Use immutable release tags. Do not move an existing release tag to another commit.
 
-The active `4a2501581ab6d56c79e2c3d3d1e3cbe9ca4ee179` authority pin requires the protected two-purpose run on all three platforms. A bare `scripts/Validate.ps1` invocation fails closed and cannot count as a release result. The workflow requires an exact nonzero event base commit that is a distinct ancestor of the exact candidate commit; manual dispatch must supply that base explicitly. See `.github/workflows/validate.yml`, `config/standard-v1.json`, and [the CI template](docs/ci/three-platform-ci-template.md).
+The active `6cee5b8e43fe4e327fedc788865f931c561d6e89` authority pin requires the protected two-purpose run on all three platforms. A bare `scripts/Validate.ps1` invocation fails closed and cannot count as a release result. The workflow requires an exact nonzero event base commit that is a distinct ancestor of the exact candidate commit; manual dispatch must supply that base explicitly. See `.github/workflows/validate.yml`, `config/standard-v1.json`, and [the CI template](docs/ci/three-platform-ci-template.md).
 
 The protected source gate covers stages 1–5 and runs Static without an LLM plus the complete repository test suite. A source report PASS, workflow success, review, or merge does not authorize release, installation, publication, or downstream cutover. The field `releaseEligible=false` remains false permanently; a separate release process must make its own decision. The [README local protected-run instructions](README.md#protected-local-run) list the required raw-checkout controls, clean roots, exact-base driver, verified runtime, and both canonical-purpose commands.
 

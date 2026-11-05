@@ -5,8 +5,8 @@
 Set-StrictMode -Version Latest
 
 $script:KnowledgeContentPreparedAuthorityRepository = 'https://github.com/SyuanTsai/SyuanTsai-AI-Instructions.git'
-$script:KnowledgeContentPreparedAuthorityCommit = '4a2501581ab6d56c79e2c3d3d1e3cbe9ca4ee179'
-$script:KnowledgeContentPreparedAuthorityArchiveSha256 = '29b0f46585c4ee7ee7784063315ddbfaf938bc2105d446398c5b5a5c66173c22'
+$script:KnowledgeContentPreparedAuthorityCommit = '6cee5b8e43fe4e327fedc788865f931c561d6e89'
+$script:KnowledgeContentPreparedAuthorityArchiveSha256 = '336290db31dde3d04fe89f11d90e517f88e8140b1b235b72fe01f7ed12345cd2'
 $script:KnowledgeContentPreparedAuthorityFiles = [ordered]@{
     'docs/standards/README.md' = '69ddc46b4ca4aca06001aaa0fb5b078ef38168f67c21552f3b075548ea707441'
     'docs/standards/managed-skill-lifecycle.md' = '4e3f8595072d663f51d18aa28f42293fda5456362b49c0ea3f0157ae3dcf56dd'
@@ -15,22 +15,22 @@ $script:KnowledgeContentPreparedAuthorityFiles = [ordered]@{
     'docs/standards/schemas/source-inventory-v2.schema.json' = '084550944b4141ab5535f58fb6e99730a5c34b56103f6b59fd5a352679caa98e'
     'docs/standards/schemas/validation-security-gate-v1.schema.json' = 'b924b28a791f4d6eedcc0aa1c01fb62687ec863c0c17048093bfdd99aaa55b74'
     'docs/standards/skill-repository-review-matrix.md' = '360346bee26f24c2dad27ea0827415150b82b555332c0d7f3d4e27bb56cf3a49'
-    'docs/standards/skill-repository-standard.md' = 'eebd6c5fdedb5dce374663b046123d8c98c65d0e30c54759f97fc99381ddfb3b'
+    'docs/standards/skill-repository-standard.md' = '24a932ff333bc74884fee8e1e784da2a7cd832373e8e0659469995be2659f1a0'
     'docs/standards/upstream-interoperability.md' = '8e48cc4831d151ffa4665433d79ad88e8871cb1d694861908dd0206406dcefe5'
     'docs/standards/validation-security-gate.json' = '1ab4c1208885a3aeb74654d8133426367134446e2b7519f06e63de3a53b16067'
     'docs/standards/validation-toolchain.json' = '1dddbf4c5736e22e56f6ecb298542f41d39e116ab00ca24ad18beb7a3eab40ed'
     'scripts/Invoke-StandardAuthorityGate.ps1' = '72dd032005a6d810f5de4ce492f964585678087a54f921e4fcb90cf5875effe1'
     'scripts/Resolve-PythonWheelClosure.py' = 'a17989f409f8394af2c851db4d33e9a5b003d0dc17a9689de8de0542c0862ca8'
-    'scripts/Resolve-StandardValidationTool.ps1' = '419c519d6f25875b2e60ba910d7909bb84811aa295a110e1f737d300d0af1873'
+    'scripts/Resolve-StandardValidationTool.ps1' = 'e51c78847aa706dd4bed92fa1e91e1c992e0b1e8d938aaa605c4c7389b66b8f5'
     'docs/standards/schemas/standard-validation-adapter-v1.schema.json' = '11aa88fc25716d748bd4f514f1a44f02390ad1745dd5a5c5beee07f642fd5639'
     'docs/standards/schemas/standard-validation-evidence-v1.schema.json' = '2e8cad8361447baba45b16c47ef685ad2de4a7f27848dd8ddd3fd83e500f23bf'
     'docs/standards/standard-validation-contract-v1.json' = 'f39b2e40c5e9f5eed0abc0d033deea751c8ee978499a86dc4fde3beb65c65242'
     'docs/standards/pr12-source-merge-adoption.json' = '4c5262f2a11d228195230c15fa4faaf9614af6b59f110e5d9c08f242ce809175'
     'docs/standards/trust-anchors/human-approval-public-key.xml' = '1e46153b72d02f3ce2fb26becd449df4f1590d8e5cb441b1954006a5602bbd9b'
     'docs/standards/trust-anchors/trusted-supervisor-public-key.xml' = '4d550851f43405920156f40c9fc648d99a69dd73efc200f6968d8a837e7fbf27'
-    'scripts/Invoke-StandardValidation.ps1' = '0aeac3cc5e00f57774e92b74e3d0f9eb3b02eea99baf2e2778f767b1445ea51a'
+    'scripts/Invoke-StandardValidation.ps1' = '106e75f8882e8a3121c09605c986afaac97c33db94d64b145297fc3370ac6bc5'
     'docs/standards/schemas/standard-semantic-consent-evidence-v2.schema.json' = '109091979d0a47e2035d3d8b20963fcdb85680e5da737bf1f27121608115d430'
-    'scripts/StandardSemanticBridge.psm1' = '62ffd8c635fa8edcb29407ac5760aad87136f6eaead200cb2109c67a4781d95f'
+    'scripts/StandardSemanticBridge.psm1' = '6de6746465fce2e3a9636207b7c3a6298c405fdd2d7e8544cf0eada8922767ea'
     'docs/standards/schemas/upstream-adapter-v1.schema.json' = '3cff6246463188a91cc54c6a46315a949314767a759c6214e5b28e4db95ac8d7'
     'docs/standards/upstream-adapter.json' = 'c4f5133b24841bb9c66182dc3d5a027596f864ec28e410d47249a67b3b97ad31'
     'scripts/Validate-UpstreamAdapter.ps1' = '3b6e6474690b1ae9f9486544b68f50ca29b96f5dbe6aa8d6c6cd8570afad500b'
@@ -43,7 +43,7 @@ $script:KnowledgeContentPreparedAuthorityFiles = [ordered]@{
     'docs/standards/static-parser-host-ownership.json' = '994acd989327d094d22ce2c68ca20eceec609f4e494f4e5d252cfcdef742de2c'
     'docs/standards/schemas/static-parser-host-ownership-v1.schema.json' = '7f8d766b7e36052b68d924c5886157734e9969c198b03b2dadf3a63bebc95bb3'
     'docs/standards/schemas/static-parser-profile-execution-v1.schema.json' = '6353bcd130093ffcdb7b6f979f8d115c02a31efae41e63f8a956e82935ab8887'
-    'scripts/platform-runtime.psd1' = '8813ca7122dbb424807fa44d2fb27b35a1f9712464838b7bf9617c43d9a3fcbe'
+    'scripts/platform-runtime.psd1' = 'df700c6c1c3c8dd2e1b24e617fabd8f4dac25e44c06d26875083ce3ce1746a91'
     'scripts/platform-runtime.psm1' = '3f0f09fede0ead288289058251264bec672cb3948ae7d9b0cd47eba97a494a01'
     'scripts/installer-safe-mutation.psm1' = 'ac1e73ffb1b8ea1b95fdc3a177449442281d3d485f62ec42e464f6f5f38ba359'
     'scripts/platform/Linux.psm1' = '82e7a6412abd51da98f7eb1777518dc9714dcaa3a72954af8a8ba5e959d3d879'
@@ -80,7 +80,7 @@ function Assert-KnowledgeContentExactPropertySet {
 function Get-KnowledgeContentPreparedAuthorityPin {
     [CmdletBinding()]
     param(
-        [ValidateSet('4a2501581ab6d56c79e2c3d3d1e3cbe9ca4ee179', IgnoreCase = $false)]
+        [ValidateSet('6cee5b8e43fe4e327fedc788865f931c561d6e89', IgnoreCase = $false)]
         [string] $Commit = $script:KnowledgeContentPreparedAuthorityCommit
     )
 

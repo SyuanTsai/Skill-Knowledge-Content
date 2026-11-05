@@ -95,6 +95,11 @@ Group 使用 `${{ github.workflow }}-${{ github.event.pull_request.number || git
 - Ubuntu runner 可能提供 uutils coreutils；不要依賴 GNU-only output 文案或參數行為。
 - Pester `Should -Throw '<substring>'` 不把 `*` 當 wildcard；需要訊息模式時，先捕捉例外再以 `Should -BeLike` 驗證。
 - Unix filesystem 大小寫敏感；archive inventory、relative path 與 hash table 不可用 Windows 路徑語意。
+- 較新的 Git 在 `commit` 後可能以 `setsid` 背景執行 `maintenance run --auto`。Linux owned-process subreaper 會收養這個孫程序，並以 `unattributed-adopted-child` fail closed。測試用 repository 與 authority snapshot clone 必須設定 `maintenance.auto=false`、`maintenance.autoDetach=false`、`gc.auto=0`、`gc.autoDetach=false`。
+- Unix 上 npm `.bin` entry 是 symlink shim。凍結檔案集合只能放 `node` 與 `entryPoint`（hash 驗證），shim 必須精確解析到 payload，不可列為 frozen file。這需要 authority 至少包含 SyuanTsai-AI-Instructions PR #125 的修正（`6cee5b8`）。
+- Runner 只轉送 `^STANDARD_VALIDATION_[A-Za-z0-9_]+$` 環境變數給 child。Source tool setup 需要 GitHub API token 時（macOS 共用 IP 容易撞到未驗證 rate limit），只能放在 `STANDARD_VALIDATION_GITHUB_API_TOKEN`，且只傳給 resolver process。Resolver 讀入後立即刪除 token，Authorization 只送往 `api.github.com`。
+- GitHub Actions 的 job-level `env` 不能使用 `runner` context。`run:` 內的 `${{ }}` 會讓整段 script 進入 expression 求值，超過 21000 字元會解析失敗。所有 expression 一律放在 step `env:`。
+- 在 PowerShell 中把 `$null` 傳給 .NET string 參數會變成空字串，所以 `[Environment]::SetEnvironmentVariable($name, $null)` 不會刪除變數。請改用 `[NullString]::Value` 或 `Remove-Item Env:<name>`。
 
 ## 各平台實測耗時
 

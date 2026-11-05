@@ -3,9 +3,9 @@
   "standardVersion": "v1",
   "authority": {
     "repository": "https://github.com/SyuanTsai/SyuanTsai-AI-Instructions.git",
-    "commit": "4a2501581ab6d56c79e2c3d3d1e3cbe9ca4ee179",
-    "archiveUrl": "https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/4a2501581ab6d56c79e2c3d3d1e3cbe9ca4ee179",
-    "archiveSha256": "29b0f46585c4ee7ee7784063315ddbfaf938bc2105d446398c5b5a5c66173c22",
+    "commit": "6cee5b8e43fe4e327fedc788865f931c561d6e89",
+    "archiveUrl": "https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/6cee5b8e43fe4e327fedc788865f931c561d6e89",
+    "archiveSha256": "336290db31dde3d04fe89f11d90e517f88e8140b1b235b72fe01f7ed12345cd2",
     "files": [
       {
         "path": "docs/standards/README.md",
@@ -37,7 +37,7 @@
       },
       {
         "path": "docs/standards/skill-repository-standard.md",
-        "sha256": "eebd6c5fdedb5dce374663b046123d8c98c65d0e30c54759f97fc99381ddfb3b"
+        "sha256": "24a932ff333bc74884fee8e1e784da2a7cd832373e8e0659469995be2659f1a0"
       },
       {
         "path": "docs/standards/upstream-interoperability.md",
@@ -61,7 +61,7 @@
       },
       {
         "path": "scripts/Resolve-StandardValidationTool.ps1",
-        "sha256": "419c519d6f25875b2e60ba910d7909bb84811aa295a110e1f737d300d0af1873"
+        "sha256": "e51c78847aa706dd4bed92fa1e91e1c992e0b1e8d938aaa605c4c7389b66b8f5"
       },
       {
         "path": "docs/standards/schemas/standard-validation-adapter-v1.schema.json",
@@ -89,7 +89,7 @@
       },
       {
         "path": "scripts/Invoke-StandardValidation.ps1",
-        "sha256": "0aeac3cc5e00f57774e92b74e3d0f9eb3b02eea99baf2e2778f767b1445ea51a"
+        "sha256": "106e75f8882e8a3121c09605c986afaac97c33db94d64b145297fc3370ac6bc5"
       },
       {
         "path": "docs/standards/schemas/standard-semantic-consent-evidence-v2.schema.json",
@@ -97,7 +97,7 @@
       },
       {
         "path": "scripts/StandardSemanticBridge.psm1",
-        "sha256": "62ffd8c635fa8edcb29407ac5760aad87136f6eaead200cb2109c67a4781d95f"
+        "sha256": "6de6746465fce2e3a9636207b7c3a6298c405fdd2d7e8544cf0eada8922767ea"
       },
       {
         "path": "docs/standards/schemas/upstream-adapter-v1.schema.json",
@@ -149,7 +149,7 @@
       },
       {
         "path": "scripts/platform-runtime.psd1",
-        "sha256": "8813ca7122dbb424807fa44d2fb27b35a1f9712464838b7bf9617c43d9a3fcbe"
+        "sha256": "df700c6c1c3c8dd2e1b24e617fabd8f4dac25e44c06d26875083ce3ce1746a91"
       },
       {
         "path": "scripts/platform-runtime.psm1",
