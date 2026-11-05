@@ -75,11 +75,33 @@ switch ($Mode) {
         Assert-RequiredValue -Value $AssetTemplate -Name 'AssetTemplate'
         Assert-RequiredValue -Value $env:GITHUB_OUTPUT -Name 'GITHUB_OUTPUT'
         $releaseUri = [Uri]'https://api.github.com/repos/PowerShell/PowerShell/releases/latest'
-        $release = Invoke-RestMethod -Uri $releaseUri -Headers @{
+        $metadataHeaders = @{
             Accept = 'application/vnd.github+json'
             'X-GitHub-Api-Version' = '2022-11-28'
             'User-Agent' = 'Skill-Knowledge-Content-Source-Validation'
-        } -TimeoutSec 60 -ErrorAction Stop
+        }
+        if (-not [string]::IsNullOrWhiteSpace($env:KC_GITHUB_API_TOKEN) -and $releaseUri.Host -ceq 'api.github.com') {
+            $metadataHeaders.Authorization = "Bearer $($env:KC_GITHUB_API_TOKEN)"
+        }
+        $metadataResponse = $null
+        for ($attempt = 1; $attempt -le 3; $attempt++) {
+            try {
+                # Do not use -PreserveAuthorizationOnRedirect: PowerShell drops Authorization on redirects by default.
+                $metadataResponse = Invoke-WebRequest -Uri $releaseUri -Headers $metadataHeaders -TimeoutSec 60 -ErrorAction Stop
+                $finalUri = [Uri]$metadataResponse.BaseResponse.ResponseUri
+                if ($finalUri.Host -cne 'api.github.com') {
+                    throw "PowerShell release metadata request redirected to an unexpected host: $($finalUri.Host)"
+                }
+                break
+            }
+            catch {
+                $statusCode = if ($null -ne $_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
+                if ($attempt -eq 3 -or -not ($statusCode -eq 403 -or $statusCode -eq 429 -or $statusCode -ge 500)) { throw }
+                Start-Sleep -Seconds 10
+            }
+        }
+        if ($null -eq $metadataResponse) { throw 'PowerShell release metadata request did not return a response.' }
+        $release = $metadataResponse.Content | ConvertFrom-Json
         $tag = [string]$release.tag_name
         if ($release.draft -or $release.prerelease -or $tag -cnotmatch '^v(?<version>[0-9]+\.[0-9]+\.[0-9]+)$') {
             throw 'PowerShell latest release is not a stable semantic-version release.'
@@ -207,9 +229,9 @@ switch ($Mode) {
         $expected = Resolve-WorkflowPhysicalPath $env:KC_POWERSHELL_EXECUTABLE
         $process = Resolve-WorkflowPhysicalPath ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
         $selected = Resolve-WorkflowPhysicalPath ((Get-Command pwsh -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source)
-        $home = Resolve-WorkflowPhysicalPath (Join-Path $PSHOME $ExecutableName)
-        if (-not $process.Equals($expected, $comparison) -or -not $selected.Equals($expected, $comparison) -or -not $home.Equals($expected, $comparison)) {
-            throw "The GitHub step shell is not the verified PowerShell: expected=$expected process=$process selected=$selected home=$home"
+        $pshomeExecutable = Resolve-WorkflowPhysicalPath (Join-Path $PSHOME $ExecutableName)
+        if (-not $process.Equals($expected, $comparison) -or -not $selected.Equals($expected, $comparison) -or -not $pshomeExecutable.Equals($expected, $comparison)) {
+            throw "The GitHub step shell is not the verified PowerShell: expected=$expected process=$process selected=$selected pshome=$pshomeExecutable"
         }
         if ($PSVersionTable.PSVersion.ToString() -cne $env:KC_POWERSHELL_VERSION) { throw 'Selected PowerShell version differs from its release receipt.' }
         break

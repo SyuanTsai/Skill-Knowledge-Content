@@ -135,6 +135,10 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $workflow | Should -Match 'Prepare-WorkflowPowerShell\.ps1''\) -Mode Resolve'
         $workflow | Should -Match 'Prepare-WorkflowPowerShell\.ps1''\) -Mode Install'
         $workflow | Should -Match 'Prepare-WorkflowPowerShell\.ps1''\) -Mode Verify'
+        $resolvePowerShellStep = [regex]::Match($workflow, '(?ms)^      - name: Resolve latest official PowerShell release metadata\r?\n(?<body>.*?)(?=^      - name:|\z)')
+        $resolvePowerShellStep.Success | Should -BeTrue
+        $resolvePowerShellStep.Groups['body'].Value | Should -Match '(?m)^          KC_GITHUB_API_TOKEN: \$\{\{ github\.token \}\}\r?$'
+        @([regex]::Matches($workflow, '(?m)^\s+KC_GITHUB_API_TOKEN:')).Count | Should -Be 1
         $workflow | Should -Match 'scripts/Prepare-PesterRuntime\.ps1'
         $workflow | Should -Match 'KC_PESTER_PACKAGE_CACHE'
         $workflow | Should -Match 'hashFiles\(''driver/config/pester-\*-closure\.lock\.json''\)'
@@ -151,6 +155,15 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $powerShellPreparer | Should -Match 'Resolve-WorkflowPhysicalPath'
         $powerShellPreparer | Should -Match '@\(Get-ChildItem -LiteralPath \$Path -Force\)\.Count'
         $powerShellPreparer | Should -Not -Match '\$matches\s*='
+        $powerShellPreparer | Should -Not -Match '\$home\s*='
+        $powerShellPreparer | Should -Match '\$pshomeExecutable = Resolve-WorkflowPhysicalPath'
+        $powerShellPreparer | Should -Match 'pshome=\$pshomeExecutable'
+        $powerShellPreparer | Should -Match '\$releaseUri\.Host -ceq ''api\.github\.com'''
+        $powerShellPreparer | Should -Match '\$metadataHeaders\.Authorization = "Bearer \$\(\$env:KC_GITHUB_API_TOKEN\)"'
+        $powerShellPreparer | Should -Match '\$attempt -le 3'
+        $powerShellPreparer | Should -Match '\$statusCode -eq 403 -or \$statusCode -eq 429 -or \$statusCode -ge 500'
+        $powerShellPreparer | Should -Match '\$finalUri\.Host -cne ''api\.github\.com'''
+        $powerShellPreparer | Should -Not -Match 'Invoke-WebRequest -Uri \(\[string\]\$hashAssets\[0\]\.browser_download_url\).*?-Headers'
         (Get-Content -LiteralPath (Join-Path $script:RepositoryRoot 'scripts/StandardCoreSourceValidation.ps1') -Raw) | Should -Not -Match '\$matches\s*='
         $pesterPreparer = Get-Content -LiteralPath (Join-Path $script:RepositoryRoot 'scripts/Prepare-PesterRuntime.ps1') -Raw
         $pesterPreparer | Should -Match 'Test-CorePesterPackageArchive -ArchivePath \$cacheArchivePath'

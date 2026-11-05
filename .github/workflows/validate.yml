@@ -413,6 +413,7 @@ jobs:
           KC_MATRIX_ARCHITECTURE: ${{ matrix.architecture }}
           KC_MATRIX_EXECUTABLE: ${{ matrix.executable }}
           KC_MATRIX_ASSET_TEMPLATE: ${{ matrix.assetTemplate }}
+          KC_GITHUB_API_TOKEN: ${{ github.token }}
         run: |
           & (Join-Path $env:KC_DRIVER_ROOT 'scripts/Prepare-WorkflowPowerShell.ps1') -Mode Resolve `
             -Platform ([string]$env:KC_MATRIX_PLATFORM) -ExpectedArchitecture ([string]$env:KC_MATRIX_ARCHITECTURE) `
