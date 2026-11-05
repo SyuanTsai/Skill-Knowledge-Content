@@ -316,7 +316,7 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $gitSha256 = (Get-FileHash -LiteralPath $gitPath -Algorithm SHA256).Hash.ToLowerInvariant()
         $ownedRoot = Join-Path $runnerTemp "kc-$runNonce"
         $runtimeRoot = Join-Path $ownedRoot 'runtime'
-        $artifactsRoot = Join-Path ([IO.Path]::GetPathRoot($runnerTemp)) "a-$runNonce"
+        $artifactsRoot = if ($IsWindows) { Join-Path ([IO.Path]::GetPathRoot($runnerTemp)) "a-$runNonce" } else { Join-Path $runnerTemp "a-$runNonce" }
         $sourceToolsPath = Join-Path $artifactsRoot 'source-tools.json'
         try {
             $env:PROTECTED_GITHUB_WORKSPACE = $workspaceRoot
