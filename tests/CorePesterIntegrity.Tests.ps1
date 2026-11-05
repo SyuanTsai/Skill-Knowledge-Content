@@ -10,6 +10,14 @@ BeforeAll {
     $script:loadedPester = @(Get-Module -Name Pester | Where-Object { $_.Version -eq [version]'6.2.0' }) | Select-Object -First 1
     if ($null -eq $script:loadedPester) { throw 'Integrity tests require the explicitly prepared Pester 6.2.0 test host.' }
 
+    function Assert-TestThrowsLike {
+        param([scriptblock] $ScriptBlock, [string] $Pattern)
+        $caught = $null
+        try { & $ScriptBlock } catch { $caught = $_ }
+        $caught | Should -Not -BeNullOrEmpty
+        ([string]$caught.Exception.Message) | Should -BeLike $Pattern
+    }
+
     function New-IntegrityPackageFixture {
         param([Parameter(Mandatory)][string] $Path, [string] $Variant = 'valid')
 
@@ -118,7 +126,7 @@ Describe 'Consumed Core process bootstrap signal' {
             'missing' { '*signal or its ancestry is missing*' }
             'directory' { '*regular file with non-reparse ancestry*' }
         }
-        { Remove-CorePesterConsumedBootstrapSignal -CandidateRoot $root -ReleasePath $signal -BootstrapCommand $command -VerifiedPowerShellExecutable $script:verifiedPowerShellExecutable } | Should -Throw $expectedError
+        Assert-TestThrowsLike { Remove-CorePesterConsumedBootstrapSignal -CandidateRoot $root -ReleasePath $signal -BootstrapCommand $command -VerifiedPowerShellExecutable $script:verifiedPowerShellExecutable } $expectedError
         if ($Variant -ne 'missing') { Test-Path -LiteralPath $signal | Should -BeTrue }
     }
 
@@ -132,7 +140,7 @@ Describe 'Consumed Core process bootstrap signal' {
         $signal = Join-Path $link 'b-22222222222222222222222222222222.sig'
         [IO.File]::WriteAllText($signal, ('release' + [Environment]::NewLine), [Text.UTF8Encoding]::new($false))
         try {
-            { Remove-CorePesterConsumedBootstrapSignal -CandidateRoot $link -ReleasePath $signal -BootstrapCommand $script:verifiedPowerShellExecutable -VerifiedPowerShellExecutable $script:verifiedPowerShellExecutable } | Should -Throw '*regular file with non-reparse ancestry*'
+            Assert-TestThrowsLike { Remove-CorePesterConsumedBootstrapSignal -CandidateRoot $link -ReleasePath $signal -BootstrapCommand $script:verifiedPowerShellExecutable -VerifiedPowerShellExecutable $script:verifiedPowerShellExecutable } '*regular file with non-reparse ancestry*'
             Test-Path -LiteralPath $signal | Should -BeTrue
             Test-Path -LiteralPath (Join-Path $outside 'b-22222222222222222222222222222222.sig') | Should -BeTrue
         }
@@ -158,19 +166,19 @@ Describe 'Verified Pester 6.2.0 module closure' {
         $duplicateProperty = $lock -replace '"schemaVersion": 1,', '"schemaVersion": 1, "schemaVersion": 1,'
         $duplicatePath = Join-Path $TestDrive 'duplicate-property.json'
         [IO.File]::WriteAllText($duplicatePath, $duplicateProperty, [Text.UTF8Encoding]::new($false))
-        { Read-CorePesterClosureLock -LiteralPath $duplicatePath } | Should -Throw '*duplicate*'
+        Assert-TestThrowsLike { Read-CorePesterClosureLock -LiteralPath $duplicatePath } '*duplicate*'
 
         $object = Get-Content -LiteralPath $script:closureLockPath -Raw -Encoding utf8 | ConvertFrom-Json -AsHashtable
         $object.modulePayload[1].path = '../escape.ps1'
         $unsafePath = Join-Path $TestDrive 'unsafe-path.json'
         $object | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $unsafePath -Encoding utf8
-        { Read-CorePesterClosureLock -LiteralPath $unsafePath } | Should -Throw '*unsafe relative path*'
+        Assert-TestThrowsLike { Read-CorePesterClosureLock -LiteralPath $unsafePath } '*unsafe relative path*'
 
         $object = Get-Content -LiteralPath $script:closureLockPath -Raw -Encoding utf8 | ConvertFrom-Json -AsHashtable
         $object.modulePayload[1].path = $object.modulePayload[0].path
         $duplicateEntryPath = Join-Path $TestDrive 'duplicate-entry.json'
         $object | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $duplicateEntryPath -Encoding utf8
-        { Read-CorePesterClosureLock -LiteralPath $duplicateEntryPath } | Should -Throw '*duplicate*'
+        Assert-TestThrowsLike { Read-CorePesterClosureLock -LiteralPath $duplicateEntryPath } '*duplicate*'
     }
 
     # Scenario: An explicit module root is checked as a complete relative path and hash inventory.
@@ -240,6 +248,14 @@ Describe 'Verified Pester 6.2.0 module closure' {
             [IO.File]::ReadAllText($outsideProbe) | Should -Be 'outside target'
         }
         finally { Remove-Item -LiteralPath $link -Force }
+    }
+
+    # Scenario: a trusted run root lives below a platform-owned symlink such as macOS /tmp.
+    # Purpose: inspect the registered boundary itself and its descendants without rejecting unrelated system ancestors.
+    It 'UnitT26_does_not_walk_above_the_registered_trusted_boundary' {
+        $boundary = Join-Path $TestDrive 'trusted-boundary'
+        [void](New-Item -ItemType Directory -Path (Join-Path $boundary 'child') -Force)
+        (Test-CorePesterPathBoundary -Path (Join-Path $boundary 'child') -Boundary $boundary).IsValid | Should -BeTrue
     }
 
     # Scenario: The runtime exposes the exact locked manifest alongside an injected ambient copy.

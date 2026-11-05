@@ -5,7 +5,8 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string] $RuntimeExecutable,
-    [Parameter(Mandatory)][string] $OwnedRoot
+    [Parameter(Mandatory)][string] $OwnedRoot,
+    [string] $PackageCacheRoot = $env:KC_PESTER_PACKAGE_CACHE
 )
 
 Set-StrictMode -Version Latest
@@ -17,7 +18,8 @@ $lockPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../config/pester-6.
 $lockRecord = Read-CorePesterClosureLock -LiteralPath $lockPath
 $runtimeExecutable = [IO.Path]::GetFullPath($RuntimeExecutable)
 $actualExecutable = [IO.Path]::GetFullPath([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
-if (-not $runtimeExecutable.Equals($actualExecutable, [StringComparison]::OrdinalIgnoreCase)) {
+$pathComparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+if (-not $runtimeExecutable.Equals($actualExecutable, $pathComparison)) {
     throw 'Pester setup must run under the exact verified PowerShell executable it will populate.'
 }
 $runtimeModuleRoot = Get-CorePesterRuntimeModuleRoot -ExecutablePath $runtimeExecutable
@@ -26,7 +28,7 @@ $ownedBoundary = Test-CorePesterPathBoundary -Path $ownedRoot -Boundary $ownedRo
 if (-not $ownedBoundary.IsValid) { throw ('Pester setup evidence root is unsafe: ' + (@($ownedBoundary.Errors) -join '; ')) }
 $registeredOwnedRoot = [Environment]::GetEnvironmentVariable('RUN_OWNED_ROOT', 'Process')
 if ([string]::IsNullOrWhiteSpace($registeredOwnedRoot) -or
-    -not ([IO.Path]::GetFullPath($registeredOwnedRoot)).Equals($ownedRoot, [StringComparison]::OrdinalIgnoreCase)) {
+    -not ([IO.Path]::GetFullPath($registeredOwnedRoot)).Equals($ownedRoot, $pathComparison)) {
     throw 'Pester setup root does not match the workflow-registered run-owned root.'
 }
 $setupRoot = Join-Path $ownedRoot 'pester-setup'
@@ -48,18 +50,47 @@ try {
     if ($sourceUri -cne 'https://www.powershellgallery.com/api/v2/package/Pester/6.2.0') {
         throw 'Pester setup source URI differs from the pinned official PSGallery endpoint.'
     }
-    $downloadResponse = Invoke-WebRequest -Uri $sourceUri -OutFile $archivePath -PassThru -MaximumRedirection 3 -TimeoutSec 180 -ErrorAction Stop
     $observedFinalPackageUri = $null
-    if ($null -ne $downloadResponse -and $null -ne $downloadResponse.BaseResponse -and
-        $null -ne $downloadResponse.BaseResponse.RequestMessage -and
-        $null -ne $downloadResponse.BaseResponse.RequestMessage.RequestUri) {
-        $observedFinalPackageUri = [string]$downloadResponse.BaseResponse.RequestMessage.RequestUri.AbsoluteUri
+    $cacheArchivePath = $null
+    $cacheWasUsed = $false
+    if (-not [string]::IsNullOrWhiteSpace($PackageCacheRoot)) {
+        $cacheRoot = [IO.Path]::GetFullPath($PackageCacheRoot)
+        [void](New-Item -ItemType Directory -Path $cacheRoot -Force -ErrorAction Stop)
+        $cacheArchivePath = Join-Path $cacheRoot 'Pester.6.2.0.nupkg'
+        if (Test-Path -LiteralPath $cacheArchivePath -PathType Leaf) {
+            try {
+                $cachedPackage = Test-CorePesterPackageArchive -ArchivePath $cacheArchivePath -Lock $lockRecord.Value
+                if (-not $cachedPackage.IsValid) { throw (@($cachedPackage.Errors) -join '; ') }
+                [IO.File]::Copy($cacheArchivePath, $archivePath, $false)
+                $cacheWasUsed = $true
+            }
+            catch {
+                Remove-Item -LiteralPath $cacheArchivePath -Force -ErrorAction Stop
+                [Console]::Error.WriteLine("Discarded invalid cached Pester package: $($_.Exception.Message)")
+            }
+        }
+    }
+    if (-not $cacheWasUsed) {
+        $downloadResponse = Invoke-WebRequest -Uri $sourceUri -OutFile $archivePath -PassThru -MaximumRedirection 3 -TimeoutSec 180 -ErrorAction Stop
+        if ($null -ne $downloadResponse -and $null -ne $downloadResponse.BaseResponse -and
+            $null -ne $downloadResponse.BaseResponse.RequestMessage -and
+            $null -ne $downloadResponse.BaseResponse.RequestMessage.RequestUri) {
+            $observedFinalPackageUri = [string]$downloadResponse.BaseResponse.RequestMessage.RequestUri.AbsoluteUri
+        }
     }
     if ($null -ne $observedFinalPackageUri -and $observedFinalPackageUri -cnotmatch '^https://') {
         throw 'PSGallery acquisition resolved to a non-HTTPS final package URI.'
     }
     $package = Test-CorePesterPackageArchive -ArchivePath $archivePath -Lock $lockRecord.Value
     if (-not $package.IsValid) { throw ('Official Pester package does not match the complete reviewed lock: ' + (@($package.Errors) -join '; ')) }
+    if (-not $cacheWasUsed -and $null -ne $cacheArchivePath) {
+        [IO.File]::Copy($archivePath, $cacheArchivePath, $false)
+        $cachedPackage = Test-CorePesterPackageArchive -ArchivePath $cacheArchivePath -Lock $lockRecord.Value
+        if (-not $cachedPackage.IsValid) {
+            Remove-Item -LiteralPath $cacheArchivePath -Force -ErrorAction Stop
+            throw ('Fresh Pester cache copy failed closure verification: ' + (@($cachedPackage.Errors) -join '; '))
+        }
+    }
 
     if (Test-Path -LiteralPath $destinationModuleRoot) { throw 'The verified PowerShell runtime already contains a Pester destination; setup refuses overwrite.' }
     $runtimeRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $destinationModuleRoot))
@@ -81,7 +112,7 @@ try {
             if ($archiveEntry.Count -ne 1) { throw "Verified package payload does not have one exact entry: $relative" }
             $targetPath = [IO.Path]::GetFullPath((Join-Path $stageRoot ($relative.Replace('/', [IO.Path]::DirectorySeparatorChar))))
             $stagePrefix = $stageRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
-            if (-not $targetPath.StartsWith($stagePrefix, [StringComparison]::OrdinalIgnoreCase)) { throw "Package path escaped owned staging: $relative" }
+            if (-not $targetPath.StartsWith($stagePrefix, $pathComparison)) { throw "Package path escaped owned staging: $relative" }
             $targetDirectory = Split-Path -Parent $targetPath
             [void](New-Item -ItemType Directory -Path $targetDirectory -Force -ErrorAction Stop)
             $inputStream = $archiveEntry[0].Open()
@@ -114,6 +145,7 @@ try {
         sourceUri = $sourceUri
         observedFinalPackageUri = $observedFinalPackageUri
         finalPackageUriObserved = ($null -ne $observedFinalPackageUri)
+        packageCacheUsed = $cacheWasUsed
         sourceName = [string]$lockRecord.Value.source.sourceName
         version = [string]$lockRecord.Value.source.version
         officialArchiveDigestClaimed = $false

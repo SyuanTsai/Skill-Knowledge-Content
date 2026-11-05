@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Supported platform
 
-Run local development, installation, execution, testing, acceptance, and CI on Windows. Linux, macOS, WSL, and Linux containers are not host fallbacks. Authorized SaaS, browser, and API services remain supported; platform-specific course code and commands remain source evidence. Every workflow job, including each required status mirror, runs on a Windows runner.
+Local Agent development remains Windows-hosted. Canonical CI is the required exception: it runs parallel `windows-latest`, `ubuntu-latest`, and `macos-latest` validation legs, aggregates all three receipts on Ubuntu, and hosts the three required status mirrors on Ubuntu.
 
 ## Release contract
 
@@ -22,7 +22,7 @@ Before release:
 
 Use immutable release tags. Do not move an existing release tag to another commit.
 
-The active `8e627baf54bd6e47862e6291b25e71cc45a2f2b7` authority pin requires the protected two-purpose run. A bare `scripts/Validate.ps1` invocation fails closed and cannot count as a release result. The workflow requires an exact nonzero event base commit that is a distinct ancestor of the exact candidate commit; manual dispatch must supply that base explicitly.
+The active `2f249f5c1acdb1e7b9eb03180a709d85408e9ac0` authority pin requires the protected two-purpose run on all three platforms. A bare `scripts/Validate.ps1` invocation fails closed and cannot count as a release result. The workflow requires an exact nonzero event base commit that is a distinct ancestor of the exact candidate commit; manual dispatch must supply that base explicitly. See `.github/workflows/validate.yml`, `config/standard-v1.json`, and [the CI template](docs/ci/three-platform-ci-template.md).
 
 The protected source gate covers stages 1–5 and runs Static without an LLM plus the complete repository test suite. A source report PASS, workflow success, review, or merge does not authorize release, installation, publication, or downstream cutover. The field `releaseEligible=false` remains false permanently; a separate release process must make its own decision. The [README local protected-run instructions](README.md#protected-local-run) list the required raw-checkout controls, clean roots, exact-base driver, verified runtime, and both canonical-purpose commands.
 
@@ -42,4 +42,4 @@ Do not silently rename a stable Skill ID. Coordinate rename/removal through the 
 
 Rollback is performed by selecting the previously validated full commit SHA or immutable tag. Because consumers pin source commits and verify deterministic Skill content hashes, reverting the source pin restores the previous repository inventory without rewriting release history.
 
-Rollback must use a normal reviewed PR that reverts the entire adoption, including the `.github/workflows/validate.yml` 8e62 activation, `config/standard-v1.json`, active driver, tests, and docs. Restore the complete previously validated ff85 authority tuple: commit `ff85d5f80fe795b96354e753074b5ce59ad04ecd`, archive SHA-256 `3dc38613f2e2316ad8fcc79d4bf48d0b03fd8398f8dacc72d156abcbce95ea9d`, and its full 32-file hash inventory, along with the prior protected two-purpose workflow. Reverting only the config or driver while leaving the 8e62 source workflow active is invalid because that workflow rejects the ff85 authority. The prepared base reader accepts either complete approved tuple; rerun the restored gate with fresh receipts before making any separate release decision.
+Rollback must use a normal reviewed PR that reverts the workflow, complete authority tuple, protected driver, tests, and documentation together to one previously validated repository commit. Never mix authority inventories or reuse receipts across candidates; rerun the restored three-platform gate with fresh receipts before making any release decision.

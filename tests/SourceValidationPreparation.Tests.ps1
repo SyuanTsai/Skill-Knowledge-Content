@@ -12,6 +12,19 @@ BeforeAll {
     }
     . $script:sourceDriverPath
     $script:SourceRepository = 'https://github.com/SyuanTsai/SyuanTsai-AI-Instructions.git'
+    $script:fixtureRoot = Join-Path ([IO.Path]::GetTempPath()) 'knowledge-content-source-fixture'
+    $script:fixtureSourceToolsPath = Join-Path $script:fixtureRoot 'source-tools.json'
+    $script:fixtureAuthorityRoot = Join-Path $script:fixtureRoot 'authority'
+    $script:fixtureRuntimeRoot = Join-Path $script:fixtureRoot 'runtime'
+    $script:fixtureLegacyArchivePath = Join-Path $script:fixtureRoot 'legacy-authority.zip'
+
+    function Assert-TestThrowsLike {
+        param([scriptblock] $ScriptBlock, [string] $Pattern)
+        $caught = $null
+        try { & $ScriptBlock } catch { $caught = $_ }
+        $caught | Should -Not -BeNullOrEmpty
+        ([string]$caught.Exception.Message) | Should -BeLike $Pattern
+    }
 
     function New-PreparedAuthorityCandidate {
         $pin = Get-KnowledgeContentPreparedAuthorityPin
@@ -31,12 +44,9 @@ BeforeAll {
 
     function New-ScopedAuthorityCandidate {
         $authority = New-PreparedAuthorityCandidate
-        $authority.commit = '8e627baf54bd6e47862e6291b25e71cc45a2f2b7'
-        $authority.archiveUrl = 'https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/8e627baf54bd6e47862e6291b25e71cc45a2f2b7'
-        $authority.archiveSha256 = '9aa4a7fc8fc7c7f0ff9e774c79c77a64077b4003212a523dda519d034ff99989'
-        ($authority.files | Where-Object path -CEQ 'docs/standards/skill-repository-standard.md').sha256 = 'f7457bc6dbc13b475bcffc532b75961ff838e8d184162188dbbb1c766fd17e98'
-        ($authority.files | Where-Object path -CEQ 'scripts/Invoke-StandardAuthorityGate.ps1').sha256 = 'c4609b7f88f9b88be8583cc52f939837d49f2fa5e784977156cfe3d7c752082e'
-        ($authority.files | Where-Object path -CEQ 'scripts/Invoke-StandardValidation.ps1').sha256 = 'd13cea68b471aea60142665ee787a1bb2111d5ea7f8d45dfea14e0a2a59409b8'
+        $authority.commit = '2f249f5c1acdb1e7b9eb03180a709d85408e9ac0'
+        $authority.archiveUrl = 'https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/2f249f5c1acdb1e7b9eb03180a709d85408e9ac0'
+        $authority.archiveSha256 = 'a6c1ea639ec37ebc2fb754c4bfff1055d4eb3264dfd358472d5f24c57e5933ae'
         return $authority
     }
 
@@ -210,38 +220,38 @@ throw 'source-import-probe-stop'
 }
 
 Describe 'Knowledge Content protected source driver preparation' {
-    # Scenario: the active public config selects the reviewed 325 authority through the prepared reader.
-    # Purpose: bind the active Standard v1 pin to the complete 32-file prepared source authority.
-    It 'UnitT00_returns_the_complete_active_32_file_scoped_pin' {
+    # Scenario: the active public config selects the reviewed 2f249 authority through the prepared reader.
+    # Purpose: bind the active Standard v1 pin to the complete 49-file prepared source authority.
+    It 'UnitT00_returns_the_complete_active_49_file_scoped_pin' {
         $config = Get-Content -LiteralPath (Join-Path $script:repositoryRoot 'config/standard-v1.json') -Raw | ConvertFrom-Json -Depth 20
-        $config.authority.commit | Should -Be '8e627baf54bd6e47862e6291b25e71cc45a2f2b7'
-        $config.authority.archiveSha256 | Should -Be '9aa4a7fc8fc7c7f0ff9e774c79c77a64077b4003212a523dda519d034ff99989'
+        $config.authority.commit | Should -Be '2f249f5c1acdb1e7b9eb03180a709d85408e9ac0'
+        $config.authority.archiveSha256 | Should -Be 'a6c1ea639ec37ebc2fb754c4bfff1055d4eb3264dfd358472d5f24c57e5933ae'
 
         $pin = Get-KnowledgeContentPreparedAuthorityPin -Commit $config.authority.commit
         $pin.repository | Should -Be 'https://github.com/SyuanTsai/SyuanTsai-AI-Instructions.git'
-        $pin.commit | Should -Be '8e627baf54bd6e47862e6291b25e71cc45a2f2b7'
-        $pin.archiveUrl | Should -Be 'https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/8e627baf54bd6e47862e6291b25e71cc45a2f2b7'
-        $pin.archiveSha256 | Should -Be '9aa4a7fc8fc7c7f0ff9e774c79c77a64077b4003212a523dda519d034ff99989'
-        @($config.authority.files).Count | Should -Be 32
+        $pin.commit | Should -Be '2f249f5c1acdb1e7b9eb03180a709d85408e9ac0'
+        $pin.archiveUrl | Should -Be 'https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/2f249f5c1acdb1e7b9eb03180a709d85408e9ac0'
+        $pin.archiveSha256 | Should -Be 'a6c1ea639ec37ebc2fb754c4bfff1055d4eb3264dfd358472d5f24c57e5933ae'
+        @($config.authority.files).Count | Should -Be 49
         for ($index = 0; $index -lt $pin.files.Count; $index++) {
             $path = @($pin.files.Keys)[$index]
             $config.authority.files[$index].path | Should -BeExactly $path
             $config.authority.files[$index].sha256 | Should -BeExactly $pin.files[$path]
         }
-        @($pin.files.Keys).Count | Should -Be 32
-        @($pin.files.Keys | Sort-Object -Unique -CaseSensitive).Count | Should -Be 32
-        $pin.files['docs/standards/standard-core-validation-v2.json'] | Should -Be '2ba91aec827a642517fd90d294524e0dfc3fed9ae19c27d867d442d73b4915d6'
+        @($pin.files.Keys).Count | Should -Be 49
+        @($pin.files.Keys | Sort-Object -Unique -CaseSensitive).Count | Should -Be 49
+        $pin.files['docs/standards/standard-core-validation-v2.json'] | Should -Be '30aa73c26659ed2aa33d3eaafd1ea3a27342ec41b79eced9727ff10b35f142e1'
         $pin.files['docs/standards/third-party-raw-skill-sources.md'] | Should -Be '18649fd56eada4a94a5d47de778669b0ebcecfb85b84f5c581d283b21979f7ac'
     }
 
-    # Scenario: a successor candidate selects the complete, normally merged 325 authority tuple.
-    # Purpose: prepare the protected base reader before activation without changing the active ff85 pin.
-    It 'UnitT01_accepts_exact_scoped_authority_with_all_32_members' {
+    # Scenario: the active candidate selects the complete reviewed 2f249 authority tuple.
+    # Purpose: keep both protected source purposes on one exact approved pin.
+    It 'UnitT01_accepts_exact_scoped_authority_with_all_49_members' {
         $authority = New-ScopedAuthorityCandidate
         $accepted = Assert-KnowledgeContentPreparedAuthorityTuple -Authority $authority
         $accepted.commit | Should -BeExactly $authority.commit
         $accepted.archiveSha256 | Should -BeExactly $authority.archiveSha256
-        $accepted.files.Count | Should -Be 32
+        $accepted.files.Count | Should -Be 49
         foreach ($file in $authority.files) {
             $accepted.files[$file.path] | Should -BeExactly $file.sha256
         }
@@ -252,7 +262,7 @@ Describe 'Knowledge Content protected source driver preparation' {
     It 'UnitT02_routes_both_source_purposes_to_the_candidate_scoped_authority' {
         $authority = New-ScopedAuthorityCandidate
         foreach ($purpose in @('PrepareSourceTools', 'SourceValidation')) {
-            $request = @{ SourceToolsPath = 'C:/owned/source-tools.json'; AuthorityRepositoryRoot = 'C:/authority'; TrustedToolRoot = 'C:/runtime'; CandidateAuthority = $authority }
+            $request = @{ SourceToolsPath = $script:fixtureSourceToolsPath; AuthorityRepositoryRoot = $script:fixtureAuthorityRoot; TrustedToolRoot = $script:fixtureRuntimeRoot; CandidateAuthority = $authority }
             $request[$purpose] = $true
             $route = Resolve-KnowledgeContentSourceRoute @request
             $route.authority.commit | Should -BeExactly $authority.commit
@@ -260,7 +270,7 @@ Describe 'Knowledge Content protected source driver preparation' {
         }
     }
 
-    # Scenario: a successor tuple retains an old runner, archive, omitted member, extra member, or an unapproved revision.
+    # Scenario: a tuple retains an old runner or archive, omits or adds a member, or selects an unapproved revision.
     # Purpose: reject mixed authority identities at both setup and execution boundaries.
     It 'UnitT03_rejects_mixed_or_incomplete_scoped_tuple_<Mutation>' -TestCases @(
         @{ Mutation = 'runner' }, @{ Mutation = 'archive' }, @{ Mutation = 'missing' }, @{ Mutation = 'extra' }, @{ Mutation = 'commit' }, @{ Mutation = 'uppercase' }
@@ -269,49 +279,49 @@ Describe 'Knowledge Content protected source driver preparation' {
         $authority = New-ScopedAuthorityCandidate
         switch ($Mutation) {
             'runner' { ($authority.files | Where-Object path -CEQ 'scripts/Invoke-StandardValidation.ps1').sha256 = 'a4ee880810171428a6abd2e8fd5db2da1eaeda4abc0fc6c72dc259b4a709174b' }
-            'archive' { $authority.archiveSha256 = '3dc38613f2e2316ad8fcc79d4bf48d0b03fd8398f8dacc72d156abcbce95ea9d' }
+            'archive' { $authority.archiveSha256 = '0' * 64 }
             'missing' { $authority.files = @($authority.files | Select-Object -SkipLast 1) }
             'extra' { $authority.files += [pscustomobject]@{ path = 'extra'; sha256 = '0' * 64 } }
             'commit' { $authority.commit = '0' * 40 }
             'uppercase' {
                 $authority = New-PreparedAuthorityCandidate
-                $authority.commit = '8E627BAF54BD6E47862E6291B25E71CC45A2F2B7'
+                $authority.commit = '2F249F5C1ACDB1E7B9EB03180A709D85408E9AC0'
                 $authority.archiveUrl = "https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/$($authority.commit)"
             }
         }
         foreach ($purpose in @('PrepareSourceTools', 'SourceValidation')) {
-            $request = @{ SourceToolsPath = 'C:/owned/source-tools.json'; AuthorityRepositoryRoot = 'C:/authority'; TrustedToolRoot = 'C:/runtime'; CandidateAuthority = $authority }
+            $request = @{ SourceToolsPath = $script:fixtureSourceToolsPath; AuthorityRepositoryRoot = $script:fixtureAuthorityRoot; TrustedToolRoot = $script:fixtureRuntimeRoot; CandidateAuthority = $authority }
             $request[$purpose] = $true
             { Resolve-KnowledgeContentSourceRoute @request } | Should -Throw
         }
     }
 
-    # Scenario: a candidate authority contains the exact fields, ordered files, and identities in the prepared ff85 pin.
+    # Scenario: a candidate authority contains the exact fields, ordered files, and identities in the prepared pin.
     # Purpose: establish positive acceptance before testing mutations to every authority identity dimension.
     It 'UnitT05_accepts_the_complete_exact_prepared_authority_tuple' {
         $authority = New-PreparedAuthorityCandidate
         $accepted = Assert-KnowledgeContentPreparedAuthorityTuple -Authority $authority
 
         $accepted.commit | Should -Be $authority.commit
-        @($authority.files).Count | Should -Be 32
+        @($authority.files).Count | Should -Be 49
     }
 
     # Scenario: a candidate authority omits one member of its file inventory.
     # Purpose: reject incomplete authority tuples even when the remaining records are valid.
     It 'UnitT10_rejects_a_missing_file_member' {
         $authority = New-PreparedAuthorityCandidate
-        $authority.files = @($authority.files | Select-Object -First 31)
+        $authority.files = @($authority.files | Select-Object -First 48)
 
-        { Assert-KnowledgeContentPreparedAuthorityTuple -Authority $authority } | Should -Throw '*file tuple is incomplete*'
+        Assert-TestThrowsLike { Assert-KnowledgeContentPreparedAuthorityTuple -Authority $authority } '*file tuple is incomplete*'
     }
 
     # Scenario: a candidate authority repeats one path while retaining the nominal inventory length.
     # Purpose: reject ambiguous duplicate members instead of accepting a count-only match.
     It 'UnitT15_rejects_a_duplicate_file_path' {
         $authority = New-PreparedAuthorityCandidate
-        $authority.files[31].path = $authority.files[0].path
+        $authority.files[48].path = $authority.files[0].path
 
-        { Assert-KnowledgeContentPreparedAuthorityTuple -Authority $authority } | Should -Throw '*duplicate file path*'
+        Assert-TestThrowsLike { Assert-KnowledgeContentPreparedAuthorityTuple -Authority $authority } '*duplicate file path*'
     }
 
     # Scenario: one expected path is paired with another lowercase SHA-256 value.
@@ -320,7 +330,7 @@ Describe 'Knowledge Content protected source driver preparation' {
         $authority = New-PreparedAuthorityCandidate
         $authority.files[0].sha256 = '0' * 64
 
-        { Assert-KnowledgeContentPreparedAuthorityTuple -Authority $authority } | Should -Throw '*file identity mismatch*'
+        Assert-TestThrowsLike { Assert-KnowledgeContentPreparedAuthorityTuple -Authority $authority } '*file identity mismatch*'
     }
 
     # Scenario: a file member contains a parent traversal path instead of an authority-relative path.
@@ -329,7 +339,7 @@ Describe 'Knowledge Content protected source driver preparation' {
         $authority = New-PreparedAuthorityCandidate
         $authority.files[0].path = '../docs/standards/README.md'
 
-        { Assert-KnowledgeContentPreparedAuthorityTuple -Authority $authority } | Should -Throw '*unsafe file path*'
+        Assert-TestThrowsLike { Assert-KnowledgeContentPreparedAuthorityTuple -Authority $authority } '*unsafe file path*'
     }
 
     # Scenario: all file members are valid but two neighboring records are swapped.
@@ -340,7 +350,7 @@ Describe 'Knowledge Content protected source driver preparation' {
         $authority.files[0] = $authority.files[1]
         $authority.files[1] = $first
 
-        { Assert-KnowledgeContentPreparedAuthorityTuple -Authority $authority } | Should -Throw '*file path or order mismatch*'
+        Assert-TestThrowsLike { Assert-KnowledgeContentPreparedAuthorityTuple -Authority $authority } '*file path or order mismatch*'
     }
 
     # Scenario: a candidate authority has the wrong archive digest or URL for the approved commit.
@@ -348,11 +358,11 @@ Describe 'Knowledge Content protected source driver preparation' {
     It 'UnitT35_rejects_wrong_archive_digest_and_url' {
         $wrongDigest = New-PreparedAuthorityCandidate
         $wrongDigest.archiveSha256 = '0' * 64
-        { Assert-KnowledgeContentPreparedAuthorityTuple -Authority $wrongDigest } | Should -Throw '*archiveSha256*'
+        Assert-TestThrowsLike { Assert-KnowledgeContentPreparedAuthorityTuple -Authority $wrongDigest } '*archiveSha256*'
 
         $wrongUrl = New-PreparedAuthorityCandidate
         $wrongUrl.archiveUrl = $wrongUrl.archiveUrl.Replace($wrongUrl.commit, '8aabd22694a05771f98639f6d726cc9a620eb94b')
-        { Assert-KnowledgeContentPreparedAuthorityTuple -Authority $wrongUrl } | Should -Throw '*archiveUrl*'
+        Assert-TestThrowsLike { Assert-KnowledgeContentPreparedAuthorityTuple -Authority $wrongUrl } '*archiveUrl*'
     }
 
     # Scenario: a candidate authority changes only the reviewed source commit.
@@ -361,15 +371,15 @@ Describe 'Knowledge Content protected source driver preparation' {
         $authority = New-PreparedAuthorityCandidate
         $authority.commit = '8aabd22694a05771f98639f6d726cc9a620eb94b'
 
-        { Assert-KnowledgeContentPreparedAuthorityTuple -Authority $authority } | Should -Throw '*commit*'
+        Assert-TestThrowsLike { Assert-KnowledgeContentPreparedAuthorityTuple -Authority $authority } '*commit*'
     }
 
     # Scenario: setup and execution are requested separately with all required roots and paths.
-    # Purpose: permit setup and execution against the same complete active ff85 pin.
+    # Purpose: permit setup and execution against the same complete active pin.
     It 'UnitT45_accepts_complete_separate_setup_and_execution_requests' {
-        { Assert-KnowledgeContentSourceRequest -PrepareSourceTools -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' } | Should -Not -Throw
+        { Assert-KnowledgeContentSourceRequest -PrepareSourceTools -SourceToolsPath $script:fixtureSourceToolsPath -AuthorityRepositoryRoot $script:fixtureAuthorityRoot -TrustedToolRoot $script:fixtureRuntimeRoot } | Should -Not -Throw
         $authority = New-PreparedAuthorityCandidate
-        { Assert-KnowledgeContentSourceRequest -SourceValidation -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' -CandidateAuthority $authority } | Should -Not -Throw
+        { Assert-KnowledgeContentSourceRequest -SourceValidation -SourceToolsPath $script:fixtureSourceToolsPath -AuthorityRepositoryRoot $script:fixtureAuthorityRoot -TrustedToolRoot $script:fixtureRuntimeRoot -CandidateAuthority $authority } | Should -Not -Throw
     }
 
     # Scenario: setup routes through a wrapper's real advanced-function bound-parameter dictionary.
@@ -377,7 +387,7 @@ Describe 'Knowledge Content protected source driver preparation' {
     It 'UnitT46_routes_setup_using_actual_advanced_function_parameters' {
         {
             Invoke-KnowledgeContentSourceRouteWithActualParameters -PrepareSourceTools `
-                -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime'
+                -SourceToolsPath $script:fixtureSourceToolsPath -AuthorityRepositoryRoot $script:fixtureAuthorityRoot -TrustedToolRoot $script:fixtureRuntimeRoot
         } | Should -Not -Throw
     }
 
@@ -387,7 +397,7 @@ Describe 'Knowledge Content protected source driver preparation' {
         $authority = New-PreparedAuthorityCandidate
         {
             Invoke-KnowledgeContentSourceRouteWithActualParameters -SourceValidation `
-                -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' `
+                -SourceToolsPath $script:fixtureSourceToolsPath -AuthorityRepositoryRoot $script:fixtureAuthorityRoot -TrustedToolRoot $script:fixtureRuntimeRoot `
                 -CandidateAuthority $authority
         } | Should -Not -Throw
     }
@@ -397,28 +407,28 @@ Describe 'Knowledge Content protected source driver preparation' {
     It 'UnitT48_rejects_explicitly_bound_null_archive_path' {
         $authority = New-PreparedAuthorityCandidate
         $nullArchivePath = $null
-        {
+        Assert-TestThrowsLike {
             Invoke-KnowledgeContentSourceRouteWithActualParameters -SourceValidation `
-                -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' `
+                -SourceToolsPath $script:fixtureSourceToolsPath -AuthorityRepositoryRoot $script:fixtureAuthorityRoot -TrustedToolRoot $script:fixtureRuntimeRoot `
                 -AuthorityArchivePath $nullArchivePath -CandidateAuthority $authority
-        } | Should -Throw '*does not accept AuthorityArchivePath*'
+        } '*does not accept AuthorityArchivePath*'
     }
 
     # Scenario: source validation explicitly binds the legacy archive parameter to an empty string.
     # Purpose: reject the obsolete argument by name even when its value is empty.
     It 'UnitT49_rejects_explicitly_bound_empty_archive_path' {
         $authority = New-PreparedAuthorityCandidate
-        {
+        Assert-TestThrowsLike {
             Invoke-KnowledgeContentSourceRouteWithActualParameters -SourceValidation `
-                -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' `
+                -SourceToolsPath $script:fixtureSourceToolsPath -AuthorityRepositoryRoot $script:fixtureAuthorityRoot -TrustedToolRoot $script:fixtureRuntimeRoot `
                 -AuthorityArchivePath '' -CandidateAuthority $authority
-        } | Should -Throw '*does not accept AuthorityArchivePath*'
+        } '*does not accept AuthorityArchivePath*'
     }
 
     # Scenario: both setup and validation are requested in one invocation.
     # Purpose: keep source acquisition and protected execution as distinct operator actions.
     It 'UnitT50_rejects_mixed_setup_and_execution_modes' {
-        { Assert-KnowledgeContentSourceRequest -PrepareSourceTools -SourceValidation -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' } | Should -Throw '*separate setup and execution*'
+        Assert-TestThrowsLike { Assert-KnowledgeContentSourceRequest -PrepareSourceTools -SourceValidation -SourceToolsPath $script:fixtureSourceToolsPath -AuthorityRepositoryRoot $script:fixtureAuthorityRoot -TrustedToolRoot $script:fixtureRuntimeRoot } '*separate setup and execution*'
     }
 
     # Scenario: the real setup function imports the pinned runner with its AuthorityRoot in the runner's CandidateRoot parameter.
@@ -451,7 +461,7 @@ Describe 'Knowledge Content protected source driver preparation' {
             $setupArguments[$sourceCheckoutParameter] = $candidate.root
             [void](New-Item -ItemType Directory -Path $setupArguments.Root -Force)
 
-            { New-KnowledgeContentSourceToolSetup @setupArguments } | Should -Throw '*source-import-probe-stop*'
+            Assert-TestThrowsLike { New-KnowledgeContentSourceToolSetup @setupArguments } '*source-import-probe-stop*'
             $probe = Get-Content -LiteralPath $probePath -Raw | ConvertFrom-Json
             $probe.candidateRoot | Should -BeExactly ([IO.Path]::GetFullPath($authorityRoot))
             $actualSourceCheckout = if ($sourceCheckoutParameter -ceq 'SourceCheckoutRoot') { [string]$probe.sourceCheckoutRoot } else { [string]$probe.candidateRoot }
@@ -496,12 +506,12 @@ Describe 'Knowledge Content protected source driver preparation' {
         Mock Remove-KnowledgeContentOwnedCoreAdapterRoot { }
 
         try {
-            {
+            Assert-TestThrowsLike {
                 Invoke-KnowledgeContentSourcePurpose -Mode source-validation -RepositoryRoot $candidate.root `
                     -ArtifactsRoot (Join-Path $TestDrive 'execution-import-artifacts') -SourceToolsPath $sourceToolsPath `
                     -AuthorityRepositoryRoot $authorityRoot -TrustedToolRoot $PSHOME -AuthorityPin (Get-KnowledgeContentPreparedAuthorityPin) `
                     -CandidateAuthority (New-PreparedAuthorityCandidate) -BaseCommit 'HEAD^' -TimeoutSeconds 1800
-            } | Should -Throw '*source-import-probe-stop*'
+            } '*source-import-probe-stop*'
 
             $probe = Get-Content -LiteralPath $probePath -Raw | ConvertFrom-Json
             $probe.candidateRoot | Should -BeExactly $candidate.root
@@ -518,57 +528,53 @@ Describe 'Knowledge Content protected source driver preparation' {
         }
     }
 
-    # Scenario: source validation is requested with the active 8e config, an obsolete 8a config, or incomplete setup locations.
+    # Scenario: source validation is requested with the active 2f249 config, an obsolete config, or incomplete setup locations.
     # Purpose: accept only the complete active pin while continuing to reject stale receipts and missing trust roots.
     It 'UnitT55_accepts_active_scoped_pin_and_rejects_obsolete_or_incomplete_requests' {
         $activeAuthority = (Get-Content -LiteralPath (Join-Path $script:repositoryRoot 'config/standard-v1.json') -Raw | ConvertFrom-Json -Depth 20).authority
-        { Assert-KnowledgeContentSourceRequest -SourceValidation -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' -CandidateAuthority $activeAuthority } | Should -Not -Throw
+        { Assert-KnowledgeContentSourceRequest -SourceValidation -SourceToolsPath $script:fixtureSourceToolsPath -AuthorityRepositoryRoot $script:fixtureAuthorityRoot -TrustedToolRoot $script:fixtureRuntimeRoot -CandidateAuthority $activeAuthority } | Should -Not -Throw
 
         $obsoleteAuthority = New-PreparedAuthorityCandidate
         $obsoleteAuthority.commit = '8aabd22694a05771f98639f6d726cc9a620eb94b'
-        { Assert-KnowledgeContentSourceRequest -SourceValidation -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' -CandidateAuthority $obsoleteAuthority } | Should -Throw '*commit*'
-        { Assert-KnowledgeContentSourceRequest -SourceValidation -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' -CandidateAuthority (New-PreparedAuthorityCandidate) } | Should -Throw '*SourceToolsPath*'
-        { Assert-KnowledgeContentSourceRequest -SourceValidation -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -CandidateAuthority (New-PreparedAuthorityCandidate) } | Should -Throw '*TrustedToolRoot*'
+        Assert-TestThrowsLike { Assert-KnowledgeContentSourceRequest -SourceValidation -SourceToolsPath $script:fixtureSourceToolsPath -AuthorityRepositoryRoot $script:fixtureAuthorityRoot -TrustedToolRoot $script:fixtureRuntimeRoot -CandidateAuthority $obsoleteAuthority } '*commit*'
+        Assert-TestThrowsLike { Assert-KnowledgeContentSourceRequest -SourceValidation -AuthorityRepositoryRoot $script:fixtureAuthorityRoot -TrustedToolRoot $script:fixtureRuntimeRoot -CandidateAuthority (New-PreparedAuthorityCandidate) } '*SourceToolsPath*'
+        Assert-TestThrowsLike { Assert-KnowledgeContentSourceRequest -SourceValidation -SourceToolsPath $script:fixtureSourceToolsPath -AuthorityRepositoryRoot $script:fixtureAuthorityRoot -CandidateAuthority (New-PreparedAuthorityCandidate) } '*TrustedToolRoot*'
     }
 
-    # Scenario: the public entry point is invoked without a source purpose while the scoped authority is active.
-    # Purpose: fail closed before ordinary validation can acquire tools or report an unprotected v1 pass.
-    It 'UnitT56_rejects_ordinary_validation_while_scoped_source_pin_is_active' {
-        $validatePath = Join-Path $script:repositoryRoot 'scripts/Validate.ps1'
-        $output = @(& $script:verifiedPowerShellExecutable -NoProfile -NonInteractive -File $validatePath -RepositoryRoot $script:repositoryRoot 2>&1)
-        $exitCode = $LASTEXITCODE
-        $text = $output -join "`n"
-
-        $exitCode | Should -Be 1
-        $text | Should -Match 'Active 8e62 authority requires explicit -PrepareSourceTools or -SourceValidation'
+    # Scenario: the public entry point is invoked without a source purpose after the new authority activation.
+    # Purpose: keep ordinary local validation available while CI explicitly selects both protected source purposes.
+    It 'UnitT56_keeps_ordinary_validation_routed_without_accepting_an_older_pin' {
+        $text = Get-Content -LiteralPath (Join-Path $script:repositoryRoot 'scripts/Validate.ps1') -Raw
+        $text | Should -Match 'if \(\[string\]\$sourceRoute\.mode -cne ''ordinary''\)'
+        $text | Should -Not -Match 'Active .* authority requires explicit'
     }
 
     # Scenario: an explicit source request includes the legacy archive path or an ordinary call supplies an empty new root.
     # Purpose: reject arguments that would otherwise be silently ignored by public source-purpose routing.
     It 'UnitT65_rejects_ignored_legacy_archive_and_roots_without_source_purpose' {
         $authority = New-PreparedAuthorityCandidate
-        { Resolve-KnowledgeContentSourceRoute -SourceValidation -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' -AuthorityArchivePath 'C:/legacy/authority.zip' -CandidateAuthority $authority } | Should -Throw '*does not accept AuthorityArchivePath*'
-        { Resolve-KnowledgeContentSourceRoute -BoundParameters @{ TrustedToolRoot = '' } } | Should -Throw '*only valid for explicit source setup or validation*'
+        Assert-TestThrowsLike { Resolve-KnowledgeContentSourceRoute -SourceValidation -SourceToolsPath $script:fixtureSourceToolsPath -AuthorityRepositoryRoot $script:fixtureAuthorityRoot -TrustedToolRoot $script:fixtureRuntimeRoot -AuthorityArchivePath $script:fixtureLegacyArchivePath -CandidateAuthority $authority } '*does not accept AuthorityArchivePath*'
+        Assert-TestThrowsLike { Resolve-KnowledgeContentSourceRoute -BoundParameters @{ TrustedToolRoot = '' } } '*only valid for explicit source setup or validation*'
     }
 
-    # Scenario: setup and source execution are routed from the active 8e candidate config.
+    # Scenario: setup and source execution are routed from the active 2f249 candidate config.
     # Purpose: bind both explicit public modes to the exact active tuple without acquiring tools in this test.
     It 'UnitT70_routes_setup_and_validation_from_active_scoped_pin' {
         $activeAuthority = (Get-Content -LiteralPath (Join-Path $script:repositoryRoot 'config/standard-v1.json') -Raw | ConvertFrom-Json -Depth 20).authority
-        $route = Resolve-KnowledgeContentSourceRoute -PrepareSourceTools -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' -CandidateAuthority $activeAuthority -BoundParameters @{
+        $route = Resolve-KnowledgeContentSourceRoute -PrepareSourceTools -SourceToolsPath $script:fixtureSourceToolsPath -AuthorityRepositoryRoot $script:fixtureAuthorityRoot -TrustedToolRoot $script:fixtureRuntimeRoot -CandidateAuthority $activeAuthority -BoundParameters @{
             PrepareSourceTools = $true
-            SourceToolsPath = 'C:/owned/source-tools.json'
-            AuthorityRepositoryRoot = 'C:/authority'
-            TrustedToolRoot = 'C:/runtime'
+            SourceToolsPath = $script:fixtureSourceToolsPath
+            AuthorityRepositoryRoot = $script:fixtureAuthorityRoot
+            TrustedToolRoot = $script:fixtureRuntimeRoot
         }
 
         $route.mode | Should -BeExactly 'prepare-source-tools'
-        $route.authority.commit | Should -BeExactly '8e627baf54bd6e47862e6291b25e71cc45a2f2b7'
+        $route.authority.commit | Should -BeExactly '2f249f5c1acdb1e7b9eb03180a709d85408e9ac0'
         $activeAuthority.commit | Should -BeExactly $route.authority.commit
-        { Resolve-KnowledgeContentSourceRoute -SourceValidation -SourceToolsPath 'C:/owned/source-tools.json' -AuthorityRepositoryRoot 'C:/authority' -TrustedToolRoot 'C:/runtime' -CandidateAuthority $activeAuthority } | Should -Not -Throw
+        { Resolve-KnowledgeContentSourceRoute -SourceValidation -SourceToolsPath $script:fixtureSourceToolsPath -AuthorityRepositoryRoot $script:fixtureAuthorityRoot -TrustedToolRoot $script:fixtureRuntimeRoot -CandidateAuthority $activeAuthority } | Should -Not -Throw
     }
 
-    # Scenario: the public Validate entrypoint accepts explicit source purposes while its active config uses 8e.
+    # Scenario: the public Validate entrypoint accepts explicit source purposes while its active config uses the current pin.
     # Purpose: keep source route selection ahead of the ordinary active-authority gate and bind it to the tested route helper.
     It 'UnitT75_public_entrypoint_uses_prepared_source_routing_before_ordinary_authority_gate' {
         $validatePath = Join-Path $script:repositoryRoot 'scripts/Validate.ps1'
@@ -603,16 +609,12 @@ Describe 'Knowledge Content protected source driver preparation' {
         $resolvedAuthorityRoot | Should -BeExactly ([IO.Path]::GetFullPath($authorityRoot))
 
         $wrongCoreRunId = [guid]::NewGuid().ToString('N')
-        { Invoke-CorePesterAuthorityDependency -CandidateRoot $candidateRoot -CoreRunId $wrongCoreRunId -OuterRunId $outerRunId } |
-            Should -Throw '*candidate snapshot does not match the trusted run identity*'
-        { Invoke-CorePesterAuthorityDependency -CandidateRoot $candidateRoot -CoreRunId $coreRunId -OuterRunId ([guid]::NewGuid().ToString('N')) } |
-            Should -Throw '*outer adapter identity does not select the run-owned adapter snapshot*'
-        { Invoke-CorePesterAuthorityDependency -CandidateRoot $candidateRoot -CoreRunId $coreRunId -OuterRunId $outerRunId -CheckId 'repository-knowledge' } |
-            Should -Throw '*trusted repository-pester run identity*'
+        Assert-TestThrowsLike { Invoke-CorePesterAuthorityDependency -CandidateRoot $candidateRoot -CoreRunId $wrongCoreRunId -OuterRunId $outerRunId } '*candidate snapshot does not match the trusted run identity*'
+        Assert-TestThrowsLike { Invoke-CorePesterAuthorityDependency -CandidateRoot $candidateRoot -CoreRunId $coreRunId -OuterRunId ([guid]::NewGuid().ToString('N')) } '*outer adapter identity does not select the run-owned adapter snapshot*'
+        Assert-TestThrowsLike { Invoke-CorePesterAuthorityDependency -CandidateRoot $candidateRoot -CoreRunId $coreRunId -OuterRunId $outerRunId -CheckId 'repository-knowledge' } '*trusted repository-pester run identity*'
 
         Remove-Item -LiteralPath $adapterPath -Force
-        { Invoke-CorePesterAuthorityDependency -CandidateRoot $candidateRoot -CoreRunId $coreRunId -OuterRunId $outerRunId } |
-            Should -Throw '*outer adapter identity does not select the run-owned adapter snapshot*'
+        Assert-TestThrowsLike { Invoke-CorePesterAuthorityDependency -CandidateRoot $candidateRoot -CoreRunId $coreRunId -OuterRunId $outerRunId } '*outer adapter identity does not select the run-owned adapter snapshot*'
         [IO.File]::WriteAllText($adapterPath, ($adapter | ConvertTo-Json -Depth 10 -Compress), [Text.UTF8Encoding]::new($false))
 
         $reparseTarget = Join-Path $artifacts 'reparse-authority-target'
@@ -620,8 +622,7 @@ Describe 'Knowledge Content protected source driver preparation' {
         Remove-Item -LiteralPath $authorityRoot -Force
         try {
             New-SourceTestDirectoryReparsePoint -Path $authorityRoot -Target $reparseTarget
-            { Invoke-CorePesterAuthorityDependency -CandidateRoot $candidateRoot -CoreRunId $coreRunId -OuterRunId $outerRunId } |
-                Should -Throw '*authority snapshot contains a reparse ancestor*'
+            Assert-TestThrowsLike { Invoke-CorePesterAuthorityDependency -CandidateRoot $candidateRoot -CoreRunId $coreRunId -OuterRunId $outerRunId } '*authority snapshot contains a reparse ancestor*'
         }
         finally {
             if (Test-Path -LiteralPath $authorityRoot) { Remove-Item -LiteralPath $authorityRoot -Force }
@@ -629,7 +630,7 @@ Describe 'Knowledge Content protected source driver preparation' {
     }
 
     # Scenario: the source adapter and its Pester child are generated from the exact source wrapper and resolver receipt identities.
-    # Purpose: keep native report fields and Static's direct skillspector argv/exit binding required by the ff85 Core assertion.
+    # Purpose: keep native report fields and Static's direct skillspector argv/exit binding required by the Core assertion.
     It 'UnitT85_binds_static_native_report_to_its_frozen_skillspector_receipt_and_exact_invocation' {
         $driver = Get-Content -LiteralPath (Join-Path $script:repositoryRoot 'scripts/Validate.ps1') -Raw
         $driver | Should -Match '\$script:NativeReports\s*=\s*@\(\)'
@@ -718,7 +719,7 @@ Describe 'Knowledge Content protected source driver preparation' {
             validator = Join-Path $root 'skill-validator.exe'
             shim = Join-Path $root 'skill-tools.cmd'
             entry = Join-Path $root 'skill-tools.js'
-            node = Join-Path $root 'node.exe'
+            node = Join-Path $root $(if ($IsWindows) { 'node.exe' } else { 'node' })
             spector = Join-Path $root 'skillspector.exe'
         }
         foreach ($path in $toolPaths.Values) {
@@ -745,7 +746,7 @@ Describe 'Knowledge Content protected source driver preparation' {
         { Assert-KnowledgeContentSourceReceiptClosureFrozen -Bindings $bindings -FrozenFiles $frozen } | Should -Not -Throw
         foreach ($missingPath in @($toolPaths.shim, $toolPaths.entry, $toolPaths.node)) {
             $withoutRequiredIdentity = @($frozen | Where-Object { [string]$_.path -cne $missingPath })
-            { Assert-KnowledgeContentSourceReceiptClosureFrozen -Bindings $bindings -FrozenFiles $withoutRequiredIdentity } | Should -Throw '*is not frozen exactly once*'
+            Assert-TestThrowsLike { Assert-KnowledgeContentSourceReceiptClosureFrozen -Bindings $bindings -FrozenFiles $withoutRequiredIdentity } '*is not frozen exactly once*'
         }
         $sourceDriver = Get-Content -LiteralPath $script:sourceDriverPath -Raw
         $sourceDriver | Should -Match '\[string\]\$receipts\.\x27skill-tools\x27\.executablePath'

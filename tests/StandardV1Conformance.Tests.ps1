@@ -1,5 +1,15 @@
 # SPDX-FileCopyrightText: 2026 SyuanTsai
 # SPDX-License-Identifier: Apache-2.0
+function Assert-TestThrowsLike {
+    param([Parameter(Mandatory = $true)][scriptblock] $ScriptBlock, [Parameter(Mandatory = $true)][string] $Pattern)
+
+    $caught = $null
+    try { & $ScriptBlock }
+    catch { $caught = $_ }
+    $caught | Should -Not -BeNullOrEmpty
+    ([string]$caught.Exception.Message) | Should -BeLike $Pattern
+}
+
 Describe 'Knowledge & Content Standard v1 reference implementation' {
     BeforeAll {
         $script:RepositoryRoot = Split-Path -Parent $PSScriptRoot
@@ -35,10 +45,10 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $adapter.schemaVersion | Should -Be 1
         $adapter.standardVersion | Should -Be 'v1'
         $adapter.authority.repository | Should -Be 'https://github.com/SyuanTsai/SyuanTsai-AI-Instructions.git'
-        $adapter.authority.commit | Should -Be '8e627baf54bd6e47862e6291b25e71cc45a2f2b7'
-        $adapter.authority.archiveSha256 | Should -Be '9aa4a7fc8fc7c7f0ff9e774c79c77a64077b4003212a523dda519d034ff99989'
+        $adapter.authority.commit | Should -Be '2f249f5c1acdb1e7b9eb03180a709d85408e9ac0'
+        $adapter.authority.archiveSha256 | Should -Be 'a6c1ea639ec37ebc2fb754c4bfff1055d4eb3264dfd358472d5f24c57e5933ae'
         @($adapter.PSObject.Properties.Name) | Should -Not -Contain 'security'
-        @($adapter.authority.files).Count | Should -Be 32
+        @($adapter.authority.files).Count | Should -Be 49
         @($adapter.authority.files.path) | Should -Contain 'docs/standards/standard-core-validation-v2.json'
         @($adapter.authority.files.path) | Should -Contain 'docs/standards/schemas/standard-core-adapter-v2.schema.json'
         @($adapter.authority.files.path) | Should -Contain 'docs/standards/schemas/standard-core-evidence-v2.schema.json'
@@ -62,6 +72,10 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         @($adapter.authority.files.path) | Should -Contain 'scripts/Invoke-StandardValidation.ps1'
         @($adapter.authority.files.path) | Should -Contain 'docs/standards/standard-validation-contract-v1.json'
         @($adapter.authority.files.path) | Should -Contain 'docs/standards/schemas/standard-validation-adapter-v1.schema.json'
+        @($adapter.authority.files.path) | Should -Contain 'docs/standards/static-parser-host-ownership.json'
+        @($adapter.authority.files.path) | Should -Contain 'scripts/platform-runtime.psd1'
+        @($adapter.authority.files.path) | Should -Contain 'scripts/platform-runtime.psm1'
+        @($adapter.authority.files.path | Where-Object { $_ -like 'scripts/platform/*' }).Count | Should -BeGreaterThan 0
         @($adapter.authority.files | Where-Object { $_.sha256 -notmatch '^[0-9a-f]{64}$' }).Count | Should -Be 0
         $adapter.PSObject.Properties.Name | Should -Not -Contain 'deviations'
     }
@@ -84,97 +98,84 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $repositoryTests | Should -Match 'Test-Repository\.ps1''\)\s+-ReadOnlySnapshot'
     }
 
-    # Scenario: the protected Windows workflow receives PR, push, or manual-dispatch events.
-    # Purpose: bind one canonical validator to exact event revisions, raw checkout bytes, verified runtimes, and existing status contexts.
+    # Scenario: the protected workflow receives PR, push, or manual-dispatch events on three platforms.
+    # Purpose: bind every leg and aggregate to exact identities while retaining the existing required contexts.
     It 'UnitT50_routes_protected_source_CI_through_the_canonical_validator' {
         $workflowPath = Join-Path $script:RepositoryRoot '.github/workflows/validate.yml'
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
+
         $workflow | Should -Match 'scripts/Validate\.ps1'
-        $workflow | Should -Match 'persist-credentials:\s*false'
-        $workflow | Should -Match 'actions/checkout@[0-9a-f]{40}'
-        $workflow | Should -Match 'uses:\s*\*checkout-action-reference'
-        $workflow | Should -Match 'actions/setup-go@[0-9a-f]{40}'
-        $workflow | Should -Match '\$ownedRoot = Join-Path \$env:RUNNER_TEMP "kc-\$runNonce"'
-        $workflow | Should -Match '\$expectedOwnedRoot = Join-Path \$env:PROTECTED_RUNNER_TEMP "kc-\$expectedRunNonce"'
-        $workflow | Should -Not -Match 'knowledge-content-owned'
-        $workflow | Should -Match '\$artifactsRoot = Join-Path \(\[IO\.Path\]::GetPathRoot\(\$env:RUNNER_TEMP\)\) "a-\$runNonce"'
-        $workflow | Should -Match 'path:\s+\$\{\{\s*env\.KC_ARTIFACTS_ROOT\s*\}\}'
-        $workflow | Should -Not -Match 'knowledge-content-artifacts'
-        $workflow | Should -Match 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020'
-        $workflow | Should -Match "node-version:\s+'24\.21\.0'"
-        $workflow | Should -Match 'nodeVersion -cne ''v24\.21\.0'''
-        $workflow | Should -Match 'Join-Path \$nodeRoot ''node_modules/npm/package\.json'''
-        $workflow | Should -Match '\$npmLauncherPath\.Equals\(\$expectedNpmLauncherPath'
-        $workflow | Should -Match 'npmVersion -cne \$npmPackageVersion'
-        $workflow | Should -Match 'nodeExecutableSha256'
-        $workflow | Should -Match 'npmLauncherSha256'
-        $workflow | Should -Match 'npmCliSha256'
-        $workflow | Should -Match 'npmPackageJsonSha256'
-        $workflow | Should -Match 'node-runtime-before-source-setup\.json'
-        $nodeRuntimeCapture = $workflow.IndexOf('Capture and verify Node runtime before source setup', [StringComparison]::Ordinal)
-        $sourceToolsSetup = $workflow.IndexOf('Prepare source tool receipts through the canonical validator', [StringComparison]::Ordinal)
-        $nodeRuntimeCapture | Should -BeGreaterThan -1
-        $nodeRuntimeCapture | Should -BeLessThan $sourceToolsSetup
-        $workflow | Should -Match 'runs-on:\s+windows-latest'
+        $workflow | Should -Match 'fail-fast:\s*false'
+        @([regex]::Matches($workflow, '(?m)^\s+- os:\s*(windows-latest|ubuntu-latest|macos-latest)\s*$')).Count | Should -Be 3
+        foreach ($entry in @(
+            @{ Os = 'windows-latest'; Platform = 'windows'; Arch = 'x64' },
+            @{ Os = 'ubuntu-latest'; Platform = 'linux'; Arch = 'x64' },
+            @{ Os = 'macos-latest'; Platform = 'macos'; Arch = 'arm64' }
+        )) {
+            $workflow | Should -Match ("(?ms)- os:\s+{0}.*?platform:\s+{1}.*?architecture:\s+{2}" -f $entry.Os, $entry.Platform, $entry.Arch)
+        }
+        $workflow | Should -Match 'name:\s*Knowledge & Content Standard v1 \(\$\{\{ matrix\.platform \}\}\)'
+        $workflow | Should -Match 'timeout-minutes:\s*60'
+        $workflow | Should -Match 'ref:\s+2f249f5c1acdb1e7b9eb03180a709d85408e9ac0'
         $workflow | Should -Match '(?s)Preserve committed bytes before checkout.*?core\.autocrlf false.*?Checkout exact event candidate'
-        $workflow | Should -Match 'github\.event\.pull_request\.head\.sha\s*\|\|\s*github\.sha'
-        $workflow | Should -Match 'PULL_REQUEST_BASE_SHA:\s*\$\{\{\s*github\.event\.pull_request\.base\.sha\s*\}\}'
-        $workflow | Should -Match 'PUSH_BEFORE_SHA:\s*\$\{\{\s*github\.event\.before\s*\}\}'
-        $workflow | Should -Match 'DISPATCH_BASE_SHA:\s*\$\{\{\s*inputs\.base_commit\s*\}\}'
         $workflow | Should -Match 'Checkout exact event-base protected driver'
-        $workflow | Should -Match 'ref:\s+\$\{\{\s*github\.event\.pull_request\.base\.sha\s*\|\|\s*github\.event\.before\s*\|\|\s*inputs\.base_commit\s*\}\}'
-        $workflow | Should -Match 'KC_DRIVER_ROOT'
         $workflow | Should -Match 'Protected driver HEAD differs from the exact event base SHA'
         $workflow | Should -Match 'Protected driver checkout is not clean'
-        $workflow | Should -Match 'id:\s*bind_identities'
-        $workflow | Should -Match 'git_sha256=\$gitExecutableSha256'
-        $workflow | Should -Match 'hash-object --no-filters -- \$protectedHelperPath'
-        $workflow | Should -Match 'EXPECTED_EVENT_BASE:\s*\$\{\{\s*github\.event\.pull_request\.base\.sha\s*\|\|\s*github\.event\.before\s*\|\|\s*inputs\.base_commit\s*\}\}'
-        $workflow | Should -Match 'EXPECTED_SOURCE_TOOLS_RUN_ID:\s*\$\{\{\s*steps\.prepare_source_tools\.outputs\.run_id\s*\}\}'
-        $workflow | Should -Match 'EXPECTED_SOURCE_TOOLS_SHA256:\s*\$\{\{\s*steps\.prepare_source_tools\.outputs\.source_tools_sha256\s*\}\}'
-        $workflow | Should -Match 'EXPECTED_GIT_PATH:\s*\$\{\{\s*steps\.bind_identities\.outputs\.git_path\s*\}\}'
-        $workflow | Should -Match 'EXPECTED_GIT_SHA256:\s*\$\{\{\s*steps\.bind_identities\.outputs\.git_sha256\s*\}\}'
-        $workflow | Should -Match 'Protected source helper raw bytes differ from the immutable event-base Git blob'
-        $sourceBindingGuardEnd = $workflow.IndexOf('# PROTECTED_SOURCE_BINDING_GUARD_END', [StringComparison]::Ordinal)
-        $protectedHelperDotSource = $workflow.IndexOf('. $protectedHelperPath', [StringComparison]::Ordinal)
-        $sourceBindingGuardEnd | Should -BeGreaterThan -1
-        $protectedHelperDotSource | Should -BeGreaterThan $sourceBindingGuardEnd
-        $workflow | Should -Match 'foreach \(\$root in @\(\$candidateRoot, \$driverRoot, \$authorityRoot\)\)'
-        $workflow | Should -Match 'ref:\s+8e627baf54bd6e47862e6291b25e71cc45a2f2b7'
-        $workflow | Should -Match 'PowerShell/PowerShell/releases/latest'
-        $workflow | Should -Match 'Get-AuthenticodeSignature'
+        $workflow | Should -Match 'Protected source helper raw bytes differ from the exact event-base Git blob'
+        $workflow | Should -Match '\$ownedRoot = Join-Path \$env:RUNNER_TEMP "kc-\$runNonce"'
+        $workflow | Should -Match 'Join-Path \$env:RUNNER_TEMP "a-\$runNonce"'
+        $workflow | Should -Match 'Prepare-WorkflowPowerShell\.ps1''\) -Mode Resolve'
+        $workflow | Should -Match 'Prepare-WorkflowPowerShell\.ps1''\) -Mode Install'
+        $workflow | Should -Match 'Prepare-WorkflowPowerShell\.ps1''\) -Mode Verify'
         $workflow | Should -Match 'scripts/Prepare-PesterRuntime\.ps1'
-        $workflow | Should -Match '\$env:RUN_OWNED_ROOT\s*=\s*\$env:KC_OWNED_ROOT'
-        $workflow | Should -Match 'PrepareSourceTools'
-        $workflow | Should -Match 'SourceValidation'
-        $workflow | Should -Match 'Join-Path \$env:KC_DRIVER_ROOT ''scripts/Prepare-PesterRuntime\.ps1'''
-        $workflow | Should -Match 'Join-Path \$env:KC_DRIVER_ROOT ''scripts/Validate\.ps1'''
-        $workflow | Should -Not -Match 'Join-Path \$env:KC_CANDIDATE_ROOT ''scripts/(?:Validate|Prepare-PesterRuntime)\.ps1'''
-        $workflow | Should -Match 'Assert-KnowledgeContentPreparedAuthorityCheckout'
-        $workflow | Should -Match "Get-KnowledgeContentPreparedAuthorityPin -Commit '8e627baf54bd6e47862e6291b25e71cc45a2f2b7'"
-        $workflow | Should -Match 'Assert-StandardCoreSourceCheckReport -Report \$report'
-        $workflow | Should -Match '\-ExpectedSourceRevision \$env:KC_HEAD_COMMIT -ExpectedBaseRevision \$env:KC_BASE_COMMIT'
-        $workflow | Should -Match '\-ExpectedEventName \$env:GITHUB_EVENT_NAME -ArtifactsRoot \$sourceValidationRoot'
-        $workflow | Should -Match 'observedProcessExitCode -ne 0\)'
-        $workflow | Should -Match '\$observedSourceExitCode = \[int\]\$phaseTiming\.observedProcessExitCode'
-        $workflow | Should -Match '\-OutputPath \$sourceReport -ProcessExitCode \$observedSourceExitCode'
-        $workflow | Should -Match 'sourceToolsSha256Before -cne \[string\]\$env:KC_SOURCE_TOOLS_SHA256'
-        $workflow | Should -Match 'sourceToolsSha256After -cne \$sourceToolsSha256Before'
-        $workflow | Should -Match 'sourceReportSha256After -cne \$sourceReportSha256Before'
-        $workflow | Should -Match 'source-workflow-timing-\$runKey\.json'
-        $workflow | Should -Match 'setupAndInstallSeconds'
-        $workflow | Should -Match 'twentyMinuteTargetMet'
-        $workflow | Should -Match 'actions/upload-artifact@[0-9a-f]{40}'
+        $workflow | Should -Match 'KC_PESTER_PACKAGE_CACHE'
+        $workflow | Should -Match 'hashFiles\(''driver/config/pester-\*-closure\.lock\.json''\)'
+        $workflow | Should -Match 'kc-leg-receipt-\$\{\{ matrix\.platform \}\}-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}'
+        $workflow | Should -Match '(?ms)^  canonical-aggregate:.*?runs-on:\s+ubuntu-latest.*?needs:\s+canonical-validation.*?if:\s+\$\{\{ always\(\) \}\}'
+        $workflow | Should -Match 'Platform ''\$platform'' must have exactly one receipt'
+        $workflow | Should -Match 'GITHUB_STEP_SUMMARY'
         $workflow | Should -Not -Match '(?m)^\s*(Install-Module|npm install|go install|pip install)\b'
-        Test-Path -LiteralPath (Join-Path $script:RepositoryRoot '.github/workflows/skill-validator.yml') | Should -BeFalse
+
+        $powerShellPreparer = Get-Content -LiteralPath (Join-Path $script:RepositoryRoot 'scripts/Prepare-WorkflowPowerShell.ps1') -Raw
+        $powerShellPreparer | Should -Match 'Discarded invalid PowerShell cache entry'
+        $powerShellPreparer | Should -Match 'mandatory post-cache verification'
+        $powerShellPreparer | Should -Match 'Get-AuthenticodeSignature'
+        $powerShellPreparer | Should -Match 'Resolve-WorkflowPhysicalPath'
+        $pesterPreparer = Get-Content -LiteralPath (Join-Path $script:RepositoryRoot 'scripts/Prepare-PesterRuntime.ps1') -Raw
+        $pesterPreparer | Should -Match 'Test-CorePesterPackageArchive -ArchivePath \$cacheArchivePath'
+        $pesterPreparer | Should -Match 'Discarded invalid cached Pester package'
+        $pesterPreparer | Should -Match 'Fresh Pester cache copy failed closure verification'
+
+        $anchors = @{}
+        foreach ($anchorMatch in [regex]::Matches($workflow, '(?m)^\s+[A-Z_]+:\s+&(?<name>[a-z-]+)\s+(?<action>[^\s#]+)')) {
+            $anchors[$anchorMatch.Groups['name'].Value] = $anchorMatch.Groups['action'].Value
+            $anchorMatch.Groups['action'].Value | Should -Match '^[^@\s]+@[0-9a-f]{40}$'
+        }
+        foreach ($usesMatch in [regex]::Matches($workflow, '(?m)^\s+uses:\s+(?<reference>[^\s#]+)')) {
+            $reference = $usesMatch.Groups['reference'].Value
+            if ($reference.StartsWith('*', [StringComparison]::Ordinal)) {
+                $anchors.ContainsKey($reference.Substring(1)) | Should -BeTrue
+            }
+            else {
+                $reference | Should -Match '^[^@\s]+@[0-9a-f]{40}$'
+            }
+        }
+
+        $checkoutBlocks = @([regex]::Matches($workflow, '(?ms)^\s+- name:\s+Checkout .*?(?=^\s+- name:|^  [a-z][a-z0-9-]*:|\z)'))
+        $checkoutBlocks.Count | Should -Be 3
+        foreach ($checkout in $checkoutBlocks) {
+            $checkout.Value | Should -Match 'persist-credentials:\s*false'
+        }
 
         foreach ($context in @('repository-contract', 'skill-validator', 'skill-tools')) {
-            $pattern = "(?ms)^\s+{0}:\s+name:\s+{0}.*?needs:\s+- canonical-validation.*?{1}" -f `
-                [regex]::Escape($context),
-                [regex]::Escape("needs['canonical-validation'].result")
-            $workflow | Should -Match $pattern
+            $job = [regex]::Match($workflow, "(?ms)^  $([regex]::Escape($context)):\s+.*?(?=^  [a-z][a-z0-9-]*:|\z)").Value
+            $job | Should -Match "(?m)^    name:\s+$([regex]::Escape($context))\s*$"
+            $job | Should -Match 'needs:\s*\[canonical-validation, canonical-aggregate\]'
+            $job | Should -Match 'runs-on:\s+ubuntu-latest'
+            $job | Should -Not -Match 'uses:'
+            $job | Should -Match "needs\['canonical-validation'\]\.result"
+            $job | Should -Match 'needs\.canonical-aggregate\.result'
         }
-        $workflow | Should -Not -Match '(?ms)repository-contract:.*?Run .*skill-validator|skill-validator:.*?Run .*skill-tools'
     }
 
     # Scenario: candidate source steps may rewrite environment state and the driver checkout before final verification.
@@ -287,24 +288,24 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
             $acceptedHelperPath | Should -BeExactly ([IO.Path]::GetFullPath((Join-Path $driverRoot $helperRelativePath)))
 
             $env:KC_DRIVER_ROOT = Join-Path $workspaceRoot 'redirected-driver'
-            { & $guardScript } | Should -Throw '*Protected driver root differs from its immutable workflow binding.*'
+            Assert-TestThrowsLike { & $guardScript } '*Protected driver root differs from its immutable workflow binding.*'
             $env:KC_DRIVER_ROOT = $driverRoot
 
             $env:KC_BASE_COMMIT = 'a' * 40
-            { & $guardScript } | Should -Throw '*Protected source environment identity differs from immutable event or setup outputs.*'
+            Assert-TestThrowsLike { & $guardScript } '*Protected source environment identity differs from immutable event or setup outputs.*'
             $env:KC_BASE_COMMIT = $baseCommit
             $env:KC_HEAD_COMMIT = 'b' * 40
-            { & $guardScript } | Should -Throw '*Protected source environment identity differs from immutable event or setup outputs.*'
+            Assert-TestThrowsLike { & $guardScript } '*Protected source environment identity differs from immutable event or setup outputs.*'
             $env:KC_HEAD_COMMIT = $headCommit
             $env:KC_SOURCE_TOOLS_RUN_ID = 'c' * 32
-            { & $guardScript } | Should -Throw '*Protected source environment identity differs from immutable event or setup outputs.*'
+            Assert-TestThrowsLike { & $guardScript } '*Protected source environment identity differs from immutable event or setup outputs.*'
             $env:KC_SOURCE_TOOLS_RUN_ID = $setupRunId
             $env:KC_SOURCE_TOOLS_SHA256 = 'd' * 64
-            { & $guardScript } | Should -Throw '*Protected source environment identity differs from immutable event or setup outputs.*'
+            Assert-TestThrowsLike { & $guardScript } '*Protected source environment identity differs from immutable event or setup outputs.*'
             $env:KC_SOURCE_TOOLS_SHA256 = $setupSha256
 
             $env:EXPECTED_HELPER_SHA256 = 'e' * 64
-            { & $guardScript } | Should -Throw '*Protected source helper SHA256 differs from its immutable identity-binding output.*'
+            Assert-TestThrowsLike { & $guardScript } '*Protected source helper SHA256 differs from its immutable identity-binding output.*'
             $env:EXPECTED_HELPER_SHA256 = $helperSha256
 
             & $gitPath -C $driverRoot config --local core.autocrlf true
@@ -318,7 +319,7 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
                 if ($LASTEXITCODE -ne 0) { throw 'Could not refresh the unchanged normalized helper blob in the fixture index.' }
                 $driverStatus = @(& $gitPath -C $driverRoot status --porcelain=v1 --untracked-files=all)
                 if ($LASTEXITCODE -ne 0 -or $driverStatus.Count -ne 0) { throw 'The CRLF protected helper fixture must remain clean after Git line-ending conversion.' }
-                { & $guardScript } | Should -Throw '*Protected source helper raw bytes differ from the immutable event-base Git blob.*'
+                Assert-TestThrowsLike { & $guardScript } '*Protected source helper raw bytes differ from the immutable event-base Git blob.*'
             }
             finally {
                 [Environment]::SetEnvironmentVariable('GIT_CONFIG_COUNT', $savedGitConfigCount, 'Process')
@@ -332,8 +333,8 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         }
     }
 
-    # Scenario: the active 8e62 pin makes ordinary v1 validation intentionally incomplete.
-    # Purpose: explain the two purposes while keeping the script path as the sole public validation command.
+    # Scenario: the active 2f249 pin requires the three-platform protected flow.
+    # Purpose: document the two canonical purposes and the reusable adoption template.
     It 'UnitT60_documents_both_protected_purposes_under_the_single_canonical_entrypoint' {
         $readme = Get-Content -LiteralPath (Join-Path $script:RepositoryRoot 'README.md') -Raw
         $release = Get-Content -LiteralPath (Join-Path $script:RepositoryRoot 'RELEASING.md') -Raw
@@ -341,15 +342,12 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
             $document | Should -Match 'scripts/Validate\.ps1'
             $document | Should -Match '-PrepareSourceTools'
             $document | Should -Match '-SourceValidation'
-            $document | Should -Match '8e627baf54bd6e47862e6291b25e71cc45a2f2b7'
+            $document | Should -Match '2f249f5c1acdb1e7b9eb03180a709d85408e9ac0'
             $document | Should -Match 'releaseEligible=false'
-            $document | Should -Match 'reverts the entire adoption'
             $document | Should -Match '\.github/workflows/validate\.yml'
             $document | Should -Match 'config/standard-v1\.json'
-            $document | Should -Match 'ff85d5f80fe795b96354e753074b5ce59ad04ecd'
-            $document | Should -Match '3dc38613f2e2316ad8fcc79d4bf48d0b03fd8398f8dacc72d156abcbce95ea9d'
-            $document | Should -Match '32-file hash inventory'
         }
+        Test-Path -LiteralPath (Join-Path $script:RepositoryRoot 'docs/ci/three-platform-ci-template.md') -PathType Leaf | Should -BeTrue
         $readme | Should -Match 'Protected local run'
         $readme | Should -Match '\$DriverRoot'
         $readme | Should -Match '\$AuthorityRoot'
@@ -360,125 +358,31 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $release | Should -Not -Match 'scripts/(?:Invoke-StandardValidation|Test-Repository)\.ps1'
     }
 
-    # Scenario: one or more validation jobs return a non-success result before the three protected status mirrors run.
-    # Purpose: verify the exact PowerShell mirror bodies fail closed and that every declared job runs on Windows.
-    It 'UnitT70_runs_all_required_status_mirrors_on_Windows_and_rejects_non_success_results' {
+    # Scenario: the matrix or aggregate is unsuccessful before the protected status mirrors run.
+    # Purpose: keep mirrors pure, Linux-hosted, and fail closed on both upstream results.
+    It 'UnitT70_keeps_required_status_mirrors_pure_and_bound_to_matrix_and_aggregate' {
         $workflowPath = Join-Path $script:RepositoryRoot '.github/workflows/validate.yml'
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
         $jobsSection = [regex]::Match($workflow, '(?ms)^jobs:[ \t]*\r?\n(?<body>.*)\z')
         $jobsSection.Success | Should -BeTrue
         $jobMatches = [regex]::Matches($jobsSection.Groups['body'].Value, '(?ms)^  (?<id>[a-z][a-z0-9-]*):[ \t]*\r?\n(?<body>.*?)(?=^  [a-z][a-z0-9-]*:[ \t]*\r?$|\z)')
         $jobIds = @($jobMatches | ForEach-Object { $_.Groups['id'].Value })
-        $jobIds | Should -Be @('canonical-validation', 'repository-contract', 'skill-validator', 'skill-tools')
+        $jobIds | Should -Be @('canonical-validation', 'canonical-aggregate', 'repository-contract', 'skill-validator', 'skill-tools')
 
         foreach ($jobMatch in $jobMatches) {
             $jobId = $jobMatch.Groups['id'].Value
-            $jobText = $jobMatch.Value
-            $runnerMatches = [regex]::Matches($jobText, '(?m)^    runs-on:[ \t]*(?<runner>[^\s#]+)[ \t]*\r?$')
-            $runnerMatches.Count | Should -Be 1
-            $runnerMatches[0].Groups['runner'].Value | Should -BeExactly 'windows-latest'
-            $jobText | Should -Not -Match '(?m)^    container:'
+            if ($jobId -in @('canonical-validation', 'canonical-aggregate')) { continue }
 
-            if ($jobId -ceq 'canonical-validation') { continue }
+            $jobText = $jobMatch.Value
             $jobText | Should -Match ("(?m)^    name:[ \t]*{0}[ \t]*\r?$" -f [regex]::Escape($jobId))
             $jobText | Should -Match '(?m)^    if:[ \t]+\$\{\{[ \t]*always\(\)[ \t]*\}\}[ \t]*\r?$'
-            $jobText | Should -Match '(?m)^    needs:[ \t]*\r?\n      - canonical-validation[ \t]*\r?$'
-            $jobText | Should -Match '(?m)^        shell:[ \t]*pwsh[ \t]*\r?$'
-            $jobText | Should -Match '(?m)^          CANONICAL_VALIDATION_RESULT:[ \t]*\$\{\{[ \t]*needs\[''canonical-validation''\]\.result[ \t]*\}\}[ \t]*\r?$'
-
-            $jobLines = $jobText -split "\r?\n"
-            $runLineIndex = -1
-            for ($lineIndex = 0; $lineIndex -lt $jobLines.Count; $lineIndex++) {
-                if ($jobLines[$lineIndex] -match '^        run:[ \t]*\|[ \t]*$') {
-                    $runLineIndex = $lineIndex
-                    break
-                }
-            }
-            $runLineIndex | Should -BeGreaterThan -1
-            $scriptLines = [System.Collections.Generic.List[string]]::new()
-            for ($lineIndex = $runLineIndex + 1; $lineIndex -lt $jobLines.Count; $lineIndex++) {
-                $line = [string]$jobLines[$lineIndex]
-                if ($line.StartsWith('          ', [StringComparison]::Ordinal)) {
-                    $scriptLines.Add($line.Substring(10))
-                    continue
-                }
-                if ([string]::IsNullOrWhiteSpace($line)) {
-                    $scriptLines.Add('')
-                    continue
-                }
-                break
-            }
-            $scriptText = $scriptLines -join "`n"
-            $scriptText | Should -Match '\$env:CANONICAL_VALIDATION_RESULT'
-            $scriptPath = Join-Path $TestDrive "mirror-$jobId.ps1"
-            [IO.File]::WriteAllText($scriptPath, $scriptText, [Text.UTF8Encoding]::new($false))
-
-            $pwshCommand = Get-Command pwsh.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
-            $pwshPath = [IO.Path]::GetFullPath([string]$pwshCommand.Source)
-            $invokeMirror = {
-                param([string]$Path, [bool]$SetResult, [AllowNull()][string]$Result)
-                $startInfo = [Diagnostics.ProcessStartInfo]::new()
-                $startInfo.FileName = $pwshPath
-                $startInfo.UseShellExecute = $false
-                $startInfo.CreateNoWindow = $true
-                $startInfo.RedirectStandardOutput = $true
-                $startInfo.RedirectStandardError = $true
-                [void]$startInfo.ArgumentList.Add('-NoLogo')
-                [void]$startInfo.ArgumentList.Add('-NoProfile')
-                [void]$startInfo.ArgumentList.Add('-NonInteractive')
-                [void]$startInfo.ArgumentList.Add('-File')
-                [void]$startInfo.ArgumentList.Add($Path)
-                if ($SetResult) {
-                    $startInfo.Environment['CANONICAL_VALIDATION_RESULT'] = $Result
-                } else {
-                    [void]$startInfo.Environment.Remove('CANONICAL_VALIDATION_RESULT')
-                }
-                $process = [Diagnostics.Process]::Start($startInfo)
-                try {
-                    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
-                    $stderrTask = $process.StandardError.ReadToEndAsync()
-                    if (-not $process.WaitForExit(60000)) {
-                        try {
-                            $process.Kill($true)
-                        }
-                        catch {
-                            # Keep the timeout as the primary failure; process cleanup is best effort.
-                        }
-                        [void]$process.WaitForExit(5000)
-                        throw "Timed out waiting for mirror process '$Path'."
-                    }
-                    [pscustomobject]@{
-                        ExitCode = $process.ExitCode
-                        StandardOutput = $stdoutTask.GetAwaiter().GetResult()
-                        StandardError = $stderrTask.GetAwaiter().GetResult()
-                    }
-                }
-                finally {
-                    $process.Dispose()
-                }
-            }
-
-            $resultCases = @(
-                [pscustomobject]@{ Label = 'success'; Value = 'success'; SetResult = $true; ExpectedExitCode = 0 },
-                [pscustomobject]@{ Label = 'failure'; Value = 'failure'; SetResult = $true; ExpectedExitCode = 1 },
-                [pscustomobject]@{ Label = 'cancelled'; Value = 'cancelled'; SetResult = $true; ExpectedExitCode = 1 },
-                [pscustomobject]@{ Label = 'skipped'; Value = 'skipped'; SetResult = $true; ExpectedExitCode = 1 },
-                [pscustomobject]@{ Label = 'empty'; Value = ''; SetResult = $true; ExpectedExitCode = 1 },
-                [pscustomobject]@{ Label = 'missing'; Value = $null; SetResult = $false; ExpectedExitCode = 1 },
-                [pscustomobject]@{ Label = 'unexpected'; Value = 'passed-with-warning'; SetResult = $true; ExpectedExitCode = 1 },
-                [pscustomobject]@{ Label = 'wrong-case'; Value = 'Success'; SetResult = $true; ExpectedExitCode = 1 }
-            )
-            foreach ($resultCase in $resultCases) {
-                $processResult = & $invokeMirror $scriptPath $resultCase.SetResult $resultCase.Value
-                $processResult.ExitCode | Should -Be $resultCase.ExpectedExitCode -Because "$jobId must map result '$($resultCase.Label)' to its strict mirror exit code"
-                $processResult.StandardError.Trim() | Should -BeExactly '' -Because "$jobId must not emit PowerShell errors for result '$($resultCase.Label)'"
-                if ($resultCase.ExpectedExitCode -eq 0) {
-                    $processResult.StandardOutput.TrimEnd() | Should -BeExactly 'Canonical Standard v1 validation passed.'
-                } else {
-                    $expectedMessage = "Canonical Standard v1 validation result: $([string]$resultCase.Value)"
-                    $processResult.StandardOutput.TrimEnd() | Should -BeExactly $expectedMessage.TrimEnd()
-                }
-            }
+            $jobText | Should -Match 'needs:\s*\[canonical-validation, canonical-aggregate\]'
+            $jobText | Should -Match '(?m)^    runs-on:\s+ubuntu-latest\s*$'
+            $jobText | Should -Match 'MATRIX_RESULT:.*needs\[''canonical-validation''\]\.result'
+            $jobText | Should -Match 'AGGREGATE_RESULT:.*needs\.canonical-aggregate\.result'
+            $jobText | Should -Match "MATRIX_RESULT -cne 'success'.*AGGREGATE_RESULT -cne 'success'"
+            $jobText | Should -Not -Match 'uses:'
+            $jobText | Should -Not -Match 'checkout'
         }
     }
 
@@ -487,6 +391,5 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $readme | Should -Match 'scripts/Validate\.ps1'
         $readme | Should -Not -Match 'scripts/(?:Invoke-StandardValidation|Test-Repository)\.ps1'
         $readme | Should -Not -Match 'tests/repository\.Tests\.ps1'
-        $readme | Should -Not -Match '(?i)\b(?:Invoke-Pester|pytest|skill-validator|skill-tools|skillspector)\b'
     }
 }

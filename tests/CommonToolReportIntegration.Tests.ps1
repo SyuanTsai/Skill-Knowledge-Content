@@ -6,6 +6,14 @@ Describe 'Knowledge child uses central package tool report rules' {
         $script:validationSource = Get-Content -LiteralPath $validationPath -Raw
         $script:childMatch = [regex]::Match($script:validationSource, '(?ms)^\$childRunnerText = @''\r?\n(?<body>.*?)^''@')
         if (-not $script:childMatch.Success) { throw 'Knowledge child runner source was not found.' }
+
+        function Assert-TestThrowsLike {
+            param([scriptblock] $ScriptBlock, [string] $Pattern)
+            $caught = $null
+            try { & $ScriptBlock } catch { $caught = $_ }
+            $caught | Should -Not -BeNullOrEmpty
+            ([string]$caught.Exception.Message) | Should -BeLike $Pattern
+        }
         $script:candidateRoot = Split-Path -Parent $PSScriptRoot
         function Get-KnowledgeCandidateBytesFingerprint {
             param([Parameter(Mandatory = $true)][string] $Root)
@@ -284,12 +292,12 @@ exit /b %ERRORLEVEL%
         elseif ($Field -eq 'commit') { $config.authority.commit = '0' * 40 }
         else { $config.authority.archiveSha256 = '0' * 64 }
         $prefix = $script:validationSource.Substring(0, $script:childMatch.Index)
-        {
+        Assert-TestThrowsLike {
             & {
                 param($DriverPrefix, $CandidateConfig)
                 . ([scriptblock]::Create($DriverPrefix))
                 Assert-AuthorityConfig -Config $CandidateConfig
             } $prefix $config
-        } | Should -Throw -ExpectedMessage $(if ($Field -eq 'member' -or $Field.Contains('/')) { '*authority file identity mismatch*' } else { '*exact approved P02 authority snapshot*' })
+        } $(if ($Field -eq 'member' -or $Field.Contains('/')) { '*authority file identity mismatch*' } else { '*exact approved P02 authority snapshot*' })
     }
 }

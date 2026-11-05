@@ -160,7 +160,8 @@ function New-CorePesterCaseInventoryRow {
         $extent = $scriptBlockProperty.Value.Ast.Extent
         $sourcePath = [IO.Path]::GetFullPath([string]$extent.File)
         $rootPrefix = $TestRoot + [IO.Path]::DirectorySeparatorChar
-        if (-not $sourcePath.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+        if (-not $sourcePath.StartsWith($rootPrefix, $comparison)) {
             throw 'the Pester case source file is outside the complete tests tree.'
         }
         if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
@@ -291,7 +292,8 @@ foreach ($container in $containerItems) {
     try {
         $containerFullPath = [IO.Path]::GetFullPath([string]$containerNameProperty.Value)
         $containerRootPrefix = $caseInventoryTestRoot + [IO.Path]::DirectorySeparatorChar
-        if (-not $containerFullPath.StartsWith($containerRootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+        if (-not $containerFullPath.StartsWith($containerRootPrefix, $comparison)) {
             throw 'container source file is outside the candidate tests tree.'
         }
         $containerRelativePath = [IO.Path]::GetRelativePath($caseInventoryTestRoot, $containerFullPath).Replace('\', '/')

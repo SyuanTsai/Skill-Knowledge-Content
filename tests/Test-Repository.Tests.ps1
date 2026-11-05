@@ -5,6 +5,14 @@ Describe 'Knowledge & Content Standard v1 repository contract' {
         $script:RepositoryRoot = Split-Path -Parent $PSScriptRoot
         $script:ValidatorPath = Join-Path $script:RepositoryRoot 'scripts/Test-Repository.ps1'
         $script:GitPath = (Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1).Path
+
+        function Assert-TestThrowsLike {
+            param([scriptblock] $ScriptBlock, [string] $Pattern)
+            $caught = $null
+            try { & $ScriptBlock } catch { $caught = $_ }
+            $caught | Should -Not -BeNullOrEmpty
+            ([string]$caught.Exception.Message) | Should -BeLike $Pattern
+        }
     }
 
     BeforeEach {
@@ -44,17 +52,17 @@ Describe 'Knowledge & Content Standard v1 repository contract' {
 
     It 'rejects an unlisted Skill directory' {
         New-Item -ItemType Directory -Path (Join-Path $script:FixtureRoot 'skills/unlisted-skill') | Out-Null
-        { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } | Should -Throw '*inventory does not exactly match*'
+        Assert-TestThrowsLike { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } '*inventory does not exactly match*'
     }
 
     It 'rejects non-package content at the canonical source root' {
         Set-Content -LiteralPath (Join-Path $script:FixtureRoot 'skills/ignored.ps1') -Value 'Write-Output unsafe'
-        { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } | Should -Throw '*non-package or reparse entry*'
+        Assert-TestThrowsLike { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } '*non-package or reparse entry*'
     }
 
     It 'rejects coexistence with the legacy Skill source root' {
         New-Item -ItemType Directory -Path (Join-Path $script:FixtureRoot '.agents/skills') -Force | Out-Null
-        { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } | Should -Throw '*Legacy .agents/skills source root*'
+        Assert-TestThrowsLike { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } '*Legacy .agents/skills source root*'
     }
 
     It 'rejects schema v1 or unknown source metadata fields' {
@@ -63,7 +71,7 @@ Describe 'Knowledge & Content Standard v1 repository contract' {
         $source.schemaVersion = 1
         $source | Add-Member -NotePropertyName profiles -NotePropertyValue @()
         $source | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $sourcePath -Encoding utf8NoBOM
-        { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } | Should -Throw '*invalid property set*'
+        Assert-TestThrowsLike { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } '*invalid property set*'
     }
 
     It 'rejects duplicate JSON properties before object materialization' {
@@ -71,7 +79,7 @@ Describe 'Knowledge & Content Standard v1 repository contract' {
         $text = Get-Content -LiteralPath $sourcePath -Raw
         $text = $text -replace '"sourceId": "knowledge-content",', '"sourceId": "knowledge-content", "sourceId": "other",'
         Set-Content -LiteralPath $sourcePath -Value $text -Encoding utf8NoBOM -NoNewline
-        { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } | Should -Throw '*duplicate JSON property*'
+        Assert-TestThrowsLike { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } '*duplicate JSON property*'
     }
 
     It 'keeps authority and security policy outside the domain inventory diagnostic' {
@@ -108,17 +116,17 @@ Describe 'Knowledge & Content Standard v1 repository contract' {
 
         [array]::Reverse($source.skills)
         $source | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $sourcePath -Encoding utf8NoBOM
-        { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } | Should -Throw '*ordinal ascending order*'
+        Assert-TestThrowsLike { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } '*ordinal ascending order*'
     }
 
     It 'rejects untracked package content from the integrity inventory' {
         Set-Content -LiteralPath (Join-Path $script:SkillRoot 'untracked.txt') -Value 'not indexed'
-        { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } | Should -Throw '*filesystem inventory does not match the Git index*'
+        Assert-TestThrowsLike { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } '*filesystem inventory does not match the Git index*'
     }
 
     It 'rejects unstaged package bytes that are not bound to the Git index' {
         Add-Content -LiteralPath (Join-Path $script:SkillRoot 'SKILL.md') -Value ([Environment]::NewLine + 'Additional valid body text.')
-        { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } | Should -Throw '*working-tree content is not bound*'
+        Assert-TestThrowsLike { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } '*working-tree content is not bound*'
     }
 
     It 'rejects malformed OpenAI metadata lexical style' {
@@ -127,12 +135,12 @@ Describe 'Knowledge & Content Standard v1 repository contract' {
         $malformedMetadata = [regex]::new('(?m)^([ \t]*)display_name(?=[ \t]*:)').Replace($metadata, '$1"display_name"', 1)
         $malformedMetadata | Should -Not -BeExactly $metadata
         Set-Content -LiteralPath $metadataPath -Value $malformedMetadata -Encoding utf8NoBOM -NoNewline
-        { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } | Should -Throw '*quoted mapping key*'
+        Assert-TestThrowsLike { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } '*quoted mapping key*'
     }
 
     It 'rejects comments outside the SPDX license header' {
         Add-Content -LiteralPath (Join-Path $script:SkillRoot 'agents/openai.yaml') -Value '# unsupported comment'
-        { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } | Should -Throw '*unsupported or malformed syntax*'
+        Assert-TestThrowsLike { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } '*unsupported or malformed syntax*'
     }
 
     It 'accepts the allowed optional license frontmatter field' {
