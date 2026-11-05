@@ -88,19 +88,20 @@ switch ($Mode) {
             try {
                 # Do not use -PreserveAuthorizationOnRedirect: PowerShell drops Authorization on redirects by default.
                 $metadataResponse = Invoke-WebRequest -Uri $releaseUri -Headers $metadataHeaders -TimeoutSec 60 -ErrorAction Stop
-                $finalUri = [Uri]$metadataResponse.BaseResponse.ResponseUri
-                if ($finalUri.Host -cne 'api.github.com') {
-                    throw "PowerShell release metadata request redirected to an unexpected host: $($finalUri.Host)"
-                }
                 break
             }
             catch {
-                $statusCode = if ($null -ne $_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
+                $responseProperty = $_.Exception.PSObject.Properties['Response']
+                $statusCode = if ($null -ne $responseProperty -and $null -ne $responseProperty.Value) { [int]$responseProperty.Value.StatusCode } else { 0 }
                 if ($attempt -eq 3 -or -not ($statusCode -eq 403 -or $statusCode -eq 429 -or $statusCode -ge 500)) { throw }
                 Start-Sleep -Seconds 10
             }
         }
         if ($null -eq $metadataResponse) { throw 'PowerShell release metadata request did not return a response.' }
+        $finalUri = [Uri]$metadataResponse.BaseResponse.RequestMessage.RequestUri
+        if ($finalUri.Host -cne 'api.github.com') {
+            throw "PowerShell release metadata request redirected to an unexpected host: $($finalUri.Host)"
+        }
         $release = $metadataResponse.Content | ConvertFrom-Json
         $tag = [string]$release.tag_name
         if ($release.draft -or $release.prerelease -or $tag -cnotmatch '^v(?<version>[0-9]+\.[0-9]+\.[0-9]+)$') {
