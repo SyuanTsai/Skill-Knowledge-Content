@@ -603,12 +603,14 @@ Describe 'Knowledge Content protected source driver preparation' {
         Assert-TestThrowsLike { Assert-KnowledgeContentSourceRequest -SourceValidation -SourceToolsPath $script:fixtureSourceToolsPath -AuthorityRepositoryRoot $script:fixtureAuthorityRoot -CandidateAuthority (New-PreparedAuthorityCandidate) } '*TrustedToolRoot*'
     }
 
-    # Scenario: the public entry point is invoked without a source purpose after the new authority activation.
-    # Purpose: keep ordinary local validation available while CI explicitly selects both protected source purposes.
-    It 'UnitT56_keeps_ordinary_validation_routed_without_accepting_an_older_pin' {
-        $text = Get-Content -LiteralPath (Join-Path $script:repositoryRoot 'scripts/Validate.ps1') -Raw
-        $text | Should -Match 'if \(\[string\]\$sourceRoute\.mode -cne ''ordinary''\)'
-        $text | Should -Not -Match 'Active .* authority requires explicit'
+    # Scenario: the public entry point is invoked without either explicit source purpose under the active Standard authority.
+    # Purpose: prevent ordinary development validation from being mistaken for protected source acceptance without pinning the gate to one authority commit.
+    It 'UnitT56_rejects_bare_ordinary_validation_without_a_commit_specific_gate' {
+        $validatePath = Join-Path $script:repositoryRoot 'scripts/Validate.ps1'
+        $text = Get-Content -LiteralPath $validatePath -Raw
+
+        $text | Should -Match 'if \(\[string\]\$sourceRoute\.mode -ceq ''ordinary''\)\s*\{\s*throw ''Active Standard authority requires explicit -PrepareSourceTools or -SourceValidation; ordinary validation is not protected source acceptance\.'''
+        $text | Should -Not -Match '\$config\.authority\.commit\s+-ceq\s+[''"][0-9a-f]{40}[''"]'
     }
 
     # Scenario: an explicit source request includes the legacy archive path or an ordinary call supplies an empty new root.
@@ -644,8 +646,9 @@ Describe 'Knowledge Content protected source driver preparation' {
         $validate | Should -Match '\[switch\]\s+\$PrepareSourceTools'
         $validate | Should -Match '\[switch\]\s+\$SourceValidation'
         $route = $validate.IndexOf('Resolve-KnowledgeContentSourceRoute', [StringComparison]::Ordinal)
-        $activeGate = $validate.IndexOf('Assert-AuthorityConfig -Config $config', [StringComparison]::Ordinal)
+        $activeGate = $validate.IndexOf('Active Standard authority requires explicit -PrepareSourceTools or -SourceValidation', [StringComparison]::Ordinal)
         $route | Should -BeGreaterThan -1
+        $activeGate | Should -BeGreaterThan -1
         $route | Should -BeLessThan $activeGate
     }
 

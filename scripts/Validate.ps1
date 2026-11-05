@@ -715,6 +715,10 @@ try {
         exit [int]$sourceExitCode
     }
 
+    if ([string]$sourceRoute.mode -ceq 'ordinary') {
+        throw 'Active Standard authority requires explicit -PrepareSourceTools or -SourceValidation; ordinary validation is not protected source acceptance.'
+    }
+
     $config = Read-JsonFile -Path (Join-Path $repoRoot 'config/standard-v1.json') -Context 'config/standard-v1.json'
     Assert-AuthorityConfig -Config $config
 
