@@ -27,7 +27,9 @@ BeforeAll {
     }
 
     function New-PreparedAuthorityCandidate {
-        $pin = Get-KnowledgeContentPreparedAuthorityPin
+        param([string] $Commit = '6cee5b8e43fe4e327fedc788865f931c561d6e89')
+
+        $pin = Get-KnowledgeContentPreparedAuthorityPin -Commit $Commit
         $files = @(
             foreach ($path in $pin.files.Keys) {
                 [pscustomobject]@{ path = [string]$path; sha256 = [string]$pin.files[$path] }
@@ -48,6 +50,10 @@ BeforeAll {
         $authority.archiveUrl = 'https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/6cee5b8e43fe4e327fedc788865f931c561d6e89'
         $authority.archiveSha256 = '336290db31dde3d04fe89f11d90e517f88e8140b1b235b72fe01f7ed12345cd2'
         return $authority
+    }
+
+    function New-ApprovedSourceAuthorityCandidate {
+        return New-PreparedAuthorityCandidate -Commit 'ead467c3488c103546f316d137196b447a1ff58a'
     }
 
     function Assert-NoReparseAncestors {
@@ -267,10 +273,10 @@ Describe 'Knowledge Content protected source driver preparation' {
         }
     }
 
-    # Scenario: both explicit purposes receive the same approved successor candidate tuple.
+    # Scenario: both explicit purposes receive the same approved ead467c successor candidate tuple.
     # Purpose: setup and execution must resolve the same authority instead of preparing old tools for a new runner.
     It 'UnitT02_routes_both_source_purposes_to_the_candidate_scoped_authority' {
-        $authority = New-ScopedAuthorityCandidate
+        $authority = New-ApprovedSourceAuthorityCandidate
         $expectedRunnerSha256 = [string](Get-KnowledgeContentPreparedAuthorityPin -Commit $authority.commit).files['scripts/Invoke-StandardValidation.ps1']
         foreach ($purpose in @('PrepareSourceTools', 'SourceValidation')) {
             $request = @{ SourceToolsPath = $script:fixtureSourceToolsPath; AuthorityRepositoryRoot = $script:fixtureAuthorityRoot; TrustedToolRoot = $script:fixtureRuntimeRoot; CandidateAuthority = $authority }
@@ -281,13 +287,13 @@ Describe 'Knowledge Content protected source driver preparation' {
         }
     }
 
-    # Scenario: a tuple retains an old runner or archive, omits or adds a member, or selects an unapproved revision.
+    # Scenario: the ead467c tuple retains an old runner or archive, omits or adds a member, or selects an unapproved revision.
     # Purpose: reject mixed authority identities at both setup and execution boundaries.
     It 'UnitT03_rejects_mixed_or_incomplete_scoped_tuple_<Mutation>' -TestCases @(
         @{ Mutation = 'runner' }, @{ Mutation = 'archive' }, @{ Mutation = 'missing' }, @{ Mutation = 'extra' }, @{ Mutation = 'commit' }, @{ Mutation = 'uppercase' }
     ) {
         param($Mutation)
-        $authority = New-ScopedAuthorityCandidate
+        $authority = New-ApprovedSourceAuthorityCandidate
         switch ($Mutation) {
             'runner' { ($authority.files | Where-Object path -CEQ 'scripts/Invoke-StandardValidation.ps1').sha256 = 'a4ee880810171428a6abd2e8fd5db2da1eaeda4abc0fc6c72dc259b4a709174b' }
             'archive' { $authority.archiveSha256 = '0' * 64 }
@@ -295,8 +301,8 @@ Describe 'Knowledge Content protected source driver preparation' {
             'extra' { $authority.files += [pscustomobject]@{ path = 'extra'; sha256 = '0' * 64 } }
             'commit' { $authority.commit = '0' * 40 }
             'uppercase' {
-                $authority = New-PreparedAuthorityCandidate
-                $authority.commit = '2F249F5C1ACDB1E7B9EB03180A709D85408E9AC0'
+                $authority = New-ApprovedSourceAuthorityCandidate
+                $authority.commit = 'EAD467C3488C103546F316D137196B447A1FF58A'
                 $authority.archiveUrl = "https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/$($authority.commit)"
             }
         }
@@ -305,6 +311,24 @@ Describe 'Knowledge Content protected source driver preparation' {
             $request[$purpose] = $true
             { Resolve-KnowledgeContentSourceRoute @request } | Should -Throw
         }
+    }
+
+    # Scenario: the protected reader selects the complete ead467c runner dependency closure before config adoption.
+    # Purpose: bind all ordered registry and platform-runtime members to one reviewable canonical digest.
+    It 'UnitT04_accepts_only_the_complete_approved_source_tuple' {
+        $authority = New-ApprovedSourceAuthorityCandidate
+        $accepted = Assert-KnowledgeContentPreparedAuthorityTuple -Authority $authority
+
+        $accepted.commit | Should -BeExactly 'ead467c3488c103546f316d137196b447a1ff58a'
+        $accepted.archiveSha256 | Should -BeExactly 'ab304bc6caabe4bb9b605f403c852650e19e25f72999010db61bbad695e1c60b'
+        @($accepted.files.Keys).Count | Should -Be 51
+        @($accepted.files.Keys) | Should -Contain 'docs/standards/skillspector-approved-sources.json'
+        @($accepted.files.Keys) | Should -Contain 'docs/standards/schemas/skillspector-approved-sources-v1.schema.json'
+        @($accepted.files.Keys) | Should -Contain 'scripts/WindowsDacl.psm1'
+        @($accepted.files.Keys) | Should -Contain 'scripts/platform/WindowsInstallerMutation.cs'
+        $canonical = (@($accepted.files.GetEnumerator() | ForEach-Object { $_.Key + [char]9 + $_.Value }) -join "`n") + "`n"
+        [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($canonical))).ToLowerInvariant() |
+            Should -BeExactly 'aec3d84a1709b4435dc65f9a5ae471dafac3a9101d6469eeee607b911f872a75'
     }
 
     # Scenario: a candidate authority contains the exact fields, ordered files, and identities in the prepared pin.

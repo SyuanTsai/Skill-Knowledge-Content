@@ -235,6 +235,22 @@ jobs:
           }
           $protectedHelperSha256 = (Get-FileHash -LiteralPath $protectedHelperPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
 
+          $approvedSourceAuthority = 'ead467c3488c103546f316d137196b447a1ff58a'
+          $candidatePin = Get-Content -LiteralPath (Join-Path $candidateRoot 'config/standard-v1.json') -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 20 -ErrorAction Stop
+          $driverPin = Get-Content -LiteralPath (Join-Path $driverRoot 'config/standard-v1.json') -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 20 -ErrorAction Stop
+          $candidateSourceAuthority = [string]$candidatePin.authority.commit
+          $driverSourceAuthority = [string]$driverPin.authority.commit
+          $protectedHelperText = [IO.File]::ReadAllText($protectedHelperPath, [Text.UTF8Encoding]::new($false, $true))
+          $approvedSourceDefinitions = [regex]::Matches($protectedHelperText, '(?m)^[ \t]*\$script:KnowledgeContentApprovedAuthorityCommit\b[^\r\n]*\r?$')
+          $approvedSourcePins = [regex]::Matches($protectedHelperText, '(?m)^\$script:KnowledgeContentApprovedAuthorityCommit = ''(?<sha>[0-9a-f]{40})''\r?$')
+          $approvedSourceRequired = $candidateSourceAuthority -ceq $approvedSourceAuthority -or $driverSourceAuthority -ceq $approvedSourceAuthority
+          $approvedSourceIsValid = ($approvedSourceDefinitions.Count -eq 0 -and -not $approvedSourceRequired) -or
+              ($approvedSourceDefinitions.Count -eq 1 -and $approvedSourcePins.Count -eq 1 -and
+                  $approvedSourcePins[0].Groups['sha'].Value -ceq $approvedSourceAuthority)
+          if (-not $approvedSourceIsValid) {
+            throw 'The exact protected driver is not prepared for the approved source authority.'
+          }
+
           $authorityHead = Get-GitValue -Root $authorityRoot -Arguments @('rev-parse', '--verify', 'HEAD^{commit}')
           if ($authorityHead -cne '6cee5b8e43fe4e327fedc788865f931c561d6e89') {
             throw 'Authority checkout HEAD differs from the exact prepared 6cee5b8 commit.'
