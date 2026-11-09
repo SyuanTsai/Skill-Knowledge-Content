@@ -7,13 +7,13 @@ Describe 'Canonical Standard v1 validation adapter' {
         $script:Validator = Get-Content -LiteralPath $script:ValidatorPath -Raw
         $script:Adapter = Get-Content -LiteralPath (Join-Path $script:RepositoryRoot 'config/standard-v1.json') -Raw |
             ConvertFrom-Json -Depth 20
-        $script:ExpectedAuthorityCommit = '6cee5b8e43fe4e327fedc788865f931c561d6e89'
-        $script:ExpectedAuthorityArchiveSha256 = '336290db31dde3d04fe89f11d90e517f88e8140b1b235b72fe01f7ed12345cd2'
+        $script:ExpectedAuthorityCommit = 'ead467c3488c103546f316d137196b447a1ff58a'
+        $script:ExpectedAuthorityArchiveSha256 = 'ab304bc6caabe4bb9b605f403c852650e19e25f72999010db61bbad695e1c60b'
         $script:ExpectedAuthorityFiles = [ordered]@{}
         foreach ($entry in @($script:Adapter.authority.files)) { $script:ExpectedAuthorityFiles[[string]$entry.path] = [string]$entry.sha256 }
     }
 
-    # Scenario: The Knowledge adapter and validator are loaded with the reviewed 6cee5b8 authority inventory.
+    # Scenario: The Knowledge adapter and validator are loaded with the reviewed ead467c authority inventory.
     # Purpose: Reject mismatched commit, archive, or required-file hashes before validation.
     It 'UnitT10_pins_exact_authority_without_local_deviation_policy' {
         @($script:Adapter.PSObject.Properties.Name) | Should -Be @('schemaVersion', 'standardVersion', 'authority')
@@ -30,18 +30,18 @@ Describe 'Canonical Standard v1 validation adapter' {
     }
 
     # Scenario: the production validator carries an ordered authority map alongside the public JSON config.
-    # Purpose: keep the runtime approval table byte-for-byte aligned with all 49 approved 6cee5b8 file identities.
-    It 'UnitT15_binds_the_protected_authority_table_to_the_complete_6cee5b8_config' {
+    # Purpose: keep the runtime approval table byte-for-byte aligned with all 51 approved ead467c file identities.
+    It 'UnitT15_binds_the_protected_authority_table_to_the_complete_ead467c_config' {
         $helper = Get-Content -LiteralPath (Join-Path $script:RepositoryRoot 'scripts/StandardCoreSourceValidation.ps1') -Raw
-        $marker = '$script:KnowledgeContentPreparedAuthorityFiles = [ordered]@{'
+        $marker = '$script:KnowledgeContentApprovedAuthorityFiles = [ordered]@{'
         $start = $helper.IndexOf($marker, [StringComparison]::Ordinal)
         $start | Should -BeGreaterOrEqual 0
         $end = $helper.IndexOf("`n}", $start, [StringComparison]::Ordinal)
         $end | Should -BeGreaterThan $start
         $tableText = $helper.Substring($start, $end - $start)
         $entries = @([regex]::Matches($tableText, "(?m)^\s*'(?<path>[^']+)'\s*=\s*'(?<sha256>[0-9a-f]{64})'\s*$"))
-        $entries.Count | Should -Be 49
-        foreach ($index in 0..48) {
+        $entries.Count | Should -Be 51
+        foreach ($index in 0..50) {
             $entries[$index].Groups['path'].Value | Should -BeExactly $script:Adapter.authority.files[$index].path
             $entries[$index].Groups['sha256'].Value | Should -BeExactly $script:Adapter.authority.files[$index].sha256
         }

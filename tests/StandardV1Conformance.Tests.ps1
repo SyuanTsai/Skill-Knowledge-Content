@@ -45,10 +45,10 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $adapter.schemaVersion | Should -Be 1
         $adapter.standardVersion | Should -Be 'v1'
         $adapter.authority.repository | Should -Be 'https://github.com/SyuanTsai/SyuanTsai-AI-Instructions.git'
-        $adapter.authority.commit | Should -Be '6cee5b8e43fe4e327fedc788865f931c561d6e89'
-        $adapter.authority.archiveSha256 | Should -Be '336290db31dde3d04fe89f11d90e517f88e8140b1b235b72fe01f7ed12345cd2'
+        $adapter.authority.commit | Should -Be 'ead467c3488c103546f316d137196b447a1ff58a'
+        $adapter.authority.archiveSha256 | Should -Be 'ab304bc6caabe4bb9b605f403c852650e19e25f72999010db61bbad695e1c60b'
         @($adapter.PSObject.Properties.Name) | Should -Not -Contain 'security'
-        @($adapter.authority.files).Count | Should -Be 49
+        @($adapter.authority.files).Count | Should -Be 51
         @($adapter.authority.files.path) | Should -Contain 'docs/standards/standard-core-validation-v2.json'
         @($adapter.authority.files.path) | Should -Contain 'docs/standards/schemas/standard-core-adapter-v2.schema.json'
         @($adapter.authority.files.path) | Should -Contain 'docs/standards/schemas/standard-core-evidence-v2.schema.json'
@@ -63,6 +63,8 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         @($adapter.authority.files.path) | Should -Contain 'docs/standards/upstream-interoperability.md'
         @($adapter.authority.files.path) | Should -Contain 'docs/standards/validation-security-gate.json'
         @($adapter.authority.files.path) | Should -Contain 'docs/standards/validation-toolchain.json'
+        @($adapter.authority.files.path) | Should -Contain 'docs/standards/skillspector-approved-sources.json'
+        @($adapter.authority.files.path) | Should -Contain 'docs/standards/schemas/skillspector-approved-sources-v1.schema.json'
         @($adapter.authority.files.path) | Should -Contain 'docs/standards/schemas/source-inventory-v2.schema.json'
         @($adapter.authority.files.path) | Should -Contain 'docs/standards/schemas/openai-agent-metadata.schema.json'
         @($adapter.authority.files.path) | Should -Contain 'docs/standards/schemas/validation-security-gate-v1.schema.json'
@@ -116,7 +118,7 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         }
         $workflow | Should -Match 'name:\s*Knowledge & Content Standard v1 \(\$\{\{ matrix\.platform \}\}\)'
         $workflow | Should -Match 'timeout-minutes:\s*60'
-        $workflow | Should -Match 'ref:\s+6cee5b8e43fe4e327fedc788865f931c561d6e89'
+        $workflow | Should -Match 'ref:\s+ead467c3488c103546f316d137196b447a1ff58a'
         $workflow | Should -Match '(?s)Preserve committed bytes before checkout.*?core\.autocrlf false.*?Checkout exact event candidate'
         $workflow | Should -Match 'Checkout exact event-base protected driver'
         $workflow | Should -Match 'Protected driver HEAD differs from the exact event base SHA'
@@ -428,7 +430,7 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         }
     }
 
-    # Scenario: the active 6cee5b8 pin requires the three-platform protected flow.
+    # Scenario: the active ead467c pin requires the three-platform protected flow.
     # Purpose: document the two canonical purposes and the reusable adoption template.
     It 'UnitT60_documents_both_protected_purposes_under_the_single_canonical_entrypoint' {
         $readme = Get-Content -LiteralPath (Join-Path $script:RepositoryRoot 'README.md') -Raw
@@ -437,7 +439,7 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
             $document | Should -Match 'scripts/Validate\.ps1'
             $document | Should -Match '-PrepareSourceTools'
             $document | Should -Match '-SourceValidation'
-            $document | Should -Match '6cee5b8e43fe4e327fedc788865f931c561d6e89'
+            $document | Should -Match 'ead467c3488c103546f316d137196b447a1ff58a'
             $document | Should -Match 'releaseEligible=false'
             $document | Should -Match '\.github/workflows/validate\.yml'
             $document | Should -Match 'config/standard-v1\.json'
