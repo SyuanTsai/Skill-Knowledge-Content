@@ -59,9 +59,9 @@ $script:KnowledgeContentPreparedAuthorityFiles = [ordered]@{
     'scripts/platform/WindowsProcess.cs' = '7b8a0cddd3b9809b861801fe1d6a618684e2ca6fa13f9334825c5c9da5b2d8d6'
 }
 
-$script:KnowledgeContentActiveAuthorityCommit = 'ead467c3488c103546f316d137196b447a1ff58a'
-$script:KnowledgeContentActiveAuthorityArchiveSha256 = 'ab304bc6caabe4bb9b605f403c852650e19e25f72999010db61bbad695e1c60b'
-$script:KnowledgeContentActiveAuthorityFiles = [ordered]@{
+$script:KnowledgeContentApprovedAuthorityCommit = 'ead467c3488c103546f316d137196b447a1ff58a'
+$script:KnowledgeContentApprovedAuthorityArchiveSha256 = 'ab304bc6caabe4bb9b605f403c852650e19e25f72999010db61bbad695e1c60b'
+$script:KnowledgeContentApprovedAuthorityFiles = [ordered]@{
     'docs/standards/README.md' = '8aef64a9e69848c82d0ceba43f14c2876e3816cbc4761bac26a35e6f62aaf884'
     'docs/standards/managed-skill-lifecycle.md' = '4e3f8595072d663f51d18aa28f42293fda5456362b49c0ea3f0157ae3dcf56dd'
     'docs/standards/schemas/managed-skill-lifecycle-v1.schema.json' = '9a7f4c02588d2b88194e953a41766a72a9426fa89d4c3781c5750dcc22d35863'
@@ -115,9 +115,9 @@ $script:KnowledgeContentActiveAuthorityFiles = [ordered]@{
     'scripts/platform/MacOS.psm1' = '8f25edfbee5ab36b5e1c42eb55c6dbab44db0bc29896c180612b1248920c7c47'
 }
 
-$script:KnowledgeContentApprovedAuthorityCommit = '472cbd6f533d3f6d0a5381862128ebcc87618a7c'
-$script:KnowledgeContentApprovedAuthorityArchiveSha256 = '357def24360566e9351af5c7b3bb8b8a7989f9ccb1eaf6f2401fa33e4069d8bf'
-$script:KnowledgeContentApprovedAuthorityFiles = [ordered]@{
+$script:KnowledgeContentRefreshedSourceAuthorityCommit = '472cbd6f533d3f6d0a5381862128ebcc87618a7c'
+$script:KnowledgeContentRefreshedSourceAuthorityArchiveSha256 = '357def24360566e9351af5c7b3bb8b8a7989f9ccb1eaf6f2401fa33e4069d8bf'
+$script:KnowledgeContentRefreshedSourceAuthorityFiles = [ordered]@{
     'docs/standards/README.md' = '8aef64a9e69848c82d0ceba43f14c2876e3816cbc4761bac26a35e6f62aaf884'
     'docs/standards/managed-skill-lifecycle.md' = '4e3f8595072d663f51d18aa28f42293fda5456362b49c0ea3f0157ae3dcf56dd'
     'docs/standards/schemas/managed-skill-lifecycle-v1.schema.json' = '9a7f4c02588d2b88194e953a41766a72a9426fa89d4c3781c5750dcc22d35863'
@@ -198,13 +198,13 @@ function Get-KnowledgeContentPreparedAuthorityPin {
 
     $authorityFiles = $script:KnowledgeContentPreparedAuthorityFiles
     $archiveSha256 = $script:KnowledgeContentPreparedAuthorityArchiveSha256
-    if ($Commit -ceq $script:KnowledgeContentActiveAuthorityCommit) {
-        $authorityFiles = $script:KnowledgeContentActiveAuthorityFiles
-        $archiveSha256 = $script:KnowledgeContentActiveAuthorityArchiveSha256
-    }
-    elseif ($Commit -ceq $script:KnowledgeContentApprovedAuthorityCommit) {
+    if ($Commit -ceq $script:KnowledgeContentApprovedAuthorityCommit) {
         $authorityFiles = $script:KnowledgeContentApprovedAuthorityFiles
         $archiveSha256 = $script:KnowledgeContentApprovedAuthorityArchiveSha256
+    }
+    elseif ($Commit -ceq $script:KnowledgeContentRefreshedSourceAuthorityCommit) {
+        $authorityFiles = $script:KnowledgeContentRefreshedSourceAuthorityFiles
+        $archiveSha256 = $script:KnowledgeContentRefreshedSourceAuthorityArchiveSha256
     }
     $files = [ordered]@{}
     foreach ($entry in $authorityFiles.GetEnumerator()) {

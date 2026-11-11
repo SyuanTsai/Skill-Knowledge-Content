@@ -124,11 +124,16 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $workflow | Should -Match 'Protected driver HEAD differs from the exact event base SHA'
         $workflow | Should -Match 'Protected driver checkout is not clean'
         $workflow | Should -Match 'Protected source helper raw bytes differ from the exact event-base Git blob'
-        @([regex]::Matches($workflow, '(?m)^\s*\$approvedSourceAuthority = ''472cbd6f533d3f6d0a5381862128ebcc87618a7c''\s*$')).Count | Should -Be 1
+        @([regex]::Matches($workflow, '(?m)^\s*\$approvedSourceAuthority = ''ead467c3488c103546f316d137196b447a1ff58a''\s*$')).Count | Should -Be 1
         $workflow | Should -Match '\$approvedSourceRequired = \$candidateSourceAuthority -ceq \$approvedSourceAuthority -or \$driverSourceAuthority -ceq \$approvedSourceAuthority'
         $workflow | Should -Match '\$approvedSourceDefinitions\.Count -eq 1 -and \$approvedSourcePins\.Count -eq 1'
         $workflow | Should -Match '\$approvedSourcePins\[0\]\.Groups\[''sha''\]\.Value -ceq \$approvedSourceAuthority'
         $workflow | Should -Match 'The exact protected driver is not prepared for the approved source authority'
+        @([regex]::Matches($workflow, '(?m)^\s*\$refreshedSourceAuthority = ''472cbd6f533d3f6d0a5381862128ebcc87618a7c''\s*$')).Count | Should -Be 1
+        $workflow | Should -Match '\$refreshedSourceRequired = \$candidateSourceAuthority -ceq \$refreshedSourceAuthority -or \$driverSourceAuthority -ceq \$refreshedSourceAuthority'
+        $workflow | Should -Match '\$refreshedSourceDefinitions\.Count -eq 1 -and \$refreshedSourcePins\.Count -eq 1'
+        $workflow | Should -Match '\$refreshedSourcePins\[0\]\.Groups\[''sha''\]\.Value -ceq \$refreshedSourceAuthority'
+        $workflow | Should -Match 'The exact protected driver is not prepared for the refreshed source authority'
         $workflow | Should -Match 'git_command_path=\$gitCommandPath'
         $workflow | Should -Match 'EXPECTED_GIT_COMMAND_PATH:'
         $workflow | Should -Match 'ResolveLinkTarget\(\$CommandPath, \$true\)'

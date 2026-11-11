@@ -235,7 +235,7 @@ jobs:
           }
           $protectedHelperSha256 = (Get-FileHash -LiteralPath $protectedHelperPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
 
-          $approvedSourceAuthority = '472cbd6f533d3f6d0a5381862128ebcc87618a7c'
+          $approvedSourceAuthority = 'ead467c3488c103546f316d137196b447a1ff58a'
           $candidatePin = Get-Content -LiteralPath (Join-Path $candidateRoot 'config/standard-v1.json') -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 20 -ErrorAction Stop
           $driverPin = Get-Content -LiteralPath (Join-Path $driverRoot 'config/standard-v1.json') -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 20 -ErrorAction Stop
           $candidateSourceAuthority = [string]$candidatePin.authority.commit
@@ -249,6 +249,16 @@ jobs:
                   $approvedSourcePins[0].Groups['sha'].Value -ceq $approvedSourceAuthority)
           if (-not $approvedSourceIsValid) {
             throw 'The exact protected driver is not prepared for the approved source authority.'
+          }
+          $refreshedSourceAuthority = '472cbd6f533d3f6d0a5381862128ebcc87618a7c'
+          $refreshedSourceDefinitions = [regex]::Matches($protectedHelperText, '(?m)^[ \t]*\$script:KnowledgeContentRefreshedSourceAuthorityCommit\b[^\r\n]*\r?$')
+          $refreshedSourcePins = [regex]::Matches($protectedHelperText, '(?m)^\$script:KnowledgeContentRefreshedSourceAuthorityCommit = ''(?<sha>[0-9a-f]{40})''\r?$')
+          $refreshedSourceRequired = $candidateSourceAuthority -ceq $refreshedSourceAuthority -or $driverSourceAuthority -ceq $refreshedSourceAuthority
+          $refreshedSourceIsValid = ($refreshedSourceDefinitions.Count -eq 0 -and -not $refreshedSourceRequired) -or
+              ($refreshedSourceDefinitions.Count -eq 1 -and $refreshedSourcePins.Count -eq 1 -and
+                  $refreshedSourcePins[0].Groups['sha'].Value -ceq $refreshedSourceAuthority)
+          if (-not $refreshedSourceIsValid) {
+            throw 'The exact protected driver is not prepared for the refreshed source authority.'
           }
 
           $authorityHead = Get-GitValue -Root $authorityRoot -Arguments @('rev-parse', '--verify', 'HEAD^{commit}')
