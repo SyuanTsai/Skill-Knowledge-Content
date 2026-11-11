@@ -235,7 +235,7 @@ jobs:
           }
           $protectedHelperSha256 = (Get-FileHash -LiteralPath $protectedHelperPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
 
-          $approvedSourceAuthority = 'ead467c3488c103546f316d137196b447a1ff58a'
+          $approvedSourceAuthority = '472cbd6f533d3f6d0a5381862128ebcc87618a7c'
           $candidatePin = Get-Content -LiteralPath (Join-Path $candidateRoot 'config/standard-v1.json') -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 20 -ErrorAction Stop
           $driverPin = Get-Content -LiteralPath (Join-Path $driverRoot 'config/standard-v1.json') -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 20 -ErrorAction Stop
           $candidateSourceAuthority = [string]$candidatePin.authority.commit

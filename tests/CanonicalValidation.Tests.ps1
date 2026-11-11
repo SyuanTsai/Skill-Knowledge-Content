@@ -33,7 +33,7 @@ Describe 'Canonical Standard v1 validation adapter' {
     # Purpose: keep the runtime approval table byte-for-byte aligned with all 51 approved ead467c file identities.
     It 'UnitT15_binds_the_protected_authority_table_to_the_complete_ead467c_config' {
         $helper = Get-Content -LiteralPath (Join-Path $script:RepositoryRoot 'scripts/StandardCoreSourceValidation.ps1') -Raw
-        $marker = '$script:KnowledgeContentApprovedAuthorityFiles = [ordered]@{'
+        $marker = '$script:KnowledgeContentActiveAuthorityFiles = [ordered]@{'
         $start = $helper.IndexOf($marker, [StringComparison]::Ordinal)
         $start | Should -BeGreaterOrEqual 0
         $end = $helper.IndexOf("`n}", $start, [StringComparison]::Ordinal)

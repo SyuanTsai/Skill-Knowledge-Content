@@ -53,7 +53,7 @@ BeforeAll {
     }
 
     function New-ApprovedSourceAuthorityCandidate {
-        return New-PreparedAuthorityCandidate -Commit 'ead467c3488c103546f316d137196b447a1ff58a'
+        return New-PreparedAuthorityCandidate -Commit '472cbd6f533d3f6d0a5381862128ebcc87618a7c'
     }
 
     function Assert-NoReparseAncestors {
@@ -273,7 +273,7 @@ Describe 'Knowledge Content protected source driver preparation' {
         }
     }
 
-    # Scenario: both explicit purposes receive the same approved ead467c successor candidate tuple.
+    # Scenario: both explicit purposes receive the same approved 472cbd6 successor candidate tuple.
     # Purpose: setup and execution must resolve the same authority instead of preparing old tools for a new runner.
     It 'UnitT02_routes_both_source_purposes_to_the_candidate_scoped_authority' {
         $authority = New-ApprovedSourceAuthorityCandidate
@@ -287,7 +287,7 @@ Describe 'Knowledge Content protected source driver preparation' {
         }
     }
 
-    # Scenario: the ead467c tuple retains an old runner or archive, omits or adds a member, or selects an unapproved revision.
+    # Scenario: the 472cbd6 tuple retains an old runner or archive, omits or adds a member, or selects an unapproved revision.
     # Purpose: reject mixed authority identities at both setup and execution boundaries.
     It 'UnitT03_rejects_mixed_or_incomplete_scoped_tuple_<Mutation>' -TestCases @(
         @{ Mutation = 'runner' }, @{ Mutation = 'archive' }, @{ Mutation = 'missing' }, @{ Mutation = 'extra' }, @{ Mutation = 'commit' }, @{ Mutation = 'uppercase' }
@@ -302,7 +302,7 @@ Describe 'Knowledge Content protected source driver preparation' {
             'commit' { $authority.commit = '0' * 40 }
             'uppercase' {
                 $authority = New-ApprovedSourceAuthorityCandidate
-                $authority.commit = 'EAD467C3488C103546F316D137196B447A1FF58A'
+                $authority.commit = '472CBD6F533D3F6D0A5381862128EBCC87618A7C'
                 $authority.archiveUrl = "https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/$($authority.commit)"
             }
         }
@@ -313,22 +313,25 @@ Describe 'Knowledge Content protected source driver preparation' {
         }
     }
 
-    # Scenario: the protected reader selects the complete ead467c runner dependency closure before config adoption.
+    # Scenario: the protected reader selects the complete 472cbd6 runner dependency closure before config adoption.
     # Purpose: bind all ordered registry and platform-runtime members to one reviewable canonical digest.
     It 'UnitT04_accepts_only_the_complete_approved_source_tuple' {
         $authority = New-ApprovedSourceAuthorityCandidate
         $accepted = Assert-KnowledgeContentPreparedAuthorityTuple -Authority $authority
 
-        $accepted.commit | Should -BeExactly 'ead467c3488c103546f316d137196b447a1ff58a'
-        $accepted.archiveSha256 | Should -BeExactly 'ab304bc6caabe4bb9b605f403c852650e19e25f72999010db61bbad695e1c60b'
+        $accepted.commit | Should -BeExactly '472cbd6f533d3f6d0a5381862128ebcc87618a7c'
+        $accepted.archiveSha256 | Should -BeExactly '357def24360566e9351af5c7b3bb8b8a7989f9ccb1eaf6f2401fa33e4069d8bf'
         @($accepted.files.Keys).Count | Should -Be 51
+        $accepted.files['docs/standards/skill-repository-standard.md'] | Should -BeExactly 'a831a4151f8ea31e90709487af7823256ca4b119784823216a89ee8fcc85da35'
+        $accepted.files['scripts/Resolve-PythonWheelClosure.py'] | Should -BeExactly '45bd49b13acaee461ac38cbdd303016d74f516ae494d77cbd127366603c90681'
+        $accepted.files['scripts/Invoke-StandardValidation.ps1'] | Should -BeExactly '242b9e856d11dffffc512d03b60a7bd1f8ebad101d99cd97556488201b504350'
         @($accepted.files.Keys) | Should -Contain 'docs/standards/skillspector-approved-sources.json'
         @($accepted.files.Keys) | Should -Contain 'docs/standards/schemas/skillspector-approved-sources-v1.schema.json'
         @($accepted.files.Keys) | Should -Contain 'scripts/WindowsDacl.psm1'
         @($accepted.files.Keys) | Should -Contain 'scripts/platform/WindowsInstallerMutation.cs'
         $canonical = (@($accepted.files.GetEnumerator() | ForEach-Object { $_.Key + [char]9 + $_.Value }) -join "`n") + "`n"
         [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($canonical))).ToLowerInvariant() |
-            Should -BeExactly 'aec3d84a1709b4435dc65f9a5ae471dafac3a9101d6469eeee607b911f872a75'
+            Should -BeExactly '09764e501bb4e975fbacaf8e943abb6fadd9d86c82ac3d584d7443644b8a8c45'
     }
 
     # Scenario: a candidate authority contains the exact fields, ordered files, and identities in the prepared pin.
