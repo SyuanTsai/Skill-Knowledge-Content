@@ -250,7 +250,7 @@ jobs:
           if (-not $approvedSourceIsValid) {
             throw 'The exact protected driver is not prepared for the approved source authority.'
           }
-          $refreshedSourceAuthority = '472cbd6f533d3f6d0a5381862128ebcc87618a7c'
+          $refreshedSourceAuthority = 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1'
           $refreshedSourceDefinitions = [regex]::Matches($protectedHelperText, '(?m)^[ \t]*\$script:KnowledgeContentRefreshedSourceAuthorityCommit\b[^\r\n]*\r?$')
           $refreshedSourcePins = [regex]::Matches($protectedHelperText, '(?m)^\$script:KnowledgeContentRefreshedSourceAuthorityCommit = ''(?<sha>[0-9a-f]{40})''\r?$')
           $refreshedSourceRequired = $candidateSourceAuthority -ceq $refreshedSourceAuthority -or $driverSourceAuthority -ceq $refreshedSourceAuthority

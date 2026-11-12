@@ -115,8 +115,8 @@ $script:KnowledgeContentApprovedAuthorityFiles = [ordered]@{
     'scripts/platform/MacOS.psm1' = '8f25edfbee5ab36b5e1c42eb55c6dbab44db0bc29896c180612b1248920c7c47'
 }
 
-$script:KnowledgeContentRefreshedSourceAuthorityCommit = '472cbd6f533d3f6d0a5381862128ebcc87618a7c'
-$script:KnowledgeContentRefreshedSourceAuthorityArchiveSha256 = '357def24360566e9351af5c7b3bb8b8a7989f9ccb1eaf6f2401fa33e4069d8bf'
+$script:KnowledgeContentRefreshedSourceAuthorityCommit = 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1'
+$script:KnowledgeContentRefreshedSourceAuthorityArchiveSha256 = '37324f1f93d4df49e6d846021d455265c176cadad1e9230f7ca82cdb26e97a6d'
 $script:KnowledgeContentRefreshedSourceAuthorityFiles = [ordered]@{
     'docs/standards/README.md' = '8aef64a9e69848c82d0ceba43f14c2876e3816cbc4761bac26a35e6f62aaf884'
     'docs/standards/managed-skill-lifecycle.md' = '4e3f8595072d663f51d18aa28f42293fda5456362b49c0ea3f0157ae3dcf56dd'
@@ -138,9 +138,9 @@ $script:KnowledgeContentRefreshedSourceAuthorityFiles = [ordered]@{
     'docs/standards/pr12-source-merge-adoption.json' = '4c5262f2a11d228195230c15fa4faaf9614af6b59f110e5d9c08f242ce809175'
     'docs/standards/trust-anchors/human-approval-public-key.xml' = '1e46153b72d02f3ce2fb26becd449df4f1590d8e5cb441b1954006a5602bbd9b'
     'docs/standards/trust-anchors/trusted-supervisor-public-key.xml' = '4d550851f43405920156f40c9fc648d99a69dd73efc200f6968d8a837e7fbf27'
-    'scripts/Invoke-StandardValidation.ps1' = '242b9e856d11dffffc512d03b60a7bd1f8ebad101d99cd97556488201b504350'
+    'scripts/Invoke-StandardValidation.ps1' = '776c35c2f4c3a3fb61b6920e38e127b7a05b4a13e865b0aa9d2b4d1347e97624'
     'docs/standards/schemas/standard-semantic-consent-evidence-v2.schema.json' = '109091979d0a47e2035d3d8b20963fcdb85680e5da737bf1f27121608115d430'
-    'scripts/StandardSemanticBridge.psm1' = '92595bdbb98ae77bdb2cc4dd7605ecc29f54e0a6746c9ee7d7636655f65665ef'
+    'scripts/StandardSemanticBridge.psm1' = 'dc3a990b6cce8ce4f282f4d4ed74fb37f83a993f3bbfb8765a0dbde0ef7eb365'
     'docs/standards/schemas/upstream-adapter-v1.schema.json' = '3cff6246463188a91cc54c6a46315a949314767a759c6214e5b28e4db95ac8d7'
     'docs/standards/upstream-adapter.json' = 'c4f5133b24841bb9c66182dc3d5a027596f864ec28e410d47249a67b3b97ad31'
     'scripts/Validate-UpstreamAdapter.ps1' = '3b6e6474690b1ae9f9486544b68f50ca29b96f5dbe6aa8d6c6cd8570afad500b'
@@ -153,12 +153,12 @@ $script:KnowledgeContentRefreshedSourceAuthorityFiles = [ordered]@{
     'docs/standards/skillspector-approved-sources.json' = 'baaaf2a66e98f2c28a48fddd04051f09cf5498ef6c7978cbf45f5d415b69a330'
     'docs/standards/schemas/skillspector-approved-sources-v1.schema.json' = '20fa8516c9dcb7c9ae15f4682092dc583411db3149fac2641fef7b5182c3d12b'
     'docs/standards/static-parser-host-ownership.json' = '994acd989327d094d22ce2c68ca20eceec609f4e494f4e5d252cfcdef742de2c'
-    'scripts/platform-runtime.psd1' = '7f112390d2995a105b9e9a916876df1779485dec6df21d7516243e2dcd1c4dca'
+    'scripts/platform-runtime.psd1' = 'd3d8eef434484b3b2449cd4762e60b94afc314d9beb91481538c7f57207a11c9'
     'scripts/platform-runtime.psm1' = 'ad051b2794ce4dc10108404201735d02f7b032ed0e633c5f22f73c884fb10370'
     'scripts/installer-safe-mutation.psm1' = 'dc031edcc2f48968df83cd68ad52eacb7f7b05d3ca6a0cc622658cf6151c8293'
     'scripts/WindowsDacl.psm1' = 'ffa1f85d94bb6bce9bf8353f8c7733bdbe59880a3d0d075191938cc28aebb5f6'
     'scripts/platform/PlatformNative.cs' = 'f9da23bf3e6e3c8960b26d534e14873f6b4fc98b3d13f5b6cdfdd5f7716a4514'
-    'scripts/platform/UnixNative.cs' = '996a8e4cc1c795f4732a9d7368e597b838c801d0710e32629cafcbba89f8c004'
+    'scripts/platform/UnixNative.cs' = '171da4acded889da89ab4e7af2729e9bbf4f3639cf1e63fe08a4c046f7545c74'
     'scripts/platform/WindowsNative.cs' = '6eea8ca2701b6a6de88ee4a3348f053d07a0543d607832e667335c838bb7d433'
     'scripts/platform/WindowsInstallerMutation.cs' = 'b88b4b09c7bb5c3e71b762ddc6ebe72007ed0cca99977ab7a7272529c3ff9218'
     'scripts/platform/OwnedProcess.cs' = '097061ad5902f896ff74b3f60b0ecaf63f3d58f357aed8fdbf80a8586564de58'
@@ -192,7 +192,7 @@ function Assert-KnowledgeContentExactPropertySet {
 function Get-KnowledgeContentPreparedAuthorityPin {
     [CmdletBinding()]
     param(
-        [ValidateSet('6cee5b8e43fe4e327fedc788865f931c561d6e89', 'ead467c3488c103546f316d137196b447a1ff58a', '472cbd6f533d3f6d0a5381862128ebcc87618a7c', IgnoreCase = $false)]
+        [ValidateSet('6cee5b8e43fe4e327fedc788865f931c561d6e89', 'ead467c3488c103546f316d137196b447a1ff58a', 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1', IgnoreCase = $false)]
         [string] $Commit = $script:KnowledgeContentPreparedAuthorityCommit
     )
 
