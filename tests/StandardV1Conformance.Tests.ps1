@@ -129,6 +129,11 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $workflow | Should -Match '\$approvedSourceDefinitions\.Count -eq 1 -and \$approvedSourcePins\.Count -eq 1'
         $workflow | Should -Match '\$approvedSourcePins\[0\]\.Groups\[''sha''\]\.Value -ceq \$approvedSourceAuthority'
         $workflow | Should -Match 'The exact protected driver is not prepared for the approved source authority'
+        @([regex]::Matches($workflow, '(?m)^\s*\$refreshedSourceAuthority = ''bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1''\s*$')).Count | Should -Be 1
+        $workflow | Should -Match '\$refreshedSourceRequired = \$candidateSourceAuthority -ceq \$refreshedSourceAuthority -or \$driverSourceAuthority -ceq \$refreshedSourceAuthority'
+        $workflow | Should -Match '\$refreshedSourceDefinitions\.Count -eq 1 -and \$refreshedSourcePins\.Count -eq 1'
+        $workflow | Should -Match '\$refreshedSourcePins\[0\]\.Groups\[''sha''\]\.Value -ceq \$refreshedSourceAuthority'
+        $workflow | Should -Match 'The exact protected driver is not prepared for the refreshed source authority'
         $workflow | Should -Match 'git_command_path=\$gitCommandPath'
         $workflow | Should -Match 'EXPECTED_GIT_COMMAND_PATH:'
         $workflow | Should -Match 'ResolveLinkTarget\(\$CommandPath, \$true\)'

@@ -56,6 +56,10 @@ BeforeAll {
         return New-PreparedAuthorityCandidate -Commit 'ead467c3488c103546f316d137196b447a1ff58a'
     }
 
+    function New-RefreshedSourceAuthorityCandidate {
+        return New-PreparedAuthorityCandidate -Commit 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1'
+    }
+
     function Assert-NoReparseAncestors {
         param([Parameter(Mandatory = $true)][string] $Path, [Parameter(Mandatory = $true)][string] $Context)
 
@@ -329,6 +333,70 @@ Describe 'Knowledge Content protected source driver preparation' {
         $canonical = (@($accepted.files.GetEnumerator() | ForEach-Object { $_.Key + [char]9 + $_.Value }) -join "`n") + "`n"
         [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($canonical))).ToLowerInvariant() |
             Should -BeExactly 'aec3d84a1709b4435dc65f9a5ae471dafac3a9101d6469eeee607b911f872a75'
+    }
+
+    # Scenario: both explicit purposes receive the same approved bb32fe9 successor candidate tuple.
+    # Purpose: setup and execution must resolve the same authority instead of preparing old tools for a new runner.
+    It 'UnitT02R_routes_both_source_purposes_to_the_candidate_scoped_authority' {
+        $authority = New-RefreshedSourceAuthorityCandidate
+        $expectedRunnerSha256 = [string](Get-KnowledgeContentPreparedAuthorityPin -Commit $authority.commit).files['scripts/Invoke-StandardValidation.ps1']
+        foreach ($purpose in @('PrepareSourceTools', 'SourceValidation')) {
+            $request = @{ SourceToolsPath = $script:fixtureSourceToolsPath; AuthorityRepositoryRoot = $script:fixtureAuthorityRoot; TrustedToolRoot = $script:fixtureRuntimeRoot; CandidateAuthority = $authority }
+            $request[$purpose] = $true
+            $route = Resolve-KnowledgeContentSourceRoute @request
+            $route.authority.commit | Should -BeExactly $authority.commit
+            $route.authority.files['scripts/Invoke-StandardValidation.ps1'] | Should -BeExactly $expectedRunnerSha256
+        }
+    }
+
+    # Scenario: the bb32fe9 tuple retains an old runner or archive, omits or adds a member, or selects an unapproved revision.
+    # Purpose: reject mixed authority identities at both setup and execution boundaries.
+    It 'UnitT03R_rejects_mixed_or_incomplete_scoped_tuple_<Mutation>' -TestCases @(
+        @{ Mutation = 'runner' }, @{ Mutation = 'archive' }, @{ Mutation = 'missing' }, @{ Mutation = 'extra' }, @{ Mutation = 'commit' }, @{ Mutation = 'uppercase' }
+    ) {
+        param($Mutation)
+        $authority = New-RefreshedSourceAuthorityCandidate
+        switch ($Mutation) {
+            'runner' { ($authority.files | Where-Object path -CEQ 'scripts/Invoke-StandardValidation.ps1').sha256 = 'a4ee880810171428a6abd2e8fd5db2da1eaeda4abc0fc6c72dc259b4a709174b' }
+            'archive' { $authority.archiveSha256 = '0' * 64 }
+            'missing' { $authority.files = @($authority.files | Select-Object -SkipLast 1) }
+            'extra' { $authority.files += [pscustomobject]@{ path = 'extra'; sha256 = '0' * 64 } }
+            'commit' { $authority.commit = '0' * 40 }
+            'uppercase' {
+                $authority = New-RefreshedSourceAuthorityCandidate
+                $authority.commit = 'BB32FE9914CA99ED91FE2102B2BEB13FEF7B3ED1'
+                $authority.archiveUrl = "https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/$($authority.commit)"
+            }
+        }
+        foreach ($purpose in @('PrepareSourceTools', 'SourceValidation')) {
+            $request = @{ SourceToolsPath = $script:fixtureSourceToolsPath; AuthorityRepositoryRoot = $script:fixtureAuthorityRoot; TrustedToolRoot = $script:fixtureRuntimeRoot; CandidateAuthority = $authority }
+            $request[$purpose] = $true
+            { Resolve-KnowledgeContentSourceRoute @request } | Should -Throw
+        }
+    }
+
+    # Scenario: the protected reader selects the complete bb32fe9 runner dependency closure before config adoption.
+    # Purpose: bind all ordered registry and platform-runtime members to one reviewable canonical digest.
+    It 'UnitT04R_accepts_only_the_complete_approved_source_tuple' {
+        $authority = New-RefreshedSourceAuthorityCandidate
+        $accepted = Assert-KnowledgeContentPreparedAuthorityTuple -Authority $authority
+
+        $accepted.commit | Should -BeExactly 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1'
+        $accepted.archiveSha256 | Should -BeExactly '37324f1f93d4df49e6d846021d455265c176cadad1e9230f7ca82cdb26e97a6d'
+        @($accepted.files.Keys).Count | Should -Be 51
+        $accepted.files['docs/standards/skill-repository-standard.md'] | Should -BeExactly 'a831a4151f8ea31e90709487af7823256ca4b119784823216a89ee8fcc85da35'
+        $accepted.files['scripts/Resolve-PythonWheelClosure.py'] | Should -BeExactly '45bd49b13acaee461ac38cbdd303016d74f516ae494d77cbd127366603c90681'
+        $accepted.files['scripts/Invoke-StandardValidation.ps1'] | Should -BeExactly '776c35c2f4c3a3fb61b6920e38e127b7a05b4a13e865b0aa9d2b4d1347e97624'
+        $accepted.files['scripts/StandardSemanticBridge.psm1'] | Should -BeExactly 'dc3a990b6cce8ce4f282f4d4ed74fb37f83a993f3bbfb8765a0dbde0ef7eb365'
+        $accepted.files['scripts/platform-runtime.psd1'] | Should -BeExactly 'd3d8eef434484b3b2449cd4762e60b94afc314d9beb91481538c7f57207a11c9'
+        $accepted.files['scripts/platform/UnixNative.cs'] | Should -BeExactly '171da4acded889da89ab4e7af2729e9bbf4f3639cf1e63fe08a4c046f7545c74'
+        @($accepted.files.Keys) | Should -Contain 'docs/standards/skillspector-approved-sources.json'
+        @($accepted.files.Keys) | Should -Contain 'docs/standards/schemas/skillspector-approved-sources-v1.schema.json'
+        @($accepted.files.Keys) | Should -Contain 'scripts/WindowsDacl.psm1'
+        @($accepted.files.Keys) | Should -Contain 'scripts/platform/WindowsInstallerMutation.cs'
+        $canonical = (@($accepted.files.GetEnumerator() | ForEach-Object { $_.Key + [char]9 + $_.Value }) -join "`n") + "`n"
+        [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($canonical))).ToLowerInvariant() |
+            Should -BeExactly 'de52e4642a4ab33a6dc7537947f4e5a7d7d848085c5fd84f4d4aca0aa32edcf4'
     }
 
     # Scenario: a candidate authority contains the exact fields, ordered files, and identities in the prepared pin.
