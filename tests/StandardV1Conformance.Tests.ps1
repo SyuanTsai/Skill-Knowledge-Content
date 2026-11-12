@@ -45,8 +45,8 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         $adapter.schemaVersion | Should -Be 1
         $adapter.standardVersion | Should -Be 'v1'
         $adapter.authority.repository | Should -Be 'https://github.com/SyuanTsai/SyuanTsai-AI-Instructions.git'
-        $adapter.authority.commit | Should -Be 'ead467c3488c103546f316d137196b447a1ff58a'
-        $adapter.authority.archiveSha256 | Should -Be 'ab304bc6caabe4bb9b605f403c852650e19e25f72999010db61bbad695e1c60b'
+        $adapter.authority.commit | Should -Be 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1'
+        $adapter.authority.archiveSha256 | Should -Be '37324f1f93d4df49e6d846021d455265c176cadad1e9230f7ca82cdb26e97a6d'
         @($adapter.PSObject.Properties.Name) | Should -Not -Contain 'security'
         @($adapter.authority.files).Count | Should -Be 51
         @($adapter.authority.files.path) | Should -Contain 'docs/standards/standard-core-validation-v2.json'
@@ -118,7 +118,7 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         }
         $workflow | Should -Match 'name:\s*Knowledge & Content Standard v1 \(\$\{\{ matrix\.platform \}\}\)'
         $workflow | Should -Match 'timeout-minutes:\s*60'
-        $workflow | Should -Match 'ref:\s+ead467c3488c103546f316d137196b447a1ff58a'
+        $workflow | Should -Match 'ref:\s+bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1'
         $workflow | Should -Match '(?s)Preserve committed bytes before checkout.*?core\.autocrlf false.*?Checkout exact event candidate'
         $workflow | Should -Match 'Checkout exact event-base protected driver'
         $workflow | Should -Match 'Protected driver HEAD differs from the exact event base SHA'
@@ -435,7 +435,7 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
         }
     }
 
-    # Scenario: the active ead467c pin requires the three-platform protected flow.
+    # Scenario: the active bb32fe9 pin requires the three-platform protected flow.
     # Purpose: document the two canonical purposes and the reusable adoption template.
     It 'UnitT60_documents_both_protected_purposes_under_the_single_canonical_entrypoint' {
         $readme = Get-Content -LiteralPath (Join-Path $script:RepositoryRoot 'README.md') -Raw
@@ -444,7 +444,7 @@ Describe 'Knowledge & Content Standard v1 reference implementation' {
             $document | Should -Match 'scripts/Validate\.ps1'
             $document | Should -Match '-PrepareSourceTools'
             $document | Should -Match '-SourceValidation'
-            $document | Should -Match 'ead467c3488c103546f316d137196b447a1ff58a'
+            $document | Should -Match 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1'
             $document | Should -Match 'releaseEligible=false'
             $document | Should -Match '\.github/workflows/validate\.yml'
             $document | Should -Match 'config/standard-v1\.json'

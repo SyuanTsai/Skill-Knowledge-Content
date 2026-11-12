@@ -26,7 +26,7 @@ $ErrorActionPreference = 'Stop'
 
 $script:SourceRepository = 'https://github.com/SyuanTsai/Skill-Knowledge-Content.git'
 . (Join-Path $PSScriptRoot 'StandardCoreSourceValidation.ps1')
-$script:PreparedAuthorityPin = Get-KnowledgeContentPreparedAuthorityPin -Commit 'ead467c3488c103546f316d137196b447a1ff58a'
+$script:PreparedAuthorityPin = Get-KnowledgeContentPreparedAuthorityPin -Commit 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1'
 $script:AuthorityRepository = [string]$script:PreparedAuthorityPin.repository
 $script:AuthorityCommit = [string]$script:PreparedAuthorityPin.commit
 $script:AuthorityArchiveSha256 = [string]$script:PreparedAuthorityPin.archiveSha256

@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 
 此範本把 Skill repository 的 canonical validation 同時綁定 Windows、Linux 與 macOS。三個 leg 都必須完成並通過；aggregate 會驗證完整平台集合、同一事件與 candidate/base/authority 身分，以及每個 leg 的凍結證據。`repository-contract`、`skill-validator`、`skill-tools` 名稱不變，只反映 matrix 與 aggregate 的共同結果。
 
-本 repository 目前採用 authority `ead467c3488c103546f316d137196b447a1ff58a` 的完整 51 檔 tuple；移植時必須把 active pin、workflow、validator 與 fixtures 視為同一個不可拆分的更新。
+本 repository 目前採用 authority `bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1` 的完整 51 檔 tuple；移植時必須把 active pin、workflow、validator 與 fixtures 視為同一個不可拆分的更新。
 
 ## Job 拓撲
 

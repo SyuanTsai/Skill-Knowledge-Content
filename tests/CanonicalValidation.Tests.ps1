@@ -7,13 +7,13 @@ Describe 'Canonical Standard v1 validation adapter' {
         $script:Validator = Get-Content -LiteralPath $script:ValidatorPath -Raw
         $script:Adapter = Get-Content -LiteralPath (Join-Path $script:RepositoryRoot 'config/standard-v1.json') -Raw |
             ConvertFrom-Json -Depth 20
-        $script:ExpectedAuthorityCommit = 'ead467c3488c103546f316d137196b447a1ff58a'
-        $script:ExpectedAuthorityArchiveSha256 = 'ab304bc6caabe4bb9b605f403c852650e19e25f72999010db61bbad695e1c60b'
+        $script:ExpectedAuthorityCommit = 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1'
+        $script:ExpectedAuthorityArchiveSha256 = '37324f1f93d4df49e6d846021d455265c176cadad1e9230f7ca82cdb26e97a6d'
         $script:ExpectedAuthorityFiles = [ordered]@{}
         foreach ($entry in @($script:Adapter.authority.files)) { $script:ExpectedAuthorityFiles[[string]$entry.path] = [string]$entry.sha256 }
     }
 
-    # Scenario: The Knowledge adapter and validator are loaded with the reviewed ead467c authority inventory.
+    # Scenario: The Knowledge adapter and validator are loaded with the reviewed bb32fe9 authority inventory.
     # Purpose: Reject mismatched commit, archive, or required-file hashes before validation.
     It 'UnitT10_pins_exact_authority_without_local_deviation_policy' {
         @($script:Adapter.PSObject.Properties.Name) | Should -Be @('schemaVersion', 'standardVersion', 'authority')
@@ -30,10 +30,10 @@ Describe 'Canonical Standard v1 validation adapter' {
     }
 
     # Scenario: the production validator carries an ordered authority map alongside the public JSON config.
-    # Purpose: keep the runtime approval table byte-for-byte aligned with all 51 approved ead467c file identities.
-    It 'UnitT15_binds_the_protected_authority_table_to_the_complete_ead467c_config' {
+    # Purpose: keep the runtime approval table byte-for-byte aligned with all 51 approved bb32fe9 file identities.
+    It 'UnitT15_binds_the_protected_authority_table_to_the_complete_bb32fe9_config' {
         $helper = Get-Content -LiteralPath (Join-Path $script:RepositoryRoot 'scripts/StandardCoreSourceValidation.ps1') -Raw
-        $marker = '$script:KnowledgeContentApprovedAuthorityFiles = [ordered]@{'
+        $marker = '$script:KnowledgeContentRefreshedSourceAuthorityFiles = [ordered]@{'
         $start = $helper.IndexOf($marker, [StringComparison]::Ordinal)
         $start | Should -BeGreaterOrEqual 0
         $end = $helper.IndexOf("`n}", $start, [StringComparison]::Ordinal)
