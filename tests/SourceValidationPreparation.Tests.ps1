@@ -27,7 +27,7 @@ BeforeAll {
     }
 
     function New-PreparedAuthorityCandidate {
-        param([string] $Commit = 'ead467c3488c103546f316d137196b447a1ff58a')
+        param([string] $Commit = 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1')
 
         $pin = Get-KnowledgeContentPreparedAuthorityPin -Commit $Commit
         $files = @(
@@ -46,9 +46,9 @@ BeforeAll {
 
     function New-ScopedAuthorityCandidate {
         $authority = New-PreparedAuthorityCandidate
-        $authority.commit = 'ead467c3488c103546f316d137196b447a1ff58a'
-        $authority.archiveUrl = 'https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/ead467c3488c103546f316d137196b447a1ff58a'
-        $authority.archiveSha256 = 'ab304bc6caabe4bb9b605f403c852650e19e25f72999010db61bbad695e1c60b'
+        $authority.commit = 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1'
+        $authority.archiveUrl = 'https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1'
+        $authority.archiveSha256 = '37324f1f93d4df49e6d846021d455265c176cadad1e9230f7ca82cdb26e97a6d'
         return $authority
     }
 
@@ -240,18 +240,18 @@ throw 'source-import-probe-stop'
 }
 
 Describe 'Knowledge Content protected source driver preparation' {
-    # Scenario: the active public config selects the reviewed ead467c authority through the prepared reader.
+    # Scenario: the active public config selects the reviewed bb32fe9 authority through the prepared reader.
     # Purpose: bind the active Standard v1 pin to the complete 51-file prepared source authority.
     It 'UnitT00_returns_the_complete_active_51_file_scoped_pin' {
         $config = Get-Content -LiteralPath (Join-Path $script:repositoryRoot 'config/standard-v1.json') -Raw | ConvertFrom-Json -Depth 20
-        $config.authority.commit | Should -Be 'ead467c3488c103546f316d137196b447a1ff58a'
-        $config.authority.archiveSha256 | Should -Be 'ab304bc6caabe4bb9b605f403c852650e19e25f72999010db61bbad695e1c60b'
+        $config.authority.commit | Should -Be 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1'
+        $config.authority.archiveSha256 | Should -Be '37324f1f93d4df49e6d846021d455265c176cadad1e9230f7ca82cdb26e97a6d'
 
         $pin = Get-KnowledgeContentPreparedAuthorityPin -Commit $config.authority.commit
         $pin.repository | Should -Be 'https://github.com/SyuanTsai/SyuanTsai-AI-Instructions.git'
-        $pin.commit | Should -Be 'ead467c3488c103546f316d137196b447a1ff58a'
-        $pin.archiveUrl | Should -Be 'https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/ead467c3488c103546f316d137196b447a1ff58a'
-        $pin.archiveSha256 | Should -Be 'ab304bc6caabe4bb9b605f403c852650e19e25f72999010db61bbad695e1c60b'
+        $pin.commit | Should -Be 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1'
+        $pin.archiveUrl | Should -Be 'https://codeload.github.com/SyuanTsai/SyuanTsai-AI-Instructions/zip/bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1'
+        $pin.archiveSha256 | Should -Be '37324f1f93d4df49e6d846021d455265c176cadad1e9230f7ca82cdb26e97a6d'
         @($config.authority.files).Count | Should -Be 51
         for ($index = 0; $index -lt $pin.files.Count; $index++) {
             $path = @($pin.files.Keys)[$index]
@@ -264,7 +264,7 @@ Describe 'Knowledge Content protected source driver preparation' {
         $pin.files['docs/standards/third-party-raw-skill-sources.md'] | Should -Be '18649fd56eada4a94a5d47de778669b0ebcecfb85b84f5c581d283b21979f7ac'
     }
 
-    # Scenario: the active candidate selects the complete reviewed ead467c authority tuple.
+    # Scenario: the active candidate selects the complete reviewed bb32fe9 authority tuple.
     # Purpose: keep both protected source purposes on one exact approved pin.
     It 'UnitT01_accepts_exact_scoped_authority_with_all_51_members' {
         $authority = New-ScopedAuthorityCandidate
@@ -553,7 +553,7 @@ Describe 'Knowledge Content protected source driver preparation' {
             $setupArguments = @{
                 Root = Join-Path $TestDrive 'setup-import-artifacts'
                 AuthorityRoot = $authorityRoot
-                AuthorityPin = Get-KnowledgeContentPreparedAuthorityPin -Commit 'ead467c3488c103546f316d137196b447a1ff58a'
+                AuthorityPin = Get-KnowledgeContentPreparedAuthorityPin -Commit 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1'
                 PowerShell = (Get-ResolvedPowerShellPath)
                 CandidateRevision = $candidate.head
                 Git = $candidate.git
@@ -612,7 +612,7 @@ Describe 'Knowledge Content protected source driver preparation' {
             Assert-TestThrowsLike {
                 Invoke-KnowledgeContentSourcePurpose -Mode source-validation -RepositoryRoot $candidate.root `
                     -ArtifactsRoot (Join-Path $TestDrive 'execution-import-artifacts') -SourceToolsPath $sourceToolsPath `
-                    -AuthorityRepositoryRoot $authorityRoot -TrustedToolRoot $PSHOME -AuthorityPin (Get-KnowledgeContentPreparedAuthorityPin -Commit 'ead467c3488c103546f316d137196b447a1ff58a') `
+                    -AuthorityRepositoryRoot $authorityRoot -TrustedToolRoot $PSHOME -AuthorityPin (Get-KnowledgeContentPreparedAuthorityPin -Commit 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1') `
                     -CandidateAuthority (New-PreparedAuthorityCandidate) -BaseCommit 'HEAD^' -TimeoutSeconds 1800
             } '*source-import-probe-stop*'
 
@@ -682,7 +682,7 @@ Describe 'Knowledge Content protected source driver preparation' {
         (Get-Content -LiteralPath $safePath -Raw) | Should -BeExactly '{"status":"passed"}'
     }
 
-    # Scenario: source validation is requested with the active ead467c config, an obsolete config, or incomplete setup locations.
+    # Scenario: source validation is requested with the active bb32fe9 config, an obsolete config, or incomplete setup locations.
     # Purpose: accept only the complete active pin while continuing to reject stale receipts and missing trust roots.
     It 'UnitT55_accepts_active_scoped_pin_and_rejects_obsolete_or_incomplete_requests' {
         $activeAuthority = (Get-Content -LiteralPath (Join-Path $script:repositoryRoot 'config/standard-v1.json') -Raw | ConvertFrom-Json -Depth 20).authority
@@ -713,7 +713,7 @@ Describe 'Knowledge Content protected source driver preparation' {
         Assert-TestThrowsLike { Resolve-KnowledgeContentSourceRoute -BoundParameters @{ TrustedToolRoot = '' } } '*only valid for explicit source setup or validation*'
     }
 
-    # Scenario: setup and source execution are routed from the active ead467c candidate config.
+    # Scenario: setup and source execution are routed from the active bb32fe9 candidate config.
     # Purpose: bind both explicit public modes to the exact active tuple without acquiring tools in this test.
     It 'UnitT70_routes_setup_and_validation_from_active_scoped_pin' {
         $activeAuthority = (Get-Content -LiteralPath (Join-Path $script:repositoryRoot 'config/standard-v1.json') -Raw | ConvertFrom-Json -Depth 20).authority
@@ -725,7 +725,7 @@ Describe 'Knowledge Content protected source driver preparation' {
         }
 
         $route.mode | Should -BeExactly 'prepare-source-tools'
-        $route.authority.commit | Should -BeExactly 'ead467c3488c103546f316d137196b447a1ff58a'
+        $route.authority.commit | Should -BeExactly 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1'
         $activeAuthority.commit | Should -BeExactly $route.authority.commit
         { Resolve-KnowledgeContentSourceRoute -SourceValidation -SourceToolsPath $script:fixtureSourceToolsPath -AuthorityRepositoryRoot $script:fixtureAuthorityRoot -TrustedToolRoot $script:fixtureRuntimeRoot -CandidateAuthority $activeAuthority } | Should -Not -Throw
     }

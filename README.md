@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 Independent Agent Skills repository for the **Knowledge & Content** domain.
 
-For source maintenance and review, follow the [central Skill maintenance guidelines](https://github.com/SyuanTsai/SyuanTsai-AI-Instructions/blob/ead467c3488c103546f316d137196b447a1ff58a/docs/skill-maintenance-guidelines.md) when deciding scope, supporting resources, dependencies, and replacement cleanup.
+For source maintenance and review, follow the [central Skill maintenance guidelines](https://github.com/SyuanTsai/SyuanTsai-AI-Instructions/blob/bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1/docs/skill-maintenance-guidelines.md) when deciding scope, supporting resources, dependencies, and replacement cleanup.
 
 ## Repository contract
 
@@ -55,7 +55,7 @@ skills/capture-private-course-knowledge/
 
 ## Validation
 
-The public validation entry point is `scripts/Validate.ps1`, and the canonical protected CI workflow entry point is `.github/workflows/validate.yml`. With the active Standard v1 pin at `ead467c3488c103546f316d137196b447a1ff58a`, validation has two explicit purposes: `scripts/Validate.ps1 -PrepareSourceTools` creates run-owned setup receipts, and `scripts/Validate.ps1 -SourceValidation` performs the protected source acceptance using those receipts and the exact event base commit. The protected three-platform workflow invokes both purposes with the required clean roots and runtime evidence. A bare `scripts/Validate.ps1` call fails closed, so it cannot be mistaken for a completed release gate.
+The public validation entry point is `scripts/Validate.ps1`, and the canonical protected CI workflow entry point is `.github/workflows/validate.yml`. With the active Standard v1 pin at `bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1`, validation has two explicit purposes: `scripts/Validate.ps1 -PrepareSourceTools` creates run-owned setup receipts, and `scripts/Validate.ps1 -SourceValidation` performs the protected source acceptance using those receipts and the exact event base commit. The protected three-platform workflow invokes both purposes with the required clean roots and runtime evidence. A bare `scripts/Validate.ps1` call fails closed, so it cannot be mistaken for a completed release gate.
 
 The validator checks:
 
@@ -66,11 +66,11 @@ The validator checks:
 - `SKILL.md` name matching the stable Skill ID;
 - deterministic `contentSha256` using repository-relative paths and raw file SHA-256 values.
 
-The canonical validator invokes the repository contract and Pester components. They are not additional public validation commands. The protected source gate covers stages 1–5 and runs Static without an LLM plus the complete repository test suite. GitHub Actions runs Windows, Linux, and macOS legs against the exact event candidate, protected base driver, and ead467c authority; an aggregate requires all three receipts before the unchanged required status contexts can succeed. This source gate does not grant release, installation, publication, or downstream cutover authority. The field `releaseEligible=false` remains false permanently, including after a PASS, review, or merge. See [the three-platform CI template](docs/ci/three-platform-ci-template.md) for adoption and bootstrap details.
+The canonical validator invokes the repository contract and Pester components. They are not additional public validation commands. The protected source gate covers stages 1–5 and runs Static without an LLM plus the complete repository test suite. GitHub Actions runs Windows, Linux, and macOS legs against the exact event candidate, protected base driver, and bb32fe9 authority; an aggregate requires all three receipts before the unchanged required status contexts can succeed. This source gate does not grant release, installation, publication, or downstream cutover authority. The field `releaseEligible=false` remains false permanently, including after a PASS, review, or merge. See [the three-platform CI template](docs/ci/three-platform-ci-template.md) for adoption and bootstrap details.
 
 ### Protected local run
 
-The local equivalent uses a clean candidate checkout at the exact event head and a separate, clean protected-driver checkout of this repository at the exact event base. Before cloning or checking out any of these roots, set global `core.autocrlf=false`; keep it false through source validation so checkout files and subsequent Git archives retain committed bytes. Recreate any checkout made while line-ending conversion was enabled. The base must be a full nonzero 40-character SHA, must resolve to itself, and must be a distinct ancestor of the candidate. Use a separate clean authority checkout at `ead467c3488c103546f316d137196b447a1ff58a`. `OwnedRoot` is a fresh parent that contains `RuntimeRoot` and the Pester setup area. Keep `ArtifactsRoot` fresh as a separate sibling outside `OwnedRoot`, candidate, driver, authority, and runtime; setup cleanup must stay within its owned paths and must not remove those roots. `SourceToolsPath` must be directly under `ArtifactsRoot`. Use the exact stable Go version installed for the run. Verify the official PowerShell archive hash against the release `hashes.sha256`; Windows also requires the Microsoft Authenticode signature.
+The local equivalent uses a clean candidate checkout at the exact event head and a separate, clean protected-driver checkout of this repository at the exact event base. Before cloning or checking out any of these roots, set global `core.autocrlf=false`; keep it false through source validation so checkout files and subsequent Git archives retain committed bytes. Recreate any checkout made while line-ending conversion was enabled. The base must be a full nonzero 40-character SHA, must resolve to itself, and must be a distinct ancestor of the candidate. Use a separate clean authority checkout at `bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1`. `OwnedRoot` is a fresh parent that contains `RuntimeRoot` and the Pester setup area. Keep `ArtifactsRoot` fresh as a separate sibling outside `OwnedRoot`, candidate, driver, authority, and runtime; setup cleanup must stay within its owned paths and must not remove those roots. `SourceToolsPath` must be directly under `ArtifactsRoot`. Use the exact stable Go version installed for the run. Verify the official PowerShell archive hash against the release `hashes.sha256`; Windows also requires the Microsoft Authenticode signature.
 
 Set the root paths and event SHAs first. Then run the global line-ending control and verification before cloning or checking out the three repositories. After checkout, the commands below bind the exact event head, protected driver base, clean ancestry, effective line-ending settings, and clean worktrees. The Pester setup uses the same verified PowerShell and `RUN_OWNED_ROOT` between the two canonical calls:
 
@@ -96,8 +96,8 @@ if ($CandidateHead -cnotmatch '^[0-9a-f]{40}$' -or $CandidateHead -match '^0+$' 
 if ($LASTEXITCODE -ne 0) { throw 'Could not check out the exact event candidate head.' }
 & git -C $DriverRoot checkout --detach $BaseCommit
 if ($LASTEXITCODE -ne 0) { throw 'Could not check out the exact event base as protected driver.' }
-& git -C $AuthorityRoot checkout --detach ead467c3488c103546f316d137196b447a1ff58a
-if ($LASTEXITCODE -ne 0) { throw 'Could not check out the exact ead467c authority.' }
+& git -C $AuthorityRoot checkout --detach bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1
+if ($LASTEXITCODE -ne 0) { throw 'Could not check out the exact bb32fe9 authority.' }
 
 $candidateHeadObserved = (& git -C $CandidateRoot rev-parse --verify --end-of-options 'HEAD^{commit}' 2>$null | Out-String).Trim()
 if ($LASTEXITCODE -ne 0 -or $candidateHeadObserved -cne $CandidateHead) { throw 'Candidate HEAD must equal the exact event head.' }

@@ -79,12 +79,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Checkout exact ead467c authority
+      - name: Checkout exact bb32fe9 authority
         id: checkout_authority
         uses: *checkout-action-reference
         with:
           repository: SyuanTsai/SyuanTsai-AI-Instructions
-          ref: ead467c3488c103546f316d137196b447a1ff58a
+          ref: bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1
           path: authority
           fetch-depth: 0
           persist-credentials: false
@@ -262,8 +262,8 @@ jobs:
           }
 
           $authorityHead = Get-GitValue -Root $authorityRoot -Arguments @('rev-parse', '--verify', 'HEAD^{commit}')
-          if ($authorityHead -cne 'ead467c3488c103546f316d137196b447a1ff58a') {
-            throw 'Authority checkout HEAD differs from the exact prepared ead467c commit.'
+          if ($authorityHead -cne 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1') {
+            throw 'Authority checkout HEAD differs from the exact prepared bb32fe9 commit.'
           }
           $authorityDirty = @(& $gitExecutable -C $authorityRoot status --porcelain=v1 --untracked-files=all)
           if ($LASTEXITCODE -ne 0 -or $authorityDirty.Count -ne 0) { throw 'Authority checkout is not clean.' }
@@ -613,8 +613,8 @@ jobs:
           $setupRunId = [string]$preparedTools.runId
           if ($setupRunId -cnotmatch '^[0-9a-f]{32}$' -or
               [string]$preparedTools.sourceRevision -cne $env:KC_HEAD_COMMIT -or
-              [string]$preparedTools.authorityRevision -cne 'ead467c3488c103546f316d137196b447a1ff58a') {
-            throw 'Protected source setup receipt does not bind a fresh run to the exact candidate and ead467c authority.'
+              [string]$preparedTools.authorityRevision -cne 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1') {
+            throw 'Protected source setup receipt does not bind a fresh run to the exact candidate and bb32fe9 authority.'
           }
           $sourceToolsSha256 = (Get-FileHash -LiteralPath $env:KC_SOURCE_TOOLS_PATH -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
           $setupBinding = [ordered]@{
@@ -625,7 +625,7 @@ jobs:
             sourceToolsPath = [IO.Path]::GetFullPath($env:KC_SOURCE_TOOLS_PATH)
             sourceToolsSha256 = $sourceToolsSha256
             candidateRevision = [string]$env:KC_HEAD_COMMIT
-            authorityRevision = 'ead467c3488c103546f316d137196b447a1ff58a'
+            authorityRevision = 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1'
           }
           [IO.File]::WriteAllText((Join-Path $env:KC_ARTIFACTS_ROOT 'source-tools-setup-binding.json'), (($setupBinding | ConvertTo-Json -Depth 5) + "`n"), [Text.UTF8Encoding]::new($false))
           [IO.File]::AppendAllText($env:GITHUB_ENV, "KC_SOURCE_TOOLS_RUN_ID=$setupRunId`nKC_SOURCE_TOOLS_SHA256=$sourceToolsSha256`n", [Text.UTF8Encoding]::new($false))
@@ -670,7 +670,7 @@ jobs:
               elapsedSeconds = [Math]::Round($sourceTimer.Elapsed.TotalSeconds, 3)
               candidateRevision = [string]$env:KC_HEAD_COMMIT
               baseRevision = [string]$env:KC_BASE_COMMIT
-              authorityRevision = 'ead467c3488c103546f316d137196b447a1ff58a'
+              authorityRevision = 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1'
               observedProcessExitCode = if ($null -ne $sourceProcessExitCode) { [int]$sourceProcessExitCode } else { $null }
             }
             [IO.File]::WriteAllText((Join-Path $env:KC_ARTIFACTS_ROOT 'source-phase-timing.json'), (($phaseTiming | ConvertTo-Json -Depth 5) + "`n"), [Text.UTF8Encoding]::new($false))
@@ -864,7 +864,7 @@ jobs:
             if ([string]$phaseTiming.phase -cne 'source-validation' -or
                 [string]$phaseTiming.candidateRevision -cne $env:KC_HEAD_COMMIT -or
                 [string]$phaseTiming.baseRevision -cne $env:KC_BASE_COMMIT -or
-                [string]$phaseTiming.authorityRevision -cne 'ead467c3488c103546f316d137196b447a1ff58a') {
+                [string]$phaseTiming.authorityRevision -cne 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1') {
               throw 'Source-validation timing record does not bind the exact candidate, base, and authority.'
             }
             if ($null -eq $phaseTiming.observedProcessExitCode -or [int]$phaseTiming.observedProcessExitCode -ne 0) {
@@ -883,7 +883,7 @@ jobs:
             report = 'protected-source-total-timing-v1'
             candidateRevision = [string]$env:KC_HEAD_COMMIT
             baseRevision = [string]$env:KC_BASE_COMMIT
-            authorityRevision = 'ead467c3488c103546f316d137196b447a1ff58a'
+            authorityRevision = 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1'
             startedAtUtc = $runStartedAtUtc.ToString('O', [Globalization.CultureInfo]::InvariantCulture)
             sourceValidationCompletedAtUtc = $sourceCompletedAtUtc.ToString('O', [Globalization.CultureInfo]::InvariantCulture)
             completedAtUtc = [DateTime]::UtcNow.ToString('O', [Globalization.CultureInfo]::InvariantCulture)
@@ -984,8 +984,8 @@ jobs:
           }
           if ($runId -cnotmatch '^[0-9a-f]{32}$' -or $runId -cne [string]$env:KC_SOURCE_TOOLS_RUN_ID -or
               [string]$sourceTools.sourceRevision -cne $env:KC_HEAD_COMMIT -or
-              [string]$sourceTools.authorityRevision -cne 'ead467c3488c103546f316d137196b447a1ff58a') {
-            throw 'Source tools receipt has no fresh run identity bound to the exact candidate and ead467c authority.'
+              [string]$sourceTools.authorityRevision -cne 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1') {
+            throw 'Source tools receipt has no fresh run identity bound to the exact candidate and bb32fe9 authority.'
           }
           $sourceToolsPath = Join-Path $env:KC_ARTIFACTS_ROOT 'source-tools.json'
           $sourceToolsSha256Before = (Get-FileHash -LiteralPath $sourceToolsPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
@@ -997,7 +997,7 @@ jobs:
               [string]$setupBinding.runId -cne $runId -or
               [string]$setupBinding.sourceToolsSha256 -cne $sourceToolsSha256Before -or
               [string]$setupBinding.candidateRevision -cne $env:KC_HEAD_COMMIT -or
-              [string]$setupBinding.authorityRevision -cne 'ead467c3488c103546f316d137196b447a1ff58a') {
+              [string]$setupBinding.authorityRevision -cne 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1') {
             throw 'Protected source setup binding differs from the fresh prepared receipt.'
           }
           $sourceValidationRoot = Join-Path $env:KC_ARTIFACTS_ROOT "source-validation-$runId"
@@ -1019,17 +1019,17 @@ jobs:
           }
 
           . $protectedHelperPath
-          $authorityPin = Get-KnowledgeContentPreparedAuthorityPin -Commit 'ead467c3488c103546f316d137196b447a1ff58a'
+          $authorityPin = Get-KnowledgeContentPreparedAuthorityPin -Commit 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1'
           $verifiedAuthority = Assert-KnowledgeContentPreparedAuthorityCheckout -GitPath $gitPath -AuthorityRoot $env:KC_AUTHORITY_ROOT -AuthorityPin $authorityPin
-          if ([string]$verifiedAuthority.revision -cne 'ead467c3488c103546f316d137196b447a1ff58a') {
-            throw 'Raw 51-file authority verification did not retain the exact ead467c revision.'
+          if ([string]$verifiedAuthority.revision -cne 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1') {
+            throw 'Raw 51-file authority verification did not retain the exact bb32fe9 revision.'
           }
           $authorityRunnerPath = [string]$verifiedAuthority.runnerPath
           . $authorityRunnerPath -DefineFunctionsOnly -CandidateRoot $env:KC_CANDIDATE_ROOT `
             -AdapterPath $adapterSnapshotPath -ArtifactsRoot $sourceValidationRoot `
             -SourceRepository 'https://github.com/SyuanTsai/Skill-Knowledge-Content.git' `
             -SourceRevision $env:KC_HEAD_COMMIT -BaseRevision $env:KC_BASE_COMMIT `
-            -AuthorityRevision 'ead467c3488c103546f316d137196b447a1ff58a'
+            -AuthorityRevision 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1'
           $validationSecurityPolicy = Get-Content -LiteralPath (Join-Path $env:KC_AUTHORITY_ROOT 'docs/standards/validation-security-gate.json') -Raw | ConvertFrom-Json -Depth 100
           $skillSpectorStages = @($validationSecurityPolicy.stages | Where-Object { [string]$_.id -ceq 'skillspector-static' })
           if ($skillSpectorStages.Count -ne 1 -or $null -eq $skillSpectorStages[0].platformUnavailableException) {
@@ -1037,7 +1037,7 @@ jobs:
           }
           [void](Assert-StandardCoreSourceCheckReport -Report $report `
             -ExpectedSourceRevision $env:KC_HEAD_COMMIT -ExpectedBaseRevision $env:KC_BASE_COMMIT `
-            -ExpectedAuthorityRevision 'ead467c3488c103546f316d137196b447a1ff58a' `
+            -ExpectedAuthorityRevision 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1' `
             -ExpectedEventName $env:GITHUB_EVENT_NAME -ArtifactsRoot $sourceValidationRoot `
             -OutputPath $sourceReport -ProcessExitCode $observedSourceExitCode `
             -ValidationSecurityPolicy $skillSpectorStages[0].platformUnavailableException)
@@ -1054,7 +1054,7 @@ jobs:
           $totalTiming.twentyMinuteTargetMet = ($totalTiming.totalSeconds -le 1200)
           $totalTiming.reportAssertionOutcome = 'passed'
           [IO.File]::WriteAllText($totalTimingPath, (($totalTiming | ConvertTo-Json -Depth 10) + "`n"), [Text.UTF8Encoding]::new($false))
-          Write-Host "Final ead467c source report assertion passed; report SHA256 $sourceReportSha256After"
+          Write-Host "Final bb32fe9 source report assertion passed; report SHA256 $sourceReportSha256After"
           Write-Host "Fresh source-tools receipt SHA256 remained $sourceToolsSha256After"
           Write-Host "Source inventory timing SHA256 $((Get-FileHash -LiteralPath $timingSidecar -Algorithm SHA256).Hash.ToLowerInvariant())"
           Write-Host "Setup/source/total timing sidecar: $totalTimingPath"
@@ -1123,7 +1123,7 @@ jobs:
             eventName = [string]$env:GITHUB_EVENT_NAME
             candidateSha = [string]$env:EXPECTED_CANDIDATE
             baseSha = [string]$env:EXPECTED_BASE
-            authoritySha = 'ead467c3488c103546f316d137196b447a1ff58a'
+            authoritySha = 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1'
             pythonVersion = [string]$pythonEvidence.pythonVersion
             powerShell = [ordered]@{ version = [string]$env:KC_POWERSHELL_VERSION; archiveSha256 = [string]$env:KC_POWERSHELL_ARCHIVE_SHA256 }
             outcomes = [ordered]@{
@@ -1238,7 +1238,7 @@ jobs:
               @{ name = 'eventName'; actual = [string]$receipt.eventName; wanted = [string]$env:GITHUB_EVENT_NAME },
               @{ name = 'candidateSha'; actual = [string]$receipt.candidateSha; wanted = [string]$env:EXPECTED_CANDIDATE },
               @{ name = 'baseSha'; actual = [string]$receipt.baseSha; wanted = [string]$env:EXPECTED_BASE },
-              @{ name = 'authoritySha'; actual = [string]$receipt.authoritySha; wanted = 'ead467c3488c103546f316d137196b447a1ff58a' }
+              @{ name = 'authoritySha'; actual = [string]$receipt.authoritySha; wanted = 'bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1' }
             )) {
               if ($binding.actual -cne $binding.wanted) { $problems.Add("$platform receipt $($binding.name)='$($binding.actual)', expected '$($binding.wanted)'.") }
             }
