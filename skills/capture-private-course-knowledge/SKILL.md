@@ -1,11 +1,7 @@
 ---
 name: capture-private-course-knowledge
-description: Windows-only. Analyze and archive authorized course/lecture materials with evidence links. Use when users want to transcribe authenticated videos; relate PDFs, slides, code, or attachments; export notes, NotebookLM sources, or articles; reconstruct teaching context without bypassing access controls.
+description: Analyze and archive authorized course/lecture materials with evidence links. Use when users want to transcribe authenticated videos; relate PDFs, slides, code, or attachments; export notes, NotebookLM sources, or articles; reconstruct teaching context without bypassing access controls.
 ---
-<!--
-SPDX-FileCopyrightText: 2026 SyuanTsai
-SPDX-License-Identifier: Apache-2.0
--->
 
 # Capture Private Course Knowledge
 
@@ -13,7 +9,7 @@ Create one trustworthy, reusable knowledge base from every material in an author
 
 ## Supported host and service boundary
 
-Use Windows as the only host for local development, installation, execution, testing, acceptance, and CI. Do not use Linux, macOS, WSL, or Linux containers as host fallbacks. Authorized SaaS, browser, and API services remain available for course capture. Preserve cross-platform code and commands found in course materials as source evidence; their presence does not change the local host requirement.
+Run local development, installation, execution, testing, and acceptance on the user's current Windows, Linux, or macOS host. If a required local tool is unavailable there, report the tooling gap and mark the affected work partial or draft; do not switch to another host, VM, WSL, or container as a fallback. Authorized SaaS, browser, and API services remain available for course capture when the user permits them. Preserve cross-platform code and commands found in course materials as source evidence; do not execute them as host setup, and their presence does not change the local host. Each reference applies this boundary to its own local tools.
 
 ## Preserve authorization and privacy
 
@@ -92,17 +88,6 @@ Generate NotebookLM or article exports from the verified durable notes. Keep exp
 
 ## Example
 
-```text
-User request:
-"Capture modules 1–3 from this authorized course, including videos and PDFs, and prepare private NotebookLM-ready notes."
-
-Expected workflow:
-1. Inventory every lesson and attachment in modules 1–3.
-2. Record timestamps, PDF pages, code paths, and access gaps as source anchors.
-3. Build cross-source lesson events and verify coverage by material type.
-4. Export the verified notes without publishing private source material.
-```
-
 Example evidence record:
 
 ```text
@@ -129,11 +114,7 @@ Write in the user's language unless requested otherwise. Report scope, inventory
 
 ## Error Handling
 
-- If authentication, MFA, or CAPTCHA blocks access, stop and request only the minimum user action needed to restore the authorized session.
-- If every authorized route to a required material fails, stop and report the exact material and access gap instead of substituting public or inferred content.
-- If the only remaining route would bypass protections, stop and explain the blocker.
 - If a no-caption video, scanned PDF, or protected document cannot be processed with available authorized tools, including when a no-caption video requires unavailable audio, mark the affected range inaccessible and preserve partial coverage accurately.
-- If private material would leave the current environment through transcription, OCR, vision, storage, or another external service, obtain explicit approval before sending it.
 - If durable recall has no safe, approved destination, stop before persistence and explain the blocker.
 - If public output cannot avoid private or unlicensed material, stop before persistence or publication and explain the blocker.
 - If target publishing conventions cannot be inspected or the scope cannot support honest coverage, stop and explain the blocker.

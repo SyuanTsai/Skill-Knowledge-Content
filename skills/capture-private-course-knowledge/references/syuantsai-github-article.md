@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 Use this reference when durable course notes must become a specific article for [SyuanTsai/SyuanTsai.github.io](https://github.com/SyuanTsai/SyuanTsai.github.io). The article is an original public synthesis, not a transcript, course substitute, or public copy of the private evidence bundle.
 
-Keep local research, editing, validation, and site builds on Windows. Use the site's authorized SaaS/browser/API services as needed, and preserve cross-platform course code and commands as source evidence. Use the site's documented native Windows toolchain; if it is unavailable, report the gap and keep the article draft instead of switching to Linux, macOS, WSL, or Linux containers.
+Keep local research, editing, validation, and site builds on the user's current host. Use the site's authorized SaaS/browser/API services as needed, and preserve cross-platform course code and commands as source evidence. Use the site's documented toolchain for that host; if it is unavailable, report the gap and keep the article draft instead of switching to another host, VM, WSL, or container.
 
 ## Reinspect the target
 

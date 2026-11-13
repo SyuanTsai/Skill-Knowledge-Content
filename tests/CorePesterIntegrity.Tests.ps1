@@ -206,6 +206,34 @@ Describe 'Verified Pester 6.2.0 module closure' {
         finally { Remove-Item -LiteralPath $link -Force }
     }
 
+    # Scenario: Payload paths differ from the pinned lock only by letter case, either in the lock or on disk.
+    # Purpose: Keep case-ambiguity rejection identical on case-sensitive and case-insensitive hosts so one lock and closure have one verdict on every CI leg.
+    It 'UnitT22_rejects_case_variant_payload_paths_identically_on_every_host' {
+        $lockObject = Get-Content -LiteralPath $script:closureLockPath -Raw -Encoding utf8 | ConvertFrom-Json -AsHashtable
+        $lockObject.modulePayload[1].path = ([string]$lockObject.modulePayload[0].path).ToUpperInvariant()
+        [string]$lockObject.modulePayload[1].path | Should -Not -BeExactly ([string]$lockObject.modulePayload[0].path)
+        $caseVariantLockPath = Join-Path $TestDrive 'case-variant-entry.json'
+        $lockObject | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $caseVariantLockPath -Encoding utf8
+        Assert-TestThrowsLike { Read-CorePesterClosureLock -LiteralPath $caseVariantLockPath } '*case-ambiguous payload path*'
+
+        $moduleRoot = Join-Path $TestDrive 'case-variant-closure'
+        [void](New-Item -ItemType Directory -Path $moduleRoot)
+        $bytes = [Text.UTF8Encoding]::new($false).GetBytes('function Invoke-Pester { }')
+        $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+        $ambiguousLock = [pscustomobject]@{ modulePayload = @(
+                [pscustomobject]@{ path = 'Pester.psm1'; sha256 = $hash }
+                [pscustomobject]@{ path = 'pester.psm1'; sha256 = $hash }
+            ) }
+        (Test-CorePesterClosure -ModuleRoot $moduleRoot -Lock $ambiguousLock).Errors | Should -Contain 'Duplicate expected payload path: pester.psm1'
+
+        [IO.File]::WriteAllBytes((Join-Path $moduleRoot 'pester.psm1'), $bytes)
+        $exactLock = [pscustomobject]@{ modulePayload = @([pscustomobject]@{ path = 'Pester.psm1'; sha256 = $hash }) }
+        $caseVariantFile = Test-CorePesterClosure -ModuleRoot $moduleRoot -Lock $exactLock
+        $caseVariantFile.IsValid | Should -BeFalse
+        $caseVariantFile.Errors | Should -Contain 'Pester closure contains unpinned file: pester.psm1'
+        @($caseVariantFile.Inventory).Count | Should -Be 0
+    }
+
     # Scenario: A destination escapes its registered runtime boundary or traverses a redirected ancestor.
     # Purpose: Fail closed on escaped paths and detect directory links without altering their target.
     It 'UnitT25_rejects_escaped_paths_and_reparse_point_ancestors' {

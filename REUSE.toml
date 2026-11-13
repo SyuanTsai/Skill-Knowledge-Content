@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 SyuanTsai
 # SPDX-License-Identifier: Apache-2.0
-# JSON files cannot carry comments; their ownership is declared here.
+# JSON files cannot carry comments, and SKILL.md bodies must not carry SPDX
+# comments (Standard section 4.5.1); their ownership is declared here.
 
 version = 1
 
@@ -18,6 +19,12 @@ SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
 path = "NOTICE"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 SyuanTsai"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "skills/**/SKILL.md"
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 SyuanTsai"
 SPDX-License-Identifier = "Apache-2.0"

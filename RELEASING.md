@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Supported platform
 
-Local Agent development remains Windows-hosted. Canonical CI is the required exception: it runs parallel `windows-latest`, `ubuntu-latest`, and `macos-latest` validation legs, aggregates all three receipts on Ubuntu, and hosts the three required status mirrors on Ubuntu.
+Local Agent development may run on Windows, Linux, or macOS hosts. Canonical CI runs parallel `windows-latest` (x64), `ubuntu-latest` (x64), and `macos-latest` (arm64) validation legs, aggregates all three receipts on Ubuntu, and hosts the three required status mirrors on Ubuntu. A release requires all three legs and the aggregate to pass.
 
 ## Release contract
 
