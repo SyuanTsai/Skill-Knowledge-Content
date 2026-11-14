@@ -25,7 +25,7 @@ Run local development, installation, execution, testing, and acceptance on the u
 
 ## Establish the deliverable
 
-Identify the course, modules or lessons, included materials, output language, desired depth, and whether the user wants a one-time summary, durable recall, NotebookLM-ready sources, or a public article. Establish a user-approved private destination before durable capture.
+Identify the course, modules or lessons, included materials, output language, desired depth, and whether the user wants a one-time summary, durable recall, NotebookLM-ready sources, or a public article. Establish a user-approved private destination before durable capture. If no safe, approved destination is available, stop before persistence and explain the blocker.
 
 For an article, establish the target repository, audience, topic or article type, and whether the user wants a draft, local change, or publication. If the topic is unspecified, default to a draft about one coherent, evidence-backed teaching outcome.
 
@@ -51,7 +51,7 @@ Use this inventory as the coverage baseline. Do not silently skip inaccessible, 
 
 Use the strongest route available: provider-supplied text or files, an official or user-provided local artifact, an approved official download or export, or visible browser inspection. Select the appropriate format tool or Skill for each file type.
 
-Do not assume that access to one course page exposes every embedded material to media or document tools. Record inaccessible items individually and identify the smallest authorized artifact needed to continue.
+Do not assume that access to one course page exposes every embedded material to media or document tools. Record inaccessible items individually and identify the smallest authorized artifact needed to continue. When a no-caption video, including one that requires unavailable audio, a scanned PDF, or a protected document cannot be processed with available authorized tools, mark the affected range inaccessible and preserve partial coverage accurately.
 
 ### 3. Extract modality-specific evidence
 
@@ -84,7 +84,7 @@ Compare processed evidence with the inventory and report coverage separately by 
 
 For long courses, checkpoint by lesson and material, write durable artifacts incrementally, and synthesize only after the agreed scope passes coverage checks. Do not label the course complete merely because every video was processed when PDFs or other in-scope materials remain unread.
 
-Generate NotebookLM or article exports from the verified durable notes. Keep exports replaceable and keep private source anchors, raw evidence, and proprietary course artifacts out of public repositories.
+Generate NotebookLM or article exports from the verified durable notes. Keep exports replaceable and keep private source anchors, raw evidence, and proprietary course artifacts out of public repositories. If a public output cannot exclude private or unlicensed material, stop before persistence or publication and explain the blocker.
 
 ## Example
 
@@ -124,8 +124,5 @@ Write in the user's language unless requested otherwise. Report scope, inventory
 
 ## Error Handling
 
-- If a no-caption video, scanned PDF, or protected document cannot be processed with available authorized tools, including when a no-caption video requires unavailable audio, mark the affected range inaccessible and preserve partial coverage accurately.
-- If durable recall has no safe, approved destination, stop before persistence and explain the blocker.
-- If public output cannot avoid private or unlicensed material, stop before persistence or publication and explain the blocker.
 - If target publishing conventions cannot be inspected or the scope cannot support honest coverage, stop and explain the blocker.
 - State what was inspected, what remains inaccessible, and the smallest user action or artifact needed to continue.

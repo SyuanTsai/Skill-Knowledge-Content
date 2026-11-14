@@ -19,7 +19,10 @@ $requiredPolicyText = @(
     @{ Path = 'skills/capture-private-course-knowledge/agents/openai.yaml'; Text = 'default_prompt: "Use $capture-private-course-knowledge to capture this authorized course across videos, PDFs, slides, code, and attachments as evidence-linked notes, then create the requested NotebookLM sources or website article. Preserve cross-platform course commands as source evidence."' },
     @{ Path = 'README.md'; Text = "The Skill instructions are host-neutral: local Agent work runs on the user's current Windows, Linux, or macOS host. When a required local tool is unavailable, the Skill reports the gap and marks the affected work partial or draft instead of switching to another host, VM, WSL, or container. Authorized SaaS, browser, and API services remain in scope when the user permits them; cross-platform course code and commands remain source evidence." },
     @{ Path = 'README.md'; Text = 'Canonical repository validation runs on GitHub Actions as three parallel matrix legs, `windows-latest` (x64), `ubuntu-latest` (x64), and `macos-latest` (arm64), then aggregates all three receipts on Ubuntu and runs the required status mirrors on Ubuntu. These legs validate the repository contract and regression suite on each platform; they are not end-to-end course-capture acceptance runs.' },
-    @{ Path = 'RELEASING.md'; Text = 'Local Agent development may run on Windows, Linux, or macOS hosts. Canonical CI runs parallel `windows-latest` (x64), `ubuntu-latest` (x64), and `macos-latest` (arm64) validation legs, aggregates all three receipts on Ubuntu, and hosts the three required status mirrors on Ubuntu. A release requires all three legs and the aggregate to pass.' }
+    @{ Path = 'RELEASING.md'; Text = 'Local Agent development may run on Windows, Linux, or macOS hosts. Canonical CI runs parallel `windows-latest` (x64), `ubuntu-latest` (x64), and `macos-latest` (arm64) validation legs, aggregates all three receipts on Ubuntu, and hosts the three required status mirrors on Ubuntu. A release requires all three legs and the aggregate to pass.' },
+    @{ Path = 'skills/capture-private-course-knowledge/SKILL.md'; Text = 'If no safe, approved destination is available, stop before persistence and explain the blocker.' },
+    @{ Path = 'skills/capture-private-course-knowledge/SKILL.md'; Text = 'When a no-caption video, including one that requires unavailable audio, a scanned PDF, or a protected document cannot be processed with available authorized tools, mark the affected range inaccessible and preserve partial coverage accurately.' },
+    @{ Path = 'skills/capture-private-course-knowledge/SKILL.md'; Text = 'If a public output cannot exclude private or unlicensed material, stop before persistence or publication and explain the blocker.' }
 )
 
 $forbiddenText = @(
@@ -42,7 +45,10 @@ $forbiddenText = @(
     'Windows-only',
     'Windows-hosted',
     '(Windows)',
-    'on Windows'
+    'on Windows',
+    'If a no-caption video, scanned PDF, or protected document cannot be processed with available authorized tools, including when a no-caption video requires unavailable audio, mark the affected range inaccessible and preserve partial coverage accurately.',
+    'If durable recall has no safe, approved destination, stop before persistence and explain the blocker.',
+    'If public output cannot avoid private or unlicensed material, stop before persistence or publication and explain the blocker.'
 )
 
 $forbiddenTextPaths = @{
@@ -66,6 +72,9 @@ $forbiddenTextPaths = @{
     $forbiddenText[17] = @('README.md', 'RELEASING.md')
     $forbiddenText[18] = @('skills/capture-private-course-knowledge/agents/openai.yaml')
     $forbiddenText[19] = @('skills/capture-private-course-knowledge/agents/openai.yaml')
+    $forbiddenText[20] = @('skills/capture-private-course-knowledge/SKILL.md')
+    $forbiddenText[21] = @('skills/capture-private-course-knowledge/SKILL.md')
+    $forbiddenText[22] = @('skills/capture-private-course-knowledge/SKILL.md')
 }
 $reuseSkillAnnotationText = @'
 [[annotations]]

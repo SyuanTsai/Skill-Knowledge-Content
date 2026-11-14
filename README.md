@@ -55,6 +55,46 @@ skills/capture-private-course-knowledge/
    └─ video-capture.md
 ```
 
+#### Local tool availability
+
+This Skill does not require a specific tool. The table lists common local tools for transcription, OCR, PDF extraction, media inspection, article-site builds, and browser access, recording how official documentation makes them available on Windows x64, Linux x64, and macOS arm64 as of 2026-11-14. This repository's CI neither installs nor runs these tools, so the table does not report tested results. Items not stated in the official documentation are marked `Unverified` without inference. When a tool is unavailable, follow the Skill's host boundary: report the gap and do not switch hosts.
+
+| Purpose | Tool | Windows x64 | Linux x64 | macOS arm64 | Sources |
+|---|---|---|---|---|---|
+| Media inspection | FFmpeg / ffprobe | Third-party builds linked from the official page | Distribution packages or third-party static builds | `Unverified`: the official page links only to third-party "64-bit" builds without naming the architecture | 1, 2 |
+| Transcription | whisper.cpp | Build from source with CMake and MSVC or MinGW | Build from source | Build from source; README explicitly lists Arm | 3 |
+| Transcription | OpenAI Whisper | pip; README provides Windows FFmpeg installation commands but does not explicitly list supported operating systems | pip with FFmpeg installed through apt | pip with FFmpeg installed through Homebrew; `Unverified`: arm64 is not explicit | 4 |
+| OCR | Tesseract | Third-party installer from UB Mannheim | Distribution packages | Homebrew or MacPorts; `Unverified`: arm64 is not explicit | 5 |
+| PDF extraction | Poppler (`pdftotext`, `pdftoppm`) | Official source only; build from source or use a third-party package | Same as Windows | Same as Windows | 6 |
+| PDF extraction | MuPDF (`mutool`) | Build from source with Visual Studio | Build from source with make | `Unverified`: official guidance only says it should be buildable | 7 |
+| Article site | Git | Official x64 installer | Distribution packages | Third-party or Apple-provided options (Homebrew, MacPorts, Xcode CLT); `Unverified`: arm64 is not explicit | 8, 9, 10 |
+| Article site | Ruby | RubyInstaller, listed as a third-party installer on the official page | Distribution packages | System Ruby or Homebrew; `Unverified`: arm64 is not explicit | 11 |
+| Article site | Bundler | Included with Ruby | Included with Ruby | Included with Ruby | 12 |
+| Article site | Jekyll | Not officially supported; usable with documented adjustments | Available through the Ubuntu guide | Follows Homebrew's macOS support; `Unverified`: arm64 is not explicit | 13, 14, 15 |
+| Browser | Google Chrome | Windows 10 or later | x86-64 `.deb` or `.rpm` | macOS 13 or later; `Unverified`: the page does not distinguish chips | 16, 17 |
+| Browser | Microsoft Edge | Available | 64-bit on listed distributions | Native Apple Silicon support starting with Edge 88 | 18 |
+| Browser | Mozilla Firefox | Windows 10 or later | glibc 2.17 or later; `Unverified`: the page does not state x86_64 | Apple silicon explicitly listed | 19 |
+
+1. <https://ffmpeg.org/download.html>
+2. <https://ffmpeg.org/ffprobe.html>
+3. <https://github.com/ggml-org/whisper.cpp>
+4. <https://github.com/openai/whisper>
+5. <https://tesseract-ocr.github.io/tessdoc/Installation.html>
+6. <https://poppler.freedesktop.org/>
+7. <https://mupdf.readthedocs.io/en/latest/guide/install.html>
+8. <https://git-scm.com/install/windows>
+9. <https://git-scm.com/install/linux>
+10. <https://git-scm.com/install/mac>
+11. <https://www.ruby-lang.org/en/documentation/installation/>
+12. <https://bundler.io/>
+13. <https://jekyllrb.com/docs/installation/>
+14. <https://jekyllrb.com/docs/installation/windows/>
+15. <https://jekyllrb.com/docs/installation/macos/>
+16. <https://support.google.com/chrome/a/answer/7100626>
+17. <https://support.google.com/chrome/answer/95346>
+18. <https://learn.microsoft.com/en-us/deployedge/microsoft-edge-supported-operating-systems>
+19. <https://www.firefox.com/en-US/firefox/system-requirements/>
+
 ## Validation
 
 The public validation entry point is `scripts/Validate.ps1`, and the canonical protected CI workflow entry point is `.github/workflows/validate.yml`. With the active Standard v1 pin at `bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1`, validation has two explicit purposes: `scripts/Validate.ps1 -PrepareSourceTools` creates run-owned setup receipts, and `scripts/Validate.ps1 -SourceValidation` performs the protected source acceptance using those receipts and the exact event base commit. The protected three-platform workflow invokes both purposes with the required clean roots and runtime evidence. A bare `scripts/Validate.ps1` call fails closed, so it cannot be mistaken for a completed release gate.
