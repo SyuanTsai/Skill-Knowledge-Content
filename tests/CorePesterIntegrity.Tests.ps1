@@ -66,6 +66,7 @@ BeforeAll {
                 finally { $target.Dispose() }
                 if ($Variant -eq 'extra') { [void]$zip.CreateEntry('extra.ps1') }
                 if ($Variant -eq 'duplicate') { [void]$zip.CreateEntry('_rels/.rels') }
+                if ($Variant -eq 'case-duplicate') { [void]$zip.CreateEntry('_RELS/.rels') }
                 if ($Variant -eq 'unsafe') { [void]$zip.CreateEntry('../outside.ps1') }
             }
             finally { $zip.Dispose() }
@@ -166,6 +167,19 @@ Describe 'Verified Pester 6.2.0 module closure' {
         Assert-TestThrowsLike { Read-CorePesterClosureLock -LiteralPath $duplicateEntryPath } '*duplicate*'
     }
 
+    # Scenario: A JSON object repeats a property with only its letter case changed.
+    # Purpose: Preserve the host-independent ambiguity verdict instead of accepting both names on case-sensitive hosts.
+    It 'UnitT12_rejects_case_only_duplicate_JSON_properties' {
+        $lock = Get-Content -LiteralPath $script:closureLockPath -Raw -Encoding utf8
+        $caseDuplicateProperty = $lock -replace '"schemaVersion": 1,', '"schemaVersion": 1, "SchemaVersion": 1,'
+        $caseDuplicatePath = Join-Path $TestDrive 'case-duplicate-property.json'
+        [IO.File]::WriteAllText($caseDuplicatePath, $caseDuplicateProperty, [Text.UTF8Encoding]::new($false))
+
+        Assert-TestThrowsLike {
+            Read-CorePesterClosureLock -LiteralPath $caseDuplicatePath
+        } "*duplicate or case-ambiguous JSON property 'SchemaVersion'*"
+    }
+
     # Scenario: An explicit module root is checked as a complete relative path and hash inventory.
     # Purpose: Detect missing, extra, altered, or reparse-backed payload before import and after execution.
     It 'UnitT20_rejects_missing_extra_hash_mismatch_and_reparse_payloads' {
@@ -232,6 +246,41 @@ Describe 'Verified Pester 6.2.0 module closure' {
         $caseVariantFile.IsValid | Should -BeFalse
         $caseVariantFile.Errors | Should -Contain 'Pester closure contains unpinned file: pester.psm1'
         @($caseVariantFile.Inventory).Count | Should -Be 0
+    }
+
+    # Scenario: The closure inventory contains two files whose relative paths differ only by letter case.
+    # Purpose: Keep actual-file ambiguity detection case-insensitive even where the native filesystem permits both files.
+    It 'UnitT23_rejects_case_only_duplicate_closure_files_on_every_host' {
+        $moduleRoot = Join-Path $TestDrive 'case-duplicate-closure'
+        [void](New-Item -ItemType Directory -Path $moduleRoot)
+        $bytes = [Text.UTF8Encoding]::new($false).GetBytes('function Invoke-Pester { }')
+        $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+        $canonicalPath = Join-Path $moduleRoot 'Pester.psm1'
+        [IO.File]::WriteAllBytes($canonicalPath, $bytes)
+        $fixtureLock = [pscustomobject]@{
+            modulePayload = @([pscustomobject]@{ path = 'Pester.psm1'; sha256 = $hash })
+        }
+
+        if ($IsWindows) {
+            $script:caseDuplicateClosureItems = @(
+                Get-Item -LiteralPath $canonicalPath -Force
+                [pscustomobject]@{
+                    Attributes = [IO.FileAttributes]::Normal
+                    PSIsContainer = $false
+                    FullName = (Join-Path $moduleRoot 'pester.psm1')
+                }
+            )
+            Mock -CommandName Get-ChildItem -ModuleName CorePesterIntegrity -MockWith {
+                $script:caseDuplicateClosureItems
+            }
+        }
+        else {
+            [IO.File]::WriteAllBytes((Join-Path $moduleRoot 'pester.psm1'), $bytes)
+        }
+
+        $result = Test-CorePesterClosure -ModuleRoot $moduleRoot -Lock $fixtureLock
+        $result.IsValid | Should -BeFalse
+        ($result.Errors -join "`n") | Should -BeLike '*Pester closure contains duplicate or case-ambiguous file path:*'
     }
 
     # Scenario: A destination escapes its registered runtime boundary or traverses a redirected ancestor.
@@ -371,6 +420,17 @@ Describe 'Verified Pester 6.2.0 module closure' {
                 $result.Errors | Should -Contain 'Pester package archive contains a symbolic link: Pester.psm1'
             }
         }
+    }
+
+    # Scenario: A package contains two entries whose names differ only by letter case.
+    # Purpose: Preserve the same ambiguity rejection for the same nupkg bytes on every host.
+    It 'UnitT52_rejects_case_only_duplicate_archive_entries' {
+        $badPath = Join-Path $TestDrive 'pester-case-duplicate.nupkg'
+        New-IntegrityPackageFixture -Path $badPath -Variant 'case-duplicate'
+
+        $result = Test-CorePesterPackageArchive -ArchivePath $badPath -Lock $script:closureLock.Value
+        $result.IsValid | Should -BeFalse
+        ($result.Errors -join "`n") | Should -BeLike '*Pester package archive has duplicate or case-ambiguous entry:*'
     }
 
     # Scenario: Normal Core wrapper is source-bound to the exact runtime and performs no acquisition.
