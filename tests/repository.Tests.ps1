@@ -95,6 +95,13 @@ $requiredCaseSensitivityCases = @(
 $forbiddenCaseSensitivityCases = @(
     @{ ForbiddenText = $forbiddenText[16]; CaseId = 1 }
 )
+$forEachExpandedNameGateCases = @(
+    @{ IsValid = $false; Errors = @('The discovery check has not run.'); CheckedCommandCount = 0; ExpandedNameCount = 0; CaseId = 1 }
+)
+$forEachExpandedNameFixtureCases = @(
+    @{ Fixture = 'duplicate expanded name'; IsValid = $true; Errors = @(); CheckedCommandCount = 0; ExpandedNameCount = 0; ExpectedErrorPattern = 'duplicate expanded It name'; CaseId = 1 },
+    @{ Fixture = 'non-variable data source'; IsValid = $true; Errors = @(); CheckedCommandCount = 0; ExpandedNameCount = 0; ExpectedErrorPattern = 'simple variable reference'; CaseId = 2 }
+)
 
 for ($index = 0; $index -lt $requiredPolicyText.Count; $index++) {
     $requiredPolicyText[$index].CaseId = $index + 1
@@ -258,6 +265,58 @@ function Test-ForEachExpandedNameUniqueness {
     }
 }
 
+$forEachExpandedNameResult = Test-ForEachExpandedNameUniqueness -LiteralPath $PSCommandPath -VariableValues @{
+    forEachExpandedNameGateCases = $forEachExpandedNameGateCases
+    forEachExpandedNameFixtureCases = $forEachExpandedNameFixtureCases
+    reuseAnnotationCases = $reuseAnnotationCases
+    requiredPolicyText = $requiredPolicyText
+    forbiddenPolicyCases = $forbiddenPolicyCases
+    forbiddenCoverageCases = $forbiddenCoverageCases
+    requiredCaseSensitivityCases = $requiredCaseSensitivityCases
+    forbiddenCaseSensitivityCases = $forbiddenCaseSensitivityCases
+}
+$forEachExpandedNameGateCases = @(
+    @{
+        IsValid = $forEachExpandedNameResult.IsValid
+        Errors = @($forEachExpandedNameResult.Errors)
+        CheckedCommandCount = $forEachExpandedNameResult.CheckedCommandCount
+        ExpandedNameCount = $forEachExpandedNameResult.ExpandedNameCount
+        CaseId = 1
+    }
+)
+
+$duplicateFixtureSource = @'
+$cases = @(@{ Label = 'same'; CaseId = 1 }, @{ Label = 'same'; CaseId = 2 })
+Describe 'fixture' { It 'case <Label>' -ForEach $cases {} }
+'@
+$duplicateFixtureResult = Test-ForEachExpandedNameUniqueness -SourceText $duplicateFixtureSource -VariableValues @{
+    cases = @(@{ Label = 'same'; CaseId = 1 }, @{ Label = 'same'; CaseId = 2 })
+}
+$expressionFixtureSource = @'
+Describe 'fixture' { It 'case <Label>' -ForEach @(@{ Label = 'one' }) {} }
+'@
+$expressionFixtureResult = Test-ForEachExpandedNameUniqueness -SourceText $expressionFixtureSource
+$forEachExpandedNameFixtureCases = @(
+    @{
+        Fixture = 'duplicate expanded name'
+        IsValid = $duplicateFixtureResult.IsValid
+        Errors = @($duplicateFixtureResult.Errors)
+        CheckedCommandCount = $duplicateFixtureResult.CheckedCommandCount
+        ExpandedNameCount = $duplicateFixtureResult.ExpandedNameCount
+        ExpectedErrorPattern = 'duplicate expanded It name'
+        CaseId = 1
+    },
+    @{
+        Fixture = 'non-variable data source'
+        IsValid = $expressionFixtureResult.IsValid
+        Errors = @($expressionFixtureResult.Errors)
+        CheckedCommandCount = $expressionFixtureResult.CheckedCommandCount
+        ExpandedNameCount = $expressionFixtureResult.ExpandedNameCount
+        ExpectedErrorPattern = 'simple variable reference'
+        CaseId = 2
+    }
+)
+
 BeforeAll {
     $script:repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
@@ -310,26 +369,16 @@ BeforeAll {
 }
 
 Describe 'Knowledge & Content repository contract' {
-    It 'keeps every -ForEach expanded test name unique' {
-        $actual = Test-ForEachExpandedNameUniqueness -LiteralPath $PSCommandPath
-        $actual.IsValid | Should -BeTrue -Because ($actual.Errors -join [Environment]::NewLine)
+    It 'keeps every -ForEach expanded test name unique #<CaseId>' -ForEach $forEachExpandedNameGateCases {
+        $IsValid | Should -BeTrue -Because ($Errors -join [Environment]::NewLine)
+        $CheckedCommandCount | Should -BeGreaterThan 0
+        $ExpandedNameCount | Should -BeGreaterThan 0
+    }
 
-        $duplicateFixtureSource = @'
-$cases = @(@{ Label = 'same'; CaseId = 1 }, @{ Label = 'same'; CaseId = 2 })
-Describe 'fixture' { It 'case <Label>' -ForEach $cases {} }
-'@
-        $duplicateFixture = Test-ForEachExpandedNameUniqueness -SourceText $duplicateFixtureSource -VariableValues @{
-            cases = @(@{ Label = 'same'; CaseId = 1 }, @{ Label = 'same'; CaseId = 2 })
-        }
-        $duplicateFixture.IsValid | Should -BeFalse
-        ($duplicateFixture.Errors -join "`n") | Should -Match 'duplicate expanded It name'
-
-        $expressionFixtureSource = @'
-Describe 'fixture' { It 'case <Label>' -ForEach @(@{ Label = 'one' }) {} }
-'@
-        $expressionFixture = Test-ForEachExpandedNameUniqueness -SourceText $expressionFixtureSource
-        $expressionFixture.IsValid | Should -BeFalse
-        ($expressionFixture.Errors -join "`n") | Should -Match 'simple variable reference'
+    It 'rejects invalid -ForEach fixture <Fixture> #<CaseId>' -ForEach $forEachExpandedNameFixtureCases {
+        $IsValid | Should -BeFalse
+        ($Errors -join "`n") | Should -Match $ExpectedErrorPattern
+        $CheckedCommandCount | Should -Be 1
     }
 
     It 'validates the repository' {
