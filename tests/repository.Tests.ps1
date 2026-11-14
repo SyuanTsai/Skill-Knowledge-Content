@@ -48,6 +48,58 @@ $hostNeutralFiles = @(
     @{ Path = 'RELEASING.md'; Required = '(?is)Windows,\s+Linux,\s+or\s+macOS\s+hosts.*windows-latest.*ubuntu-latest.*macos-latest' }
 )
 
+$authorizationAndPrivacyCases = @(
+    @{
+        Name = 'user-provided or authorized-session content only'
+        Required = '(?is)\bWork\s+only\s+with\s+content\s+the\s+user\s+provides\s+or\s+can\s+access\s+through\s+an\s+authorized\s+session\b'
+        Positive = 'Work only with content the user provides or can access through an authorized session.'
+        Counterexample = 'Work with content the user provides or can access through a session.'
+    },
+    @{
+        Name = 'no bypass of provider access and content protections'
+        Required = '(?is)\bDo\s+not\s+bypass\s+authentication,\s+paywalls,\s+DRM,\s+playback\s+restrictions,\s+document\s+protections,\s+download\s+controls,\s+or\s+provider\s+safeguards\b'
+        Positive = 'Do not bypass authentication, paywalls, DRM, playback restrictions, document protections, download controls, or provider safeguards.'
+        Counterexample = 'Bypass authentication, paywalls, DRM, playback restrictions, document protections, download controls, or provider safeguards when necessary.'
+    },
+    @{
+        Name = 'approval before private material reaches an external service'
+        Required = '(?is)\bObtain\s+approval\s+before\s+sending\s+private\s+material\s+to\s+an\s+external\s+transcription,\s+OCR,\s+vision,\s+storage,\s+or\s+knowledge\s+service\b'
+        Positive = 'Obtain approval before sending private material to an external transcription, OCR, vision, storage, or knowledge service.'
+        Counterexample = 'Send private material to an external transcription, OCR, vision, storage, or knowledge service.'
+    },
+    @{
+        Name = 'no requesting or retaining session secrets'
+        Required = '(?is)\bNever\s+request,\s+inspect,\s+extract,\s+or\s+store\s+passwords,\s+cookies,\s+tokens,\s+browser\s+storage,\s+or\s+session\s+data\b'
+        Positive = 'Never request, inspect, extract, or store passwords, cookies, tokens, browser storage, or session data.'
+        Counterexample = 'Request, inspect, extract, or store passwords, cookies, tokens, browser storage, or session data.'
+    }
+)
+
+$readmeThreePlatformCiPattern = '(?is)Canonical\s+repository\s+validation\s+runs\s+on\s+GitHub\s+Actions\s+as\s+three\s+parallel\s+matrix\s+legs,\s*`windows-latest`\s*\(x64\),\s*`ubuntu-latest`\s*\(x64\),\s*and\s*`macos-latest`\s*\(arm64\),\s*then\s+aggregates\s+all\s+three\s+receipts\s+on\s+Ubuntu\s+and\s+runs\s+the\s+required\s+status\s+mirrors\s+on\s+Ubuntu\..*?These\s+legs\s+validate\s+the\s+repository\s+contract\s+and\s+regression\s+suite\s+on\s+each\s+platform;\s*they\s+are\s+not\s+end-to-end\s+course-capture\s+acceptance\s+runs\.'
+
+$errorHandlingDuplicationCases = @(
+    @{
+        Name = 'MFA or CAPTCHA sign-in handling'
+        Prohibited = '(?is)\bAsk\s+the\s+user\s+to\s+sign\s+in\s+or\s+complete\s+MFA\s+or\s+CAPTCHA\b'
+        Counterexample = 'Ask the user to sign in or complete MFA or CAPTCHA when required.'
+    },
+    @{
+        Name = 'substitution after all authorized routes fail'
+        Prohibited = '(?is)\bIf\s+all\s+authorized\s+(?:access\s+)?routes?\s+fail,?\s*(?:do\s+not|never)\s+(?:replace|substitute)\b.*?\b(?:public|inferred)\b.*?\bcontent\b'
+        Counterexample = 'If all authorized access routes fail, do not replace the evidence with public or inferred content.'
+    },
+    @{
+        Name = 'routes that bypass provider protections'
+        Prohibited = '(?is)\bIf\b.{0,100}\b(?:route|action|method)\b.{0,100}\b(?:would|could)\s+bypass\b.{0,250}\b(?:authentication|paywalls?|DRM|protections?|safeguards?)\b'
+        Counterexample = 'If a route would bypass authentication, paywalls, DRM, playback restrictions, document protections, download controls, or provider safeguards, stop.'
+    },
+    @{
+        Name = 'approval before external private-data transfer'
+        Prohibited = '(?is)\b(?:Obtain|Get|Ask\s+for)\s+(?:the\s+user''s\s+)?approval\s+before\s+sending\s+private\b.*?\bexternal\b'
+        Counterexample = 'Obtain approval before sending private material to an external service.'
+    }
+)
+
 BeforeAll {
     $script:repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
@@ -204,6 +256,26 @@ BeforeAll {
         $regex = '^' + [regex]::Escape($normalizedPattern).Replace('\*\*', '.*').Replace('\*', '[^/]*') + '$'
         return [regex]::IsMatch($normalizedPath, $regex, [Text.RegularExpressions.RegexOptions]::CultureInvariant)
     }
+
+    function Split-TestMarkdownLevel2Sections {
+        param([Parameter(Mandatory)][string] $Content)
+
+        $headings = [regex]::Matches(
+            $Content,
+            '(?m)^## (?<heading>[^\r\n]+)\r?$',
+            [Text.RegularExpressions.RegexOptions]::CultureInvariant
+        )
+        $sections = [Collections.Generic.List[object]]::new()
+        for ($index = 0; $index -lt $headings.Count; $index++) {
+            $bodyStart = $headings[$index].Index + $headings[$index].Length
+            $bodyEnd = if ($index + 1 -lt $headings.Count) { $headings[$index + 1].Index } else { $Content.Length }
+            $sections.Add([pscustomobject]@{
+                    Heading = [string]$headings[$index].Groups['heading'].Value
+                    Body = $Content.Substring($bodyStart, $bodyEnd - $bodyStart)
+                })
+        }
+        return @($sections)
+    }
 }
 
 Describe 'Knowledge & Content repository contract' {
@@ -332,5 +404,69 @@ Describe 'Capture Private Course Knowledge host-neutral contract' {
         @{ Field = 'default_prompt'; Value = 'Run this Skill on a Windows host' }
     ) {
         $Value | Should -Match '(?i)(?:\(\s*Windows\s*\)|\bWindows[- ]only\b|\bon\s+Windows\b|\bWindows\s+host\b)'
+    }
+}
+
+Describe 'Capture Private Course Knowledge authorization and privacy contract' {
+    It 'preserves <Name>' -ForEach $authorizationAndPrivacyCases {
+        $content = Get-Content -LiteralPath (Join-Path $script:repoRoot 'skills/capture-private-course-knowledge/SKILL.md') -Raw -Encoding utf8
+        $content | Should -Match $Required
+    }
+
+    It 'rejects a counterexample without the required negative or approval condition for <Name>' -ForEach $authorizationAndPrivacyCases {
+        $Positive | Should -Match $Required
+        $Counterexample | Should -Not -Match $Required
+    }
+}
+
+Describe 'README three-platform CI contract' {
+    It 'declares the exact runner architecture legs, Ubuntu aggregation and mirrors, and non-E2E boundary' {
+        $content = Get-Content -LiteralPath (Join-Path $script:repoRoot 'README.md') -Raw -Encoding utf8
+        $content | Should -Match $readmeThreePlatformCiPattern
+    }
+
+    It 'rejects a CI declaration that omits one platform leg' {
+        $completeDeclaration = 'Canonical repository validation runs on GitHub Actions as three parallel matrix legs, `windows-latest` (x64), `ubuntu-latest` (x64), and `macos-latest` (arm64), then aggregates all three receipts on Ubuntu and runs the required status mirrors on Ubuntu. These legs validate the repository contract and regression suite on each platform; they are not end-to-end course-capture acceptance runs.'
+        $missingMacOsLeg = 'Canonical repository validation runs on GitHub Actions as three parallel matrix legs, `windows-latest` (x64) and `ubuntu-latest` (x64), then aggregates all three receipts on Ubuntu and runs the required status mirrors on Ubuntu. These legs validate the repository contract and regression suite on each platform; they are not end-to-end course-capture acceptance runs.'
+        $completeDeclaration | Should -Match $readmeThreePlatformCiPattern
+        $missingMacOsLeg | Should -Not -Match $readmeThreePlatformCiPattern
+    }
+}
+
+Describe 'Capture Private Course Knowledge concise Skill contract' {
+    BeforeAll {
+        $script:captureSkillContent = Get-Content -LiteralPath (Join-Path $script:repoRoot 'skills/capture-private-course-knowledge/SKILL.md') -Raw -Encoding utf8
+        $script:captureSkillSections = @(Split-TestMarkdownLevel2Sections -Content $script:captureSkillContent)
+        $script:expectedWorkflowExamplePattern = '(?is)(?:\bExpected\s+workflow\b[^\r\n]*\r?\n\s*```|```[^\r\n]*\r?\n(?:(?!```).)*\bExpected\s+workflow\b(?:(?!```).)*```)'
+    }
+
+    It 'keeps every Example section free of Expected workflow fenced blocks' {
+        $exampleSections = @($script:captureSkillSections | Where-Object { $_.Heading -match '(?i)\bExamples?\b' })
+        $exampleSections.Count | Should -BeGreaterThan 0
+        foreach ($section in $exampleSections) {
+            $section.Body | Should -Not -Match $script:expectedWorkflowExamplePattern -Because "the '$($section.Heading)' section must demonstrate output or a decision boundary instead of restating workflow steps"
+        }
+    }
+
+    It 'detects an Expected workflow fenced-block counterexample' {
+        $counterexample = @(
+            'Expected workflow:',
+            '```text',
+            '1. Inventory the course.',
+            '2. Extract the evidence.',
+            '3. Produce the result.',
+            '```'
+        ) -join "`n"
+        $counterexample | Should -Match $script:expectedWorkflowExamplePattern
+    }
+
+    It 'does not repeat <Name> in Error Handling' -ForEach $errorHandlingDuplicationCases {
+        $errorHandlingSections = @($script:captureSkillSections | Where-Object { $_.Heading -ceq 'Error Handling' })
+        $errorHandlingSections.Count | Should -Be 1
+        $errorHandlingSections[0].Body | Should -Not -Match $Prohibited
+    }
+
+    It 'detects the Error Handling duplication counterexample for <Name>' -ForEach $errorHandlingDuplicationCases {
+        $Counterexample | Should -Match $Prohibited
     }
 }
