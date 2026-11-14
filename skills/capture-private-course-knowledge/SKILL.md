@@ -97,6 +97,16 @@ claim: The demonstrated configuration requires the preceding initialization step
 confidence: directly observed
 ```
 
+Example final inventory and coverage summary:
+
+```text
+Inventory: 8 lessons; 6 videos, 2 PDFs, 1 code archive
+Coverage: videos 05:42:10 / 06:03:25; PDFs 74 / 81 pages; code 1 / 1 archive
+Status: 6 complete, 1 partial, 1 inaccessible
+Gaps: lesson-7-video-1 00:18:20-00:39:35 (audio unavailable); handbook-v2 pages 42-48 (access restricted)
+Artifacts: index.md; manifest.json; lessons/; events/; materials/
+```
+
 ## Answer future questions from the notes
 
 1. Search the manifest, material records, lesson notes, events, code, and evidence.
