@@ -172,6 +172,7 @@ BeforeAll {
     function Read-TestOpenAiInterface {
         param([Parameter(Mandatory)][string] $LiteralPath)
 
+        $allowedFields = @('display_name', 'short_description', 'default_prompt', 'icon_small', 'icon_large', 'brand_color')
         $fields = [ordered]@{}
         $inInterface = $false
         $lineNumber = 0
@@ -179,9 +180,12 @@ BeforeAll {
             $lineNumber++
             if ($rawLine -match '^interface:\s*(?:#.*)?$') { $inInterface = $true; continue }
             if (-not $inInterface -or $rawLine -match '^\s*(?:#.*)?$') { continue }
-            if ($rawLine -notmatch '^\s{2}(?<key>display_name|short_description|default_prompt):\s*(?<value>.+?)\s*$') {
+            if ($rawLine -notmatch '^\s{2}(?<key>[a-z_]+):\s*(?<value>.+?)\s*$') {
                 if ($rawLine -notmatch '^\s') { break }
                 throw "Unsupported OpenAI interface metadata at line $lineNumber."
+            }
+            if ([string]$Matches.key -cnotin $allowedFields -or $fields.Contains([string]$Matches.key)) {
+                throw "Unsupported or duplicate OpenAI interface metadata at line $lineNumber."
             }
             try { $fields[[string]$Matches.key] = [string](ConvertFrom-Json -InputObject ([string]$Matches.value) -ErrorAction Stop) }
             catch { throw "OpenAI interface metadata at line $lineNumber must use a quoted scalar." }
@@ -288,6 +292,37 @@ Describe 'Capture Private Course Knowledge host-neutral contract' {
         $metadata.short_description | Should -Not -Match $legacyMetadataRestriction
         $metadata.default_prompt | Should -Not -Match $legacyMetadataRestriction
         $metadata.default_prompt | Should -Match '\$capture-private-course-knowledge'
+    }
+
+    It 'accepts all supported optional OpenAI interface fields' {
+        $fixturePath = Join-Path $TestDrive 'openai-interface-optionals.yaml'
+        @(
+            'interface:',
+            '  display_name: "Fixture Skill"',
+            '  short_description: "Fixture metadata with optional fields"',
+            '  default_prompt: "Use $fixture-skill"',
+            '  icon_small: "./assets/icon-small.svg"',
+            '  icon_large: "./assets/icon-large.svg"',
+            '  brand_color: "#123456"'
+        ) | Set-Content -LiteralPath $fixturePath -Encoding utf8
+
+        $metadata = Read-TestOpenAiInterface -LiteralPath $fixturePath
+        $metadata.icon_small | Should -BeExactly './assets/icon-small.svg'
+        $metadata.icon_large | Should -BeExactly './assets/icon-large.svg'
+        $metadata.brand_color | Should -BeExactly '#123456'
+    }
+
+    It 'rejects unknown OpenAI interface fields' {
+        $fixturePath = Join-Path $TestDrive 'openai-interface-unknown-field.yaml'
+        @(
+            'interface:',
+            '  display_name: "Fixture Skill"',
+            '  short_description: "Fixture metadata with unknown field"',
+            '  default_prompt: "Use $fixture-skill"',
+            '  unknown_field: "must be rejected"'
+        ) | Set-Content -LiteralPath $fixturePath -Encoding utf8
+
+        { Read-TestOpenAiInterface -LiteralPath $fixturePath } | Should -Throw '*Unsupported or duplicate OpenAI interface metadata*'
     }
 
     It 'detects legacy Windows restrictions in OpenAI <Field>' -ForEach @(
