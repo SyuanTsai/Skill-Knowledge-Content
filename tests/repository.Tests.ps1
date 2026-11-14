@@ -84,16 +84,64 @@ $forbiddenPolicyCases = @(
     }
 )
 $forbiddenCoverageCases = @(
-    @{ ComparedCount = $forbiddenPolicyCases.Count; ExpectedCount = $forbiddenText.Count }
+    @{ ComparedCount = $forbiddenPolicyCases.Count; ExpectedCount = $forbiddenText.Count; CaseId = 1 }
 )
 $reuseAnnotationCases = @(
-    @{ ReuseAnnotationText = $reuseSkillAnnotationText }
+    @{ ReuseAnnotationText = $reuseSkillAnnotationText; CaseId = 1 }
 )
 $requiredCaseSensitivityCases = @(
-    @{ RequiredText = $requiredPolicyText[0].Text }
+    @{ RequiredText = $requiredPolicyText[0].Text; CaseId = 1 }
 )
 $forbiddenCaseSensitivityCases = @(
-    @{ ForbiddenText = $forbiddenText[16] }
+    @{ ForbiddenText = $forbiddenText[16]; CaseId = 1 }
+)
+
+for ($index = 0; $index -lt $requiredPolicyText.Count; $index++) {
+    $requiredPolicyText[$index].CaseId = $index + 1
+}
+$forEachExpandedNameCases = @(
+    @{
+        Name = 'reuseAnnotationCases'
+        ExpandedNames = @($reuseAnnotationCases | ForEach-Object {
+                "covers every Skill manifest with the exact REUSE annotation #$($_.CaseId)"
+            })
+    }
+    @{
+        Name = 'requiredPolicyText'
+        ExpandedNames = @($requiredPolicyText | ForEach-Object {
+                "preserves the required literal policy text in $($_.Path) #$($_.CaseId)"
+            })
+    }
+    @{
+        Name = 'forbiddenPolicyCases'
+        ExpandedNames = @($forbiddenPolicyCases | ForEach-Object {
+                "keeps forbidden policy text case $($_.CaseIndex) out of its policy files"
+            })
+    }
+    @{
+        Name = 'forbiddenCoverageCases'
+        ExpandedNames = @($forbiddenCoverageCases | ForEach-Object {
+                "compares exactly every forbidden-text list entry #$($_.CaseId)"
+            })
+    }
+    @{
+        Name = 'requiredCaseSensitivityCases'
+        ExpandedNames = @($requiredCaseSensitivityCases | ForEach-Object {
+                "treats a one-letter case change as missing required text #$($_.CaseId)"
+            })
+    }
+    @{
+        Name = 'forbiddenCaseSensitivityCases'
+        ExpandedNames = @($forbiddenCaseSensitivityCases | ForEach-Object {
+                "detects a lowercase forbidden-text insertion #$($_.CaseId)"
+            })
+    }
+    @{
+        Name = 'reuseAnnotationCases (missing line)'
+        ExpandedNames = @($reuseAnnotationCases | ForEach-Object {
+                "treats a REUSE annotation with one missing line as missing #$($_.CaseId)"
+            })
+    }
 )
 
 BeforeAll {
@@ -148,6 +196,13 @@ BeforeAll {
 }
 
 Describe 'Knowledge & Content repository contract' {
+    It 'keeps every -ForEach expanded test name unique' {
+        foreach ($caseSet in $forEachExpandedNameCases) {
+            $expandedNames = @($caseSet.ExpandedNames)
+            @($expandedNames | Sort-Object -Unique).Count | Should -Be $expandedNames.Count
+        }
+    }
+
     It 'validates the repository' {
         { & (Join-Path $script:repoRoot 'scripts/Test-Repository.ps1') -ReadOnlySnapshot } | Should -Not -Throw
     }
@@ -174,14 +229,14 @@ Describe 'Knowledge & Content repository contract' {
         }
     }
 
-    It 'covers every Skill manifest with the exact REUSE annotation' -ForEach $reuseAnnotationCases {
+    It 'covers every Skill manifest with the exact REUSE annotation #<CaseId>' -ForEach $reuseAnnotationCases {
         $reuseContent = Get-Content -LiteralPath (Join-Path $script:repoRoot 'REUSE.toml') -Raw -Encoding utf8
         (Test-RequiredPolicyText -Content $reuseContent -RequiredText $ReuseAnnotationText) | Should -BeTrue
     }
 }
 
 Describe 'Capture Private Course Knowledge literal policy contract' {
-    It 'preserves the required literal policy text in <Path>' -ForEach $requiredPolicyText {
+    It 'preserves the required literal policy text in <Path> #<CaseId>' -ForEach $requiredPolicyText {
         $content = Get-Content -LiteralPath (Join-Path $script:repoRoot $Path) -Raw -Encoding utf8
         (Test-RequiredPolicyText -Content $content -RequiredText $Text) | Should -BeTrue
     }
@@ -197,21 +252,21 @@ Describe 'Capture Private Course Knowledge literal policy contract' {
         }
     }
 
-    It 'compares exactly every forbidden-text list entry' -ForEach $forbiddenCoverageCases {
+    It 'compares exactly every forbidden-text list entry #<CaseId>' -ForEach $forbiddenCoverageCases {
         $ComparedCount | Should -BeGreaterThan 0
         $ComparedCount | Should -Be $ExpectedCount
     }
 
-    It 'treats a one-letter case change as missing required text' -ForEach $requiredCaseSensitivityCases {
+    It 'treats a one-letter case change as missing required text #<CaseId>' -ForEach $requiredCaseSensitivityCases {
         $changedCase = 'w' + $RequiredText.Substring(1)
         (Test-RequiredPolicyText -Content $changedCase -RequiredText $RequiredText) | Should -BeFalse
     }
 
-    It 'detects a lowercase forbidden-text insertion' -ForEach $forbiddenCaseSensitivityCases {
+    It 'detects a lowercase forbidden-text insertion #<CaseId>' -ForEach $forbiddenCaseSensitivityCases {
         (Test-ForbiddenPolicyText -Content "prefix $($ForbiddenText.ToLowerInvariant()) suffix" -ForbiddenText $ForbiddenText) | Should -BeTrue
     }
 
-    It 'treats a REUSE annotation with one missing line as missing' -ForEach $reuseAnnotationCases {
+    It 'treats a REUSE annotation with one missing line as missing #<CaseId>' -ForEach $reuseAnnotationCases {
         $missingLine = $ReuseAnnotationText.Replace("`nprecedence = `"aggregate`"", '')
         (Test-RequiredPolicyText -Content $missingLine -RequiredText $ReuseAnnotationText) | Should -BeFalse
     }
