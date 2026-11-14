@@ -80,23 +80,23 @@ $readmeThreePlatformCiPattern = '(?is)Canonical\s+repository\s+validation\s+runs
 $errorHandlingDuplicationCases = @(
     @{
         Name = 'MFA or CAPTCHA sign-in handling'
-        Prohibited = '(?is)\bAsk\s+the\s+user\s+to\s+sign\s+in\s+or\s+complete\s+MFA\s+or\s+CAPTCHA\b'
-        Counterexample = 'Ask the user to sign in or complete MFA or CAPTCHA when required.'
+        Prohibited = '(?is)\b(?:Ask\s+the\s+user\s+to\s+sign\s+in\s+or\s+complete\s+MFA\s+or\s+CAPTCHA|If\s+authentication,\s+MFA,\s+or\s+CAPTCHA\s+blocks?\s+access)\b'
+        Counterexample = 'If authentication, MFA, or CAPTCHA blocks access, stop and request only the minimum user action needed to restore the authorized session.'
     },
     @{
         Name = 'substitution after all authorized routes fail'
-        Prohibited = '(?is)\bIf\s+all\s+authorized\s+(?:access\s+)?routes?\s+fail,?\s*(?:do\s+not|never)\s+(?:replace|substitute)\b.*?\b(?:public|inferred)\b.*?\bcontent\b'
-        Counterexample = 'If all authorized access routes fail, do not replace the evidence with public or inferred content.'
+        Prohibited = '(?is)\bIf\s+(?:all|every)\s+authorized\s+(?:access\s+)?routes?(?:\s+to\s+[^,\r\n]+)?\s+fails?\b.{0,300}\b(?:(?:do\s+not|never)\b.{0,100}\b(?:replace|substitut\w*)|instead\s+of\s+substitut\w*)\b.{0,100}\b(?:public|inferred)\b.{0,100}\bcontent\b'
+        Counterexample = 'If every authorized route to a required material fails, stop and report the exact material and access gap instead of substituting public or inferred content.'
     },
     @{
         Name = 'routes that bypass provider protections'
         Prohibited = '(?is)\bIf\b.{0,100}\b(?:route|action|method)\b.{0,100}\b(?:would|could)\s+bypass\b.{0,250}\b(?:authentication|paywalls?|DRM|protections?|safeguards?)\b'
-        Counterexample = 'If a route would bypass authentication, paywalls, DRM, playback restrictions, document protections, download controls, or provider safeguards, stop.'
+        Counterexample = 'If the only remaining route would bypass protections, stop and explain the blocker.'
     },
     @{
         Name = 'approval before external private-data transfer'
-        Prohibited = '(?is)\b(?:Obtain|Get|Ask\s+for)\s+(?:the\s+user''s\s+)?approval\s+before\s+sending\s+private\b.*?\bexternal\b'
-        Counterexample = 'Obtain approval before sending private material to an external service.'
+        Prohibited = '(?is)\b(?:(?:Obtain|Get|Ask\s+for)\s+(?:the\s+user''s\s+)?(?:explicit\s+)?approval\s+before\s+sending\s+private\b.{0,250}\bexternal\b|If\s+private\s+material\s+would\s+leave\b.{0,250}\bexternal\s+service,?\s+(?:obtain|get|ask\s+for)\s+(?:the\s+user''s\s+)?(?:explicit\s+)?approval\s+before\s+sending\s+it\b)'
+        Counterexample = 'If private material would leave the current environment through transcription, OCR, vision, storage, or another external service, obtain explicit approval before sending it.'
     }
 )
 
@@ -260,17 +260,64 @@ BeforeAll {
     function Split-TestMarkdownLevel2Sections {
         param([Parameter(Mandatory)][string] $Content)
 
-        $headings = [regex]::Matches(
+        $headings = [Collections.Generic.List[object]]::new()
+        $fenceCharacter = $null
+        $fenceLength = 0
+        $lines = [regex]::Matches(
             $Content,
-            '(?m)^## (?<heading>[^\r\n]+)\r?$',
+            '(?m)^(?<text>[^\r\n]*)(?<ending>\r?\n|$)',
             [Text.RegularExpressions.RegexOptions]::CultureInvariant
         )
+        foreach ($lineMatch in $lines) {
+            $line = [string]$lineMatch.Groups['text'].Value
+            $fenceMatch = [regex]::Match(
+                $line,
+                '^ {0,3}(?<fence>`{3,}|~{3,})(?<remainder>.*)$',
+                [Text.RegularExpressions.RegexOptions]::CultureInvariant
+            )
+
+            if ($null -ne $fenceCharacter) {
+                if ($fenceMatch.Success -and
+                    $fenceMatch.Groups['remainder'].Value -match '^[ \t]*$' -and
+                    $fenceMatch.Groups['fence'].Value.StartsWith($fenceCharacter, [StringComparison]::Ordinal) -and
+                    $fenceMatch.Groups['fence'].Value.Length -ge $fenceLength) {
+                    $fenceCharacter = $null
+                    $fenceLength = 0
+                }
+                continue
+            }
+
+            if ($fenceMatch.Success) {
+                $fence = [string]$fenceMatch.Groups['fence'].Value
+                $remainder = [string]$fenceMatch.Groups['remainder'].Value
+                if (-not ($fence[0] -ceq [char]'`' -and $remainder.Contains('`'))) {
+                    $fenceCharacter = $fence.Substring(0, 1)
+                    $fenceLength = $fence.Length
+                    continue
+                }
+            }
+
+            $headingMatch = [regex]::Match(
+                $line,
+                '^## (?<heading>[^\r\n]+)$',
+                [Text.RegularExpressions.RegexOptions]::CultureInvariant
+            )
+            if ($headingMatch.Success) {
+                $carriageReturnLength = if ($lineMatch.Groups['ending'].Value.StartsWith("`r", [StringComparison]::Ordinal)) { 1 } else { 0 }
+                $headings.Add([pscustomobject]@{
+                        Index = $lineMatch.Index
+                        Length = $line.Length + $carriageReturnLength
+                        Heading = [string]$headingMatch.Groups['heading'].Value
+                    })
+            }
+        }
+
         $sections = [Collections.Generic.List[object]]::new()
         for ($index = 0; $index -lt $headings.Count; $index++) {
             $bodyStart = $headings[$index].Index + $headings[$index].Length
             $bodyEnd = if ($index + 1 -lt $headings.Count) { $headings[$index + 1].Index } else { $Content.Length }
             $sections.Add([pscustomobject]@{
-                    Heading = [string]$headings[$index].Groups['heading'].Value
+                    Heading = [string]$headings[$index].Heading
                     Body = $Content.Substring($bodyStart, $bodyEnd - $bodyStart)
                 })
         }
@@ -458,6 +505,26 @@ Describe 'Capture Private Course Knowledge concise Skill contract' {
             '```'
         ) -join "`n"
         $counterexample | Should -Match $script:expectedWorkflowExamplePattern
+    }
+
+    It 'ignores level-2 headings inside <Name> fences while retaining the real Error Handling section' -ForEach @(
+        @{ Name = 'backtick'; Opening = '````markdown'; ShortFence = '```'; Closing = '`````' },
+        @{ Name = 'tilde'; Opening = '~~~~markdown'; ShortFence = '~~~'; Closing = '~~~~~' }
+    ) {
+        $content = @(
+            '## Example',
+            $Opening,
+            '## Error Handling',
+            $ShortFence,
+            '## Still Fenced',
+            $Closing,
+            '## Error Handling',
+            'Real section body.'
+        ) -join "`n"
+
+        $sections = @(Split-TestMarkdownLevel2Sections -Content $content)
+        @($sections.Heading) | Should -Be @('Example', 'Error Handling')
+        @($sections | Where-Object { $_.Heading -ceq 'Error Handling' }).Count | Should -Be 1
     }
 
     It 'does not repeat <Name> in Error Handling' -ForEach $errorHandlingDuplicationCases {
