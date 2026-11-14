@@ -17,6 +17,7 @@ $requiredPolicyText = @(
     @{ Path = 'skills/capture-private-course-knowledge/agents/openai.yaml'; Text = 'display_name: "Capture Private Course Knowledge"' },
     @{ Path = 'skills/capture-private-course-knowledge/agents/openai.yaml'; Text = 'short_description: "Unify course videos, PDFs, code, recall, and exports"' },
     @{ Path = 'skills/capture-private-course-knowledge/agents/openai.yaml'; Text = 'default_prompt: "Use $capture-private-course-knowledge to capture this authorized course across videos, PDFs, slides, code, and attachments as evidence-linked notes, then create the requested NotebookLM sources or website article. Preserve cross-platform course commands as source evidence."' },
+    @{ Path = 'README.md'; Text = "The Skill instructions are host-neutral: local Agent work runs on the user's current Windows, Linux, or macOS host. When a required local tool is unavailable, the Skill reports the gap and marks the affected work partial or draft instead of switching to another host, VM, WSL, or container. Authorized SaaS, browser, and API services remain in scope when the user permits them; cross-platform course code and commands remain source evidence." },
     @{ Path = 'README.md'; Text = 'Canonical repository validation runs on GitHub Actions as three parallel matrix legs, `windows-latest` (x64), `ubuntu-latest` (x64), and `macos-latest` (arm64), then aggregates all three receipts on Ubuntu and runs the required status mirrors on Ubuntu. These legs validate the repository contract and regression suite on each platform; they are not end-to-end course-capture acceptance runs.' },
     @{ Path = 'RELEASING.md'; Text = 'Local Agent development may run on Windows, Linux, or macOS hosts. Canonical CI runs parallel `windows-latest` (x64), `ubuntu-latest` (x64), and `macos-latest` (arm64) validation legs, aggregates all three receipts on Ubuntu, and hosts the three required status mirrors on Ubuntu. A release requires all three legs and the aggregate to pass.' }
 )
@@ -73,6 +74,27 @@ precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 SyuanTsai"
 SPDX-License-Identifier = "Apache-2.0"
 '@
+$forbiddenPolicyCases = @(
+    for ($index = 0; $index -lt $forbiddenText.Count; $index++) {
+        @{
+            CaseIndex = $index
+            ForbiddenText = $forbiddenText[$index]
+            Paths = @($forbiddenTextPaths[$forbiddenText[$index]])
+        }
+    }
+)
+$forbiddenCoverageCases = @(
+    @{ ComparedCount = $forbiddenPolicyCases.Count; ExpectedCount = $forbiddenText.Count }
+)
+$reuseAnnotationCases = @(
+    @{ ReuseAnnotationText = $reuseSkillAnnotationText }
+)
+$requiredCaseSensitivityCases = @(
+    @{ RequiredText = $requiredPolicyText[0].Text }
+)
+$forbiddenCaseSensitivityCases = @(
+    @{ ForbiddenText = $forbiddenText[16] }
+)
 
 BeforeAll {
     $script:repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -142,7 +164,7 @@ Describe 'Knowledge & Content repository contract' {
         $source.sourceId | Should -BeExactly 'knowledge-content'
     }
 
-    It 'keeps every Skill manifest free of inline SPDX comments and covered by the exact REUSE annotation' {
+    It 'keeps every Skill manifest free of inline SPDX comments' {
         $skillManifests = @(Get-ChildItem -LiteralPath (Join-Path $script:repoRoot 'skills') -Filter 'SKILL.md' -File -Recurse)
         $skillManifests.Count | Should -BeGreaterThan 0
         foreach ($manifest in $skillManifests) {
@@ -150,8 +172,11 @@ Describe 'Knowledge & Content repository contract' {
             $content.Contains('SPDX-FileCopyrightText', [StringComparison]::Ordinal) | Should -BeFalse
             $content.Contains('SPDX-License-Identifier', [StringComparison]::Ordinal) | Should -BeFalse
         }
+    }
+
+    It 'covers every Skill manifest with the exact REUSE annotation' -ForEach $reuseAnnotationCases {
         $reuseContent = Get-Content -LiteralPath (Join-Path $script:repoRoot 'REUSE.toml') -Raw -Encoding utf8
-        (Test-RequiredPolicyText -Content $reuseContent -RequiredText $reuseSkillAnnotationText) | Should -BeTrue
+        (Test-RequiredPolicyText -Content $reuseContent -RequiredText $ReuseAnnotationText) | Should -BeTrue
     }
 }
 
@@ -161,31 +186,34 @@ Describe 'Capture Private Course Knowledge literal policy contract' {
         (Test-RequiredPolicyText -Content $content -RequiredText $Text) | Should -BeTrue
     }
 
-    It 'keeps legacy and fixed forbidden text out of their policy files' {
-        foreach ($forbidden in $forbiddenText) {
-            foreach ($path in $forbiddenTextPaths[$forbidden]) {
-                $content = Get-Content -LiteralPath (Join-Path $script:repoRoot $path) -Raw -Encoding utf8
-                $normalizedContent = Normalize-TestPolicyText -Text $content
-                $normalizedForbidden = Normalize-TestPolicyText -Text $forbidden
-                $normalizedContent.Contains($normalizedForbidden, [StringComparison]::Ordinal) | Should -BeFalse
-                $normalizedContent.ToLowerInvariant().Contains($normalizedForbidden.ToLowerInvariant(), [StringComparison]::Ordinal) | Should -BeFalse
-            }
+    It 'keeps forbidden policy text case <CaseIndex> out of its policy files' -ForEach $forbiddenPolicyCases {
+        $Paths.Count | Should -BeGreaterThan 0
+        foreach ($path in $Paths) {
+            $content = Get-Content -LiteralPath (Join-Path $script:repoRoot $path) -Raw -Encoding utf8
+            $normalizedContent = Normalize-TestPolicyText -Text $content
+            $normalizedForbidden = Normalize-TestPolicyText -Text $ForbiddenText
+            $normalizedContent.Contains($normalizedForbidden, [StringComparison]::Ordinal) | Should -BeFalse
+            $normalizedContent.ToLowerInvariant().Contains($normalizedForbidden.ToLowerInvariant(), [StringComparison]::Ordinal) | Should -BeFalse
         }
     }
 
-    It 'treats a one-letter case change as missing required text' {
-        $required = $requiredPolicyText[0].Text
-        $changedCase = 'w' + $required.Substring(1)
-        (Test-RequiredPolicyText -Content $changedCase -RequiredText $required) | Should -BeFalse
+    It 'compares exactly every forbidden-text list entry' -ForEach $forbiddenCoverageCases {
+        $ComparedCount | Should -BeGreaterThan 0
+        $ComparedCount | Should -Be $ExpectedCount
     }
 
-    It 'detects a lowercase forbidden-text insertion' {
-        (Test-ForbiddenPolicyText -Content 'prefix windows-only suffix' -ForbiddenText 'Windows-only') | Should -BeTrue
+    It 'treats a one-letter case change as missing required text' -ForEach $requiredCaseSensitivityCases {
+        $changedCase = 'w' + $RequiredText.Substring(1)
+        (Test-RequiredPolicyText -Content $changedCase -RequiredText $RequiredText) | Should -BeFalse
     }
 
-    It 'treats a REUSE annotation with one missing line as missing' {
-        $missingLine = $reuseSkillAnnotationText.Replace("`nprecedence = `"aggregate`"", '')
-        (Test-RequiredPolicyText -Content $missingLine -RequiredText $reuseSkillAnnotationText) | Should -BeFalse
+    It 'detects a lowercase forbidden-text insertion' -ForEach $forbiddenCaseSensitivityCases {
+        (Test-ForbiddenPolicyText -Content "prefix $($ForbiddenText.ToLowerInvariant()) suffix" -ForbiddenText $ForbiddenText) | Should -BeTrue
+    }
+
+    It 'treats a REUSE annotation with one missing line as missing' -ForEach $reuseAnnotationCases {
+        $missingLine = $ReuseAnnotationText.Replace("`nprecedence = `"aggregate`"", '')
+        (Test-RequiredPolicyText -Content $missingLine -RequiredText $ReuseAnnotationText) | Should -BeFalse
     }
 }
 
