@@ -99,50 +99,164 @@ $forbiddenCaseSensitivityCases = @(
 for ($index = 0; $index -lt $requiredPolicyText.Count; $index++) {
     $requiredPolicyText[$index].CaseId = $index + 1
 }
-$forEachExpandedNameCases = @(
-    @{
-        Name = 'reuseAnnotationCases'
-        ExpandedNames = @($reuseAnnotationCases | ForEach-Object {
-                "covers every Skill manifest with the exact REUSE annotation #$($_.CaseId)"
-            })
+function Test-ForEachExpandedNameUniqueness {
+    [CmdletBinding(DefaultParameterSetName = 'File')]
+    param(
+        [Parameter(Mandatory, ParameterSetName = 'File')][string] $LiteralPath,
+        [Parameter(Mandatory, ParameterSetName = 'Source')][string] $SourceText,
+        [System.Collections.IDictionary] $VariableValues
+    )
+
+    $tokens = $null
+    $parseErrors = $null
+    if ($PSCmdlet.ParameterSetName -eq 'File') {
+        $syntaxTree = [System.Management.Automation.Language.Parser]::ParseFile(
+            $LiteralPath,
+            [ref] $tokens,
+            [ref] $parseErrors
+        )
     }
-    @{
-        Name = 'requiredPolicyText'
-        ExpandedNames = @($requiredPolicyText | ForEach-Object {
-                "preserves the required literal policy text in $($_.Path) #$($_.CaseId)"
-            })
+    else {
+        $syntaxTree = [System.Management.Automation.Language.Parser]::ParseInput(
+            $SourceText,
+            [ref] $tokens,
+            [ref] $parseErrors
+        )
     }
-    @{
-        Name = 'forbiddenPolicyCases'
-        ExpandedNames = @($forbiddenPolicyCases | ForEach-Object {
-                "keeps forbidden policy text case $($_.CaseIndex) out of its policy files"
-            })
+    $errors = [System.Collections.Generic.List[string]]::new()
+    foreach ($parseError in $parseErrors) {
+        $errors.Add("Line $($parseError.Extent.StartLineNumber): parser error: $($parseError.Message)")
     }
-    @{
-        Name = 'forbiddenCoverageCases'
-        ExpandedNames = @($forbiddenCoverageCases | ForEach-Object {
-                "compares exactly every forbidden-text list entry #$($_.CaseId)"
-            })
+
+    $commands = @($syntaxTree.FindAll({
+                param($node)
+                if ($node -isnot [System.Management.Automation.Language.CommandAst] -or
+                    $node.GetCommandName() -ine 'It') {
+                    return $false
+                }
+                return $null -ne ($node.CommandElements | Where-Object {
+                        $_ -is [System.Management.Automation.Language.CommandParameterAst] -and
+                        $_.ParameterName -iin @('ForEach', 'TestCases')
+                    } | Select-Object -First 1)
+            }, $true))
+    $expandedNameCount = 0
+
+    foreach ($command in $commands) {
+        $lineNumber = $command.Extent.StartLineNumber
+        $nameAst = $null
+        $dataAst = $null
+        $positionalArguments = [System.Collections.Generic.List[object]]::new()
+
+        for ($index = 1; $index -lt $command.CommandElements.Count; $index++) {
+            $element = $command.CommandElements[$index]
+            if ($element -isnot [System.Management.Automation.Language.CommandParameterAst]) {
+                $positionalArguments.Add($element)
+                continue
+            }
+
+            if ($element.ParameterName -iin @('Name', 'ForEach', 'TestCases')) {
+                $argument = $element.Argument
+                if ($null -eq $argument -and $index + 1 -lt $command.CommandElements.Count -and
+                    $command.CommandElements[$index + 1] -isnot [System.Management.Automation.Language.CommandParameterAst]) {
+                    $argument = $command.CommandElements[++$index]
+                }
+                if ($element.ParameterName -ieq 'Name') {
+                    $nameAst = $argument
+                }
+                else {
+                    $dataAst = $argument
+                }
+            }
+        }
+        if ($null -eq $nameAst -and $positionalArguments.Count -gt 0) {
+            $nameAst = $positionalArguments[0]
+        }
+
+        if ($nameAst -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+            $nameTemplate = $nameAst.Value
+        }
+        elseif ($nameAst -is [System.Management.Automation.Language.ExpandableStringExpressionAst] -and
+            $nameAst.NestedExpressions.Count -eq 0) {
+            $nameTemplate = $nameAst.Value
+        }
+        else {
+            $errors.Add("Line ${lineNumber}: It -ForEach name must be a literal string.")
+            continue
+        }
+
+        if ($dataAst -isnot [System.Management.Automation.Language.VariableExpressionAst]) {
+            $errors.Add("Line ${lineNumber}: It -ForEach data must be a simple variable reference.")
+            continue
+        }
+        $variableName = $dataAst.VariablePath.UserPath
+        try {
+            if ($null -ne $VariableValues -and $VariableValues.Contains($variableName)) {
+                $data = $VariableValues[$variableName]
+            }
+            elseif ($null -ne $VariableValues) {
+                throw "fixture variable '$variableName' was not supplied"
+            }
+            else {
+                $data = Get-Variable -Name $variableName -Scope Script -ValueOnly -ErrorAction Stop
+            }
+        }
+        catch {
+            $errors.Add("Line ${lineNumber}: cannot resolve -ForEach variable '$variableName': $($_.Exception.Message)")
+            continue
+        }
+
+        $expandedNames = [System.Collections.Generic.List[string]]::new()
+        $rowNumber = 0
+        foreach ($row in @($data)) {
+            $rowNumber++
+            $expandedName = $nameTemplate
+            $rowFailed = $false
+            foreach ($placeholder in [regex]::Matches($nameTemplate, '<(?<Field>[^<>]+)>')) {
+                $fieldName = $placeholder.Groups['Field'].Value
+                $fieldFound = $false
+                $fieldValue = $null
+                if ($row -is [System.Collections.IDictionary]) {
+                    foreach ($key in $row.Keys) {
+                        if ([string]::Equals([string] $key, $fieldName, [StringComparison]::OrdinalIgnoreCase)) {
+                            $fieldValue = $row[$key]
+                            $fieldFound = $true
+                            break
+                        }
+                    }
+                }
+                elseif ($null -ne $row) {
+                    $property = $row.PSObject.Properties | Where-Object Name -IEQ $fieldName | Select-Object -First 1
+                    if ($null -ne $property) {
+                        $fieldValue = $property.Value
+                        $fieldFound = $true
+                    }
+                }
+                if (-not $fieldFound) {
+                    $errors.Add("Line ${lineNumber}: row $rowNumber from '$variableName' has no field '$fieldName'.")
+                    $rowFailed = $true
+                    continue
+                }
+                $expandedName = $expandedName.Replace($placeholder.Value, [string] $fieldValue)
+            }
+            if (-not $rowFailed) {
+                $expandedNames.Add($expandedName)
+                $expandedNameCount++
+            }
+        }
+
+        $duplicates = @($expandedNames | Group-Object | Where-Object Count -gt 1)
+        foreach ($duplicate in $duplicates) {
+            $errors.Add("Line ${lineNumber}: duplicate expanded It name '$($duplicate.Name)' ($($duplicate.Count) occurrences).")
+        }
     }
-    @{
-        Name = 'requiredCaseSensitivityCases'
-        ExpandedNames = @($requiredCaseSensitivityCases | ForEach-Object {
-                "treats a one-letter case change as missing required text #$($_.CaseId)"
-            })
+
+    [pscustomobject]@{
+        IsValid = $errors.Count -eq 0
+        Errors = @($errors)
+        CheckedCommandCount = $commands.Count
+        ExpandedNameCount = $expandedNameCount
     }
-    @{
-        Name = 'forbiddenCaseSensitivityCases'
-        ExpandedNames = @($forbiddenCaseSensitivityCases | ForEach-Object {
-                "detects a lowercase forbidden-text insertion #$($_.CaseId)"
-            })
-    }
-    @{
-        Name = 'reuseAnnotationCases (missing line)'
-        ExpandedNames = @($reuseAnnotationCases | ForEach-Object {
-                "treats a REUSE annotation with one missing line as missing #$($_.CaseId)"
-            })
-    }
-)
+}
 
 BeforeAll {
     $script:repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -197,10 +311,25 @@ BeforeAll {
 
 Describe 'Knowledge & Content repository contract' {
     It 'keeps every -ForEach expanded test name unique' {
-        foreach ($caseSet in $forEachExpandedNameCases) {
-            $expandedNames = @($caseSet.ExpandedNames)
-            @($expandedNames | Sort-Object -Unique).Count | Should -Be $expandedNames.Count
+        $actual = Test-ForEachExpandedNameUniqueness -LiteralPath $PSCommandPath
+        $actual.IsValid | Should -BeTrue -Because ($actual.Errors -join [Environment]::NewLine)
+
+        $duplicateFixtureSource = @'
+$cases = @(@{ Label = 'same'; CaseId = 1 }, @{ Label = 'same'; CaseId = 2 })
+Describe 'fixture' { It 'case <Label>' -ForEach $cases {} }
+'@
+        $duplicateFixture = Test-ForEachExpandedNameUniqueness -SourceText $duplicateFixtureSource -VariableValues @{
+            cases = @(@{ Label = 'same'; CaseId = 1 }, @{ Label = 'same'; CaseId = 2 })
         }
+        $duplicateFixture.IsValid | Should -BeFalse
+        ($duplicateFixture.Errors -join "`n") | Should -Match 'duplicate expanded It name'
+
+        $expressionFixtureSource = @'
+Describe 'fixture' { It 'case <Label>' -ForEach @(@{ Label = 'one' }) {} }
+'@
+        $expressionFixture = Test-ForEachExpandedNameUniqueness -SourceText $expressionFixtureSource
+        $expressionFixture.IsValid | Should -BeFalse
+        ($expressionFixture.Errors -join "`n") | Should -Match 'simple variable reference'
     }
 
     It 'validates the repository' {
