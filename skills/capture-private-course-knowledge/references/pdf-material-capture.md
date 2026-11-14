@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 Use this reference for course handbooks, slide exports, worksheets, lab guides, reference sheets, scanned documents, and other PDF material. Preserve both searchable content and visual structure when layout conveys meaning.
 
-Run local extraction, rendering, and OCR with Windows-native tools. If a needed tool is unavailable, report the tooling gap and mark the work partial or draft; do not switch to Linux, macOS, WSL, or Linux containers. Authorized SaaS/browser/API services remain in scope when the user permits their use, and cross-platform commands printed in the PDF remain source evidence.
+Run local extraction, rendering, and OCR with tools available on the user's current host. If a needed tool is unavailable, report the tooling gap and mark the work partial or draft; do not switch to another host, VM, WSL, or container. Authorized SaaS/browser/API services remain in scope when the user permits their use, and cross-platform commands printed in the PDF remain source evidence.
 
 ## Inventory and classify the PDF
 

@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 Use this format for persistent notes and later question answering. Preserve stable identifiers and precise source anchors across every material type.
 
-Create and process local note files on Windows. Preserve course-supplied commands with their source platform as evidence; do not run them by switching the local host to Linux, macOS, WSL, or a Linux container. Authorized SaaS, browser, and API services remain available when the user permits them.
+Create and process local note files on the user's current host under the host boundary in `SKILL.md`. Preserve course-supplied commands with their source platform as evidence; do not run them by switching to another host, VM, WSL, or container. Authorized SaaS, browser, and API services remain available when the user permits them.
 
 ## Contents
 
