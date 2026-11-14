@@ -2,228 +2,104 @@
 # SPDX-License-Identifier: Apache-2.0
 $ErrorActionPreference = 'Stop'
 
-$hostNeutralPolicyCases = @(
-    @{
-        Path = 'skills/capture-private-course-knowledge/references/course-notes-format.md'
-        Required = '(?is)current\s+host.*source\s+platform\s+as\s+evidence.*do\s+not\s+run\s+them\s+by\s+switching\s+to\s+another\s+host,\s+VM,\s+WSL,\s+or\s+container'
-        Positive = 'current host; source platform as evidence; do not run them by switching to another host, VM, WSL, or container'
-        Negative = 'current host; source platform as evidence; run them by switching to another host, VM, WSL, or container'
-    },
-    @{
-        Path = 'skills/capture-private-course-knowledge/references/notebooklm-export.md'
-        Required = '(?is)current\s+host.*do\s+not\s+use\s+another\s+host,\s+VM,\s+WSL,\s+or\s+container.*source\s+evidence'
-        Positive = 'current host; do not use another host, VM, WSL, or container; source evidence'
-        Negative = 'current host; use another host, VM, WSL, or container; source evidence'
-    },
-    @{
-        Path = 'skills/capture-private-course-knowledge/references/pdf-material-capture.md'
-        Required = '(?is)current\s+host.*partial\s+or\s+draft.*do\s+not\s+switch\s+to\s+another\s+host,\s+VM,\s+WSL,\s+or\s+container.*source\s+evidence'
-        Positive = 'current host; partial or draft; do not switch to another host, VM, WSL, or container; source evidence'
-        Negative = 'current host; partial or draft; switch to another host, VM, WSL, or container; source evidence'
-    },
-    @{
-        Path = 'skills/capture-private-course-knowledge/references/syuantsai-github-article.md'
-        Required = '(?is)current\s+host.*cross-platform\s+course\s+code\s+and\s+commands\s+as\s+source\s+evidence.*instead\s+of\s+switching\s+to\s+another\s+host,\s+VM,\s+WSL,\s+or\s+container'
-        Positive = 'current host; cross-platform course code and commands as source evidence; instead of switching to another host, VM, WSL, or container'
-        Negative = 'current host; cross-platform course code and commands as source evidence; switching to another host, VM, WSL, or container'
-    },
-    @{
-        Path = 'skills/capture-private-course-knowledge/references/video-capture.md'
-        Required = '(?is)current\s+host.*instead\s+of\s+switching\s+to\s+another\s+host,\s+VM,\s+WSL,\s+or\s+container.*source\s+evidence'
-        Positive = 'current host; instead of switching to another host, VM, WSL, or container; source evidence'
-        Negative = 'current host; switching to another host, VM, WSL, or container; source evidence'
-    },
-    @{
-        Path = 'README.md'
-        Required = '(?is)current\s+Windows,\s+Linux,\s+or\s+macOS\s+host.*partial\s+or\s+draft.*instead\s+of\s+switching\s+to\s+another\s+host,\s+VM,\s+WSL,\s+or\s+container.*source\s+evidence'
-        Positive = 'current Windows, Linux, or macOS host; partial or draft; instead of switching to another host, VM, WSL, or container; source evidence'
-        Negative = 'current Windows, Linux, or macOS host; partial or draft; switching to another host, VM, WSL, or container; source evidence'
-    }
+# 改寫任何政策句時，必須同步更新本清單；本測試刻意逐字比對。
+$requiredPolicyText = @(
+    @{ Path = 'skills/capture-private-course-knowledge/SKILL.md'; Text = 'Work only with content the user provides or can access through an authorized session.' },
+    @{ Path = 'skills/capture-private-course-knowledge/SKILL.md'; Text = 'Never request, inspect, extract, or store passwords, cookies, tokens, browser storage, or session data.' },
+    @{ Path = 'skills/capture-private-course-knowledge/SKILL.md'; Text = 'Do not bypass authentication, paywalls, DRM, playback restrictions, document protections, download controls, or provider safeguards.' },
+    @{ Path = 'skills/capture-private-course-knowledge/SKILL.md'; Text = 'Obtain approval before sending private material to an external transcription, OCR, vision, storage, or knowledge service, especially when it may incur cost.' },
+    @{ Path = 'skills/capture-private-course-knowledge/SKILL.md'; Text = "Run local development, installation, execution, testing, and acceptance on the user's current Windows, Linux, or macOS host. If a required local tool is unavailable there, report the tooling gap and mark the affected work partial or draft; do not switch to another host, VM, WSL, or container as a fallback. Authorized SaaS, browser, and API services remain available for course capture when the user permits them. Preserve cross-platform code and commands found in course materials as source evidence; do not execute them as host setup, and their presence does not change the local host. Each reference applies this boundary to its own local tools." },
+    @{ Path = 'skills/capture-private-course-knowledge/references/course-notes-format.md'; Text = "Create and process local note files on the user's current host under the host boundary in ``SKILL.md``. Preserve course-supplied commands with their source platform as evidence; do not run them by switching to another host, VM, WSL, or container. Authorized SaaS, browser, and API services remain available when the user permits them." },
+    @{ Path = 'skills/capture-private-course-knowledge/references/notebooklm-export.md'; Text = "Generate local export files and run local preparation tools on the user's current host. Use authorized Google Drive, NotebookLM, browser, or API services as SaaS destinations; do not use another host, VM, WSL, or container as a local fallback. Retain platform-specific course commands in the export as source evidence rather than executing them as host setup." },
+    @{ Path = 'skills/capture-private-course-knowledge/references/pdf-material-capture.md'; Text = "Run local extraction, rendering, and OCR with tools available on the user's current host. If a needed tool is unavailable, report the tooling gap and mark the work partial or draft; do not switch to another host, VM, WSL, or container. Authorized SaaS/browser/API services remain in scope when the user permits their use, and cross-platform commands printed in the PDF remain source evidence." },
+    @{ Path = 'skills/capture-private-course-knowledge/references/syuantsai-github-article.md'; Text = "Keep local research, editing, validation, and site builds on the user's current host. Use the site's authorized SaaS/browser/API services as needed, and preserve cross-platform course code and commands as source evidence. Use the site's documented toolchain for that host; if it is unavailable, report the gap and keep the article draft instead of switching to another host, VM, WSL, or container." },
+    @{ Path = 'skills/capture-private-course-knowledge/references/video-capture.md'; Text = "Run local media inspection, transcription, and note preparation with tools available on the user's current host. Authorized course SaaS, browser playback, and API routes remain available; if a required local tool is unavailable, report the limitation or use an authorized service instead of switching to another host, VM, WSL, or container. Keep platform-specific code and commands shown in the course as source evidence." },
+    @{ Path = 'skills/capture-private-course-knowledge/agents/openai.yaml'; Text = 'display_name: "Capture Private Course Knowledge"' },
+    @{ Path = 'skills/capture-private-course-knowledge/agents/openai.yaml'; Text = 'short_description: "Unify course videos, PDFs, code, recall, and exports"' },
+    @{ Path = 'skills/capture-private-course-knowledge/agents/openai.yaml'; Text = 'default_prompt: "Use $capture-private-course-knowledge to capture this authorized course across videos, PDFs, slides, code, and attachments as evidence-linked notes, then create the requested NotebookLM sources or website article. Preserve cross-platform course commands as source evidence."' },
+    @{ Path = 'README.md'; Text = 'Canonical repository validation runs on GitHub Actions as three parallel matrix legs, `windows-latest` (x64), `ubuntu-latest` (x64), and `macos-latest` (arm64), then aggregates all three receipts on Ubuntu and runs the required status mirrors on Ubuntu. These legs validate the repository contract and regression suite on each platform; they are not end-to-end course-capture acceptance runs.' },
+    @{ Path = 'RELEASING.md'; Text = 'Local Agent development may run on Windows, Linux, or macOS hosts. Canonical CI runs parallel `windows-latest` (x64), `ubuntu-latest` (x64), and `macos-latest` (arm64) validation legs, aggregates all three receipts on Ubuntu, and hosts the three required status mirrors on Ubuntu. A release requires all three legs and the aggregate to pass.' }
 )
 
-$hostNeutralFiles = @(
-    @{ Path = 'skills/capture-private-course-knowledge/SKILL.md'; Required = '(?is)current\s+Windows,\s+Linux,\s+or\s+macOS\s+host' }
-) + $hostNeutralPolicyCases + @(
-    @{ Path = 'skills/capture-private-course-knowledge/agents/openai.yaml'; Required = '(?s)\$capture-private-course-knowledge' },
-    @{ Path = 'RELEASING.md'; Required = '(?is)Windows,\s+Linux,\s+or\s+macOS\s+hosts.*windows-latest.*ubuntu-latest.*macos-latest' }
+$forbiddenText = @(
+    'Use Windows as the only host for local development, installation, execution, testing, acceptance, and CI. Do not use Linux, macOS, WSL, or Linux containers as host fallbacks. Authorized SaaS, browser, and API services remain available for course capture. Preserve cross-platform code and commands found in course materials as source evidence; their presence does not change the local host requirement.',
+    'If authentication, MFA, or CAPTCHA blocks access, stop and request only the minimum user action needed to restore the authorized session.',
+    'If every authorized route to a required material fails, stop and report the exact material and access gap instead of substituting public or inferred content.',
+    'If the only remaining route would bypass protections, stop and explain the blocker.',
+    'If private material would leave the current environment through transcription, OCR, vision, storage, or another external service, obtain explicit approval before sending it.',
+    'Expected workflow:',
+    'Create and process local note files on Windows. Preserve course-supplied commands with their source platform as evidence; do not run them by switching the local host to Linux, macOS, WSL, or a Linux container. Authorized SaaS, browser, and API services remain available when the user permits them.',
+    'Generate local export files and run local preparation tools on Windows only. Use authorized Google Drive, NotebookLM, browser, or API services as SaaS destinations; do not use Linux, macOS, WSL, or Linux containers as local-host fallbacks. Retain platform-specific course commands in the export as source evidence rather than executing them as host setup.',
+    'Run local extraction, rendering, and OCR with Windows-native tools. If a needed tool is unavailable, report the tooling gap and mark the work partial or draft; do not switch to Linux, macOS, WSL, or Linux containers. Authorized SaaS/browser/API services remain in scope when the user permits their use, and cross-platform commands printed in the PDF remain source evidence.',
+    'Keep local research, editing, validation, and site builds on Windows. Use the site''s authorized SaaS/browser/API services as needed, and preserve cross-platform course code and commands as source evidence. Use the site''s documented native Windows toolchain; if it is unavailable, report the gap and keep the article draft instead of switching to Linux, macOS, WSL, or Linux containers.',
+    'Run local media inspection, transcription, and note preparation on Windows with Windows-native tools. Authorized course SaaS, browser playback, and API routes remain available; if a required local tool is unavailable, report the limitation or use an authorized service instead of switching to Linux, macOS, WSL, or Linux containers. Keep platform-specific code and commands shown in the course as source evidence.',
+    'Local Agent development, installation, execution, testing, and acceptance remain Windows-hosted. Canonical repository validation is the required exception: GitHub Actions runs Windows, Linux, and macOS matrix legs, aggregates them on Ubuntu, and runs the required status mirrors on Ubuntu. Authorized SaaS, browser, and API services remain in scope; cross-platform course code and commands remain source evidence.',
+    'Local Agent development remains Windows-hosted. Canonical CI is the required exception: it runs parallel `windows-latest`, `ubuntu-latest`, and `macos-latest` validation legs, aggregates all three receipts on Ubuntu, and hosts the three required status mirrors on Ubuntu.',
+    'display_name: "Capture Private Course Knowledge (Windows)"',
+    'short_description: "Windows-only: unify videos, PDFs, code, recall, and exports"',
+    'default_prompt: "Use $capture-private-course-knowledge on Windows to capture this authorized course across videos, PDFs, slides, code, and attachments as evidence-linked notes, then create the requested NotebookLM sources or website article. Preserve cross-platform course commands as source evidence."',
+    'Windows-only',
+    'Windows-hosted',
+    '(Windows)',
+    'on Windows'
 )
 
-$authorizationAndPrivacyCases = @(
-    @{
-        Name = 'user-provided or authorized-session content only'
-        Required = '(?is)\bWork\s+only\s+with\s+content\s+the\s+user\s+provides\s+or\s+can\s+access\s+through\s+an\s+authorized\s+session\b'
-        Positive = 'Work only with content the user provides or can access through an authorized session.'
-        Counterexample = 'Work with content the user provides or can access through a session.'
-    },
-    @{
-        Name = 'no bypass of provider access and content protections'
-        Required = '(?is)\bDo\s+not\s+bypass\s+authentication,\s+paywalls,\s+DRM,\s+playback\s+restrictions,\s+document\s+protections,\s+download\s+controls,\s+or\s+provider\s+safeguards\b'
-        Positive = 'Do not bypass authentication, paywalls, DRM, playback restrictions, document protections, download controls, or provider safeguards.'
-        Counterexample = 'Bypass authentication, paywalls, DRM, playback restrictions, document protections, download controls, or provider safeguards when necessary.'
-    },
-    @{
-        Name = 'approval before private material reaches an external service'
-        Required = '(?is)\bObtain\s+approval\s+before\s+sending\s+private\s+material\s+to\s+an\s+external\s+transcription,\s+OCR,\s+vision,\s+storage,\s+or\s+knowledge\s+service\b'
-        Positive = 'Obtain approval before sending private material to an external transcription, OCR, vision, storage, or knowledge service.'
-        Counterexample = 'Send private material to an external transcription, OCR, vision, storage, or knowledge service.'
-    },
-    @{
-        Name = 'no requesting or retaining session secrets'
-        Required = '(?is)\bNever\s+request,\s+inspect,\s+extract,\s+or\s+store\s+passwords,\s+cookies,\s+tokens,\s+browser\s+storage,\s+or\s+session\s+data\b'
-        Positive = 'Never request, inspect, extract, or store passwords, cookies, tokens, browser storage, or session data.'
-        Counterexample = 'Request, inspect, extract, or store passwords, cookies, tokens, browser storage, or session data.'
-    }
-)
-
-$readmeThreePlatformCiPattern = '(?is)Canonical\s+repository\s+validation\s+runs\s+on\s+GitHub\s+Actions\s+as\s+three\s+parallel\s+matrix\s+legs,\s*`windows-latest`\s*\(x64\),\s*`ubuntu-latest`\s*\(x64\),\s*and\s*`macos-latest`\s*\(arm64\),\s*then\s+aggregates\s+all\s+three\s+receipts\s+on\s+Ubuntu\s+and\s+runs\s+the\s+required\s+status\s+mirrors\s+on\s+Ubuntu\..*?These\s+legs\s+validate\s+the\s+repository\s+contract\s+and\s+regression\s+suite\s+on\s+each\s+platform;\s*they\s+are\s+not\s+end-to-end\s+course-capture\s+acceptance\s+runs\.'
-
-$errorHandlingDuplicationCases = @(
-    @{
-        Name = 'MFA or CAPTCHA sign-in handling'
-        Prohibited = '(?is)\b(?:Ask\s+the\s+user\s+to\s+sign\s+in\s+or\s+complete\s+MFA\s+or\s+CAPTCHA|If\s+authentication,\s+MFA,\s+or\s+CAPTCHA\s+blocks?\s+access)\b'
-        Counterexample = 'If authentication, MFA, or CAPTCHA blocks access, stop and request only the minimum user action needed to restore the authorized session.'
-    },
-    @{
-        Name = 'substitution after all authorized routes fail'
-        Prohibited = '(?is)\bIf\s+(?:all|every)\s+authorized\s+(?:access\s+)?routes?(?:\s+to\s+[^,\r\n]+)?\s+fails?\b.{0,300}\b(?:(?:do\s+not|never)\b.{0,100}\b(?:replace|substitut\w*)|instead\s+of\s+substitut\w*)\b.{0,100}\b(?:public|inferred)\b.{0,100}\bcontent\b'
-        Counterexample = 'If every authorized route to a required material fails, stop and report the exact material and access gap instead of substituting public or inferred content.'
-    },
-    @{
-        Name = 'routes that bypass provider protections'
-        Prohibited = '(?is)\bIf\b.{0,100}\b(?:route|action|method)\b.{0,100}\b(?:would|could)\s+bypass\b.{0,250}\b(?:authentication|paywalls?|DRM|protections?|safeguards?)\b'
-        Counterexample = 'If the only remaining route would bypass protections, stop and explain the blocker.'
-    },
-    @{
-        Name = 'approval before external private-data transfer'
-        Prohibited = '(?is)\b(?:(?:Obtain|Get|Ask\s+for)\s+(?:the\s+user''s\s+)?(?:explicit\s+)?approval\s+before\s+sending\s+private\b.{0,250}\bexternal\b|If\s+private\s+material\s+would\s+leave\b.{0,250}\bexternal\s+service,?\s+(?:obtain|get|ask\s+for)\s+(?:the\s+user''s\s+)?(?:explicit\s+)?approval\s+before\s+sending\s+it\b)'
-        Counterexample = 'If private material would leave the current environment through transcription, OCR, vision, storage, or another external service, obtain explicit approval before sending it.'
-    }
-)
+$forbiddenTextPaths = @{
+    $forbiddenText[0] = @('skills/capture-private-course-knowledge/SKILL.md')
+    $forbiddenText[1] = @('skills/capture-private-course-knowledge/SKILL.md')
+    $forbiddenText[2] = @('skills/capture-private-course-knowledge/SKILL.md')
+    $forbiddenText[3] = @('skills/capture-private-course-knowledge/SKILL.md')
+    $forbiddenText[4] = @('skills/capture-private-course-knowledge/SKILL.md')
+    $forbiddenText[5] = @('skills/capture-private-course-knowledge/SKILL.md')
+    $forbiddenText[6] = @('skills/capture-private-course-knowledge/references/course-notes-format.md')
+    $forbiddenText[7] = @('skills/capture-private-course-knowledge/references/notebooklm-export.md')
+    $forbiddenText[8] = @('skills/capture-private-course-knowledge/references/pdf-material-capture.md')
+    $forbiddenText[9] = @('skills/capture-private-course-knowledge/references/syuantsai-github-article.md')
+    $forbiddenText[10] = @('skills/capture-private-course-knowledge/references/video-capture.md')
+    $forbiddenText[11] = @('README.md')
+    $forbiddenText[12] = @('RELEASING.md')
+    $forbiddenText[13] = @('skills/capture-private-course-knowledge/agents/openai.yaml')
+    $forbiddenText[14] = @('skills/capture-private-course-knowledge/agents/openai.yaml')
+    $forbiddenText[15] = @('skills/capture-private-course-knowledge/agents/openai.yaml')
+    $forbiddenText[16] = @('skills/capture-private-course-knowledge/SKILL.md', 'skills/capture-private-course-knowledge/agents/openai.yaml')
+    $forbiddenText[17] = @('README.md', 'RELEASING.md')
+    $forbiddenText[18] = @('skills/capture-private-course-knowledge/agents/openai.yaml')
+    $forbiddenText[19] = @('skills/capture-private-course-knowledge/agents/openai.yaml')
+}
+$reuseSkillAnnotationText = @'
+[[annotations]]
+path = "skills/**/SKILL.md"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 SyuanTsai"
+SPDX-License-Identifier = "Apache-2.0"
+'@
 
 BeforeAll {
     $script:repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
-    function Read-TestReuseAnnotations {
-        param([Parameter(Mandatory)][string] $LiteralPath)
-
-        $annotations = [Collections.Generic.List[object]]::new()
-        $current = $null
-        $lineNumber = 0
-        foreach ($rawLine in Get-Content -LiteralPath $LiteralPath -Encoding utf8) {
-            $lineNumber++
-            $line = $rawLine.Trim()
-            if ($line.Length -eq 0 -or $line.StartsWith('#', [StringComparison]::Ordinal)) { continue }
-            if ($line -ceq '[[annotations]]') {
-                $current = [ordered]@{}
-                $annotations.Add($current)
-                continue
-            }
-            if ($null -eq $current) { continue }
-            if ($line -notmatch '^(?<key>[A-Za-z0-9-]+)\s*=\s*(?<value>.+)$') {
-                throw "Unsupported REUSE annotation syntax at line $lineNumber."
-            }
-
-            $key = [string]$Matches.key
-            $value = ConvertFrom-TestTomlValue -Text ([string]$Matches.value) -LineNumber $lineNumber
-            if ($value -is [array]) {
-                if ($key -cne 'path') {
-                    throw "Unsupported TOML array for REUSE annotation '$key' at line $lineNumber."
-                }
-                $current[$key] = @($value | ForEach-Object { [string]$_ })
-            }
-            elseif ($key -ceq 'path') {
-                $current[$key] = @([string]$value)
-            }
-            else { $current[$key] = [string]$value }
-        }
-        return @($annotations)
+    function Normalize-TestPolicyText {
+        param([Parameter(Mandatory)][AllowEmptyString()][string] $Text)
+        return [regex]::Replace($Text, '\s+', ' ').Trim()
     }
 
-    function ConvertFrom-TestTomlValue {
-        param(
-            [Parameter(Mandatory)][string] $Text,
-            [Parameter(Mandatory)][int] $LineNumber
-        )
+    function Test-RequiredPolicyText {
+        param([Parameter(Mandatory)][AllowEmptyString()][string] $Content, [Parameter(Mandatory)][string] $RequiredText)
+        $normalizedContent = Normalize-TestPolicyText -Text $Content
+        $normalizedRequired = Normalize-TestPolicyText -Text $RequiredText
+        return $normalizedContent.Contains($normalizedRequired, [StringComparison]::Ordinal)
+    }
 
-        $state = [pscustomobject]@{ Index = 0 }
-        function Skip-Whitespace { while ($state.Index -lt $Text.Length -and [char]::IsWhiteSpace($Text[$state.Index])) { $state.Index++ } }
-        function Read-TomlString {
-            Skip-Whitespace
-            if ($state.Index -ge $Text.Length -or ($Text[$state.Index] -ne '"' -and $Text[$state.Index] -ne "'")) {
-                throw "Expected a TOML string at line $LineNumber."
-            }
-            $quote = $Text[$state.Index]
-            $state.Index++
-            $builder = [Text.StringBuilder]::new()
-            while ($state.Index -lt $Text.Length) {
-                $character = $Text[$state.Index]
-                $state.Index++
-                if ($character -eq $quote) { return $builder.ToString() }
-                if ($quote -eq "'" -or $character -ne '\') {
-                    [void]$builder.Append($character)
-                    continue
-                }
-                if ($state.Index -ge $Text.Length) { throw "Unterminated TOML escape at line $LineNumber." }
-                $escape = $Text[$state.Index]
-                $state.Index++
-                switch -CaseSensitive ($escape) {
-                    '"' { [void]$builder.Append('"') }
-                    '\' { [void]$builder.Append('\') }
-                    'b' { [void]$builder.Append([char]8) }
-                    't' { [void]$builder.Append("`t") }
-                    'n' { [void]$builder.Append("`n") }
-                    'f' { [void]$builder.Append([char]12) }
-                    'r' { [void]$builder.Append("`r") }
-                    default { throw "Unsupported TOML escape '\$escape' at line $LineNumber." }
-                }
-            }
-            throw "Unterminated TOML string at line $LineNumber."
-        }
-        function Assert-TomlRemainder {
-            Skip-Whitespace
-            if ($state.Index -lt $Text.Length -and $Text[$state.Index] -ne '#') {
-                throw "Unsupported TOML syntax at line $LineNumber."
-            }
-        }
-
-        Skip-Whitespace
-        if ($state.Index -lt $Text.Length -and $Text[$state.Index] -eq '[') {
-            $state.Index++
-            $values = [Collections.Generic.List[string]]::new()
-            Skip-Whitespace
-            if ($state.Index -lt $Text.Length -and $Text[$state.Index] -eq ']') {
-                $state.Index++
-                Assert-TomlRemainder
-                return ,$values.ToArray()
-            }
-            while ($true) {
-                $values.Add((Read-TomlString))
-                Skip-Whitespace
-                if ($state.Index -ge $Text.Length) { throw "Unterminated TOML array at line $LineNumber." }
-                if ($Text[$state.Index] -eq ']') {
-                    $state.Index++
-                    Assert-TomlRemainder
-                    return ,$values.ToArray()
-                }
-                if ($Text[$state.Index] -ne ',') { throw "Expected ',' or ']' in TOML array at line $LineNumber." }
-                $state.Index++
-                Skip-Whitespace
-                if ($state.Index -lt $Text.Length -and $Text[$state.Index] -eq ']') {
-                    $state.Index++
-                    Assert-TomlRemainder
-                    return ,$values.ToArray()
-                }
-            }
-        }
-
-        $scalar = Read-TomlString
-        Assert-TomlRemainder
-        return $scalar
+    function Test-ForbiddenPolicyText {
+        param([Parameter(Mandatory)][AllowEmptyString()][string] $Content, [Parameter(Mandatory)][string] $ForbiddenText)
+        $normalizedContent = Normalize-TestPolicyText -Text $Content
+        $normalizedForbidden = Normalize-TestPolicyText -Text $ForbiddenText
+        $hasExactText = $normalizedContent.Contains($normalizedForbidden, [StringComparison]::Ordinal)
+        $hasCaseInsensitiveText = $normalizedContent.ToLowerInvariant().Contains($normalizedForbidden.ToLowerInvariant(), [StringComparison]::Ordinal)
+        return $hasExactText -or $hasCaseInsensitiveText
     }
 
     function Read-TestOpenAiInterface {
         param([Parameter(Mandatory)][string] $LiteralPath)
-
         $allowedFields = @('display_name', 'short_description', 'default_prompt', 'icon_small', 'icon_large', 'brand_color')
         $fields = [ordered]@{}
         $inInterface = $false
@@ -247,82 +123,6 @@ BeforeAll {
         }
         return $fields
     }
-
-    function Test-ReusePathPattern {
-        param([Parameter(Mandatory)][string] $Pattern, [Parameter(Mandatory)][string] $RelativePath)
-
-        $normalizedPattern = $Pattern.Replace('\', '/')
-        $normalizedPath = $RelativePath.Replace('\', '/')
-        $regex = '^' + [regex]::Escape($normalizedPattern).Replace('\*\*', '.*').Replace('\*', '[^/]*') + '$'
-        return [regex]::IsMatch($normalizedPath, $regex, [Text.RegularExpressions.RegexOptions]::CultureInvariant)
-    }
-
-    function Split-TestMarkdownLevel2Sections {
-        param([Parameter(Mandatory)][string] $Content)
-
-        $headings = [Collections.Generic.List[object]]::new()
-        $fenceCharacter = $null
-        $fenceLength = 0
-        $lines = [regex]::Matches(
-            $Content,
-            '(?m)^(?<text>[^\r\n]*)(?<ending>\r?\n|$)',
-            [Text.RegularExpressions.RegexOptions]::CultureInvariant
-        )
-        foreach ($lineMatch in $lines) {
-            $line = [string]$lineMatch.Groups['text'].Value
-            $fenceMatch = [regex]::Match(
-                $line,
-                '^ {0,3}(?<fence>`{3,}|~{3,})(?<remainder>.*)$',
-                [Text.RegularExpressions.RegexOptions]::CultureInvariant
-            )
-
-            if ($null -ne $fenceCharacter) {
-                if ($fenceMatch.Success -and
-                    $fenceMatch.Groups['remainder'].Value -match '^[ \t]*$' -and
-                    $fenceMatch.Groups['fence'].Value.StartsWith($fenceCharacter, [StringComparison]::Ordinal) -and
-                    $fenceMatch.Groups['fence'].Value.Length -ge $fenceLength) {
-                    $fenceCharacter = $null
-                    $fenceLength = 0
-                }
-                continue
-            }
-
-            if ($fenceMatch.Success) {
-                $fence = [string]$fenceMatch.Groups['fence'].Value
-                $remainder = [string]$fenceMatch.Groups['remainder'].Value
-                if (-not ($fence[0] -ceq [char]'`' -and $remainder.Contains('`'))) {
-                    $fenceCharacter = $fence.Substring(0, 1)
-                    $fenceLength = $fence.Length
-                    continue
-                }
-            }
-
-            $headingMatch = [regex]::Match(
-                $line,
-                '^## (?<heading>[^\r\n]+)$',
-                [Text.RegularExpressions.RegexOptions]::CultureInvariant
-            )
-            if ($headingMatch.Success) {
-                $carriageReturnLength = if ($lineMatch.Groups['ending'].Value.StartsWith("`r", [StringComparison]::Ordinal)) { 1 } else { 0 }
-                $headings.Add([pscustomobject]@{
-                        Index = $lineMatch.Index
-                        Length = $line.Length + $carriageReturnLength
-                        Heading = [string]$headingMatch.Groups['heading'].Value
-                    })
-            }
-        }
-
-        $sections = [Collections.Generic.List[object]]::new()
-        for ($index = 0; $index -lt $headings.Count; $index++) {
-            $bodyStart = $headings[$index].Index + $headings[$index].Length
-            $bodyEnd = if ($index + 1 -lt $headings.Count) { $headings[$index + 1].Index } else { $Content.Length }
-            $sections.Add([pscustomobject]@{
-                    Heading = [string]$headings[$index].Heading
-                    Body = $Content.Substring($bodyStart, $bodyEnd - $bodyStart)
-                })
-        }
-        return @($sections)
-    }
 }
 
 Describe 'Knowledge & Content repository contract' {
@@ -331,88 +131,65 @@ Describe 'Knowledge & Content repository contract' {
     }
 
     It 'contains only declared top-level Skill directories' {
-        $source = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $script:repoRoot 'catalog/source.json') | ConvertFrom-Json
+        $source = Get-Content -Raw -Encoding utf8 -LiteralPath (Join-Path $script:repoRoot 'catalog/source.json') | ConvertFrom-Json
         $declared = @($source.skills | Sort-Object)
         $actual = @(Get-ChildItem -LiteralPath (Join-Path $script:repoRoot 'skills') -Directory | ForEach-Object Name | Sort-Object)
         ($actual -join "`n") | Should -BeExactly ($declared -join "`n")
     }
 
     It 'keeps the stable source ID' {
-        $source = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $script:repoRoot 'catalog/source.json') | ConvertFrom-Json
+        $source = Get-Content -Raw -Encoding utf8 -LiteralPath (Join-Path $script:repoRoot 'catalog/source.json') | ConvertFrom-Json
         $source.sourceId | Should -BeExactly 'knowledge-content'
     }
 
-    It 'keeps every Skill manifest free of inline SPDX comments and covered by a parsed REUSE annotation' {
+    It 'keeps every Skill manifest free of inline SPDX comments and covered by the exact REUSE annotation' {
         $skillManifests = @(Get-ChildItem -LiteralPath (Join-Path $script:repoRoot 'skills') -Filter 'SKILL.md' -File -Recurse)
         $skillManifests.Count | Should -BeGreaterThan 0
-        $annotations = @(Read-TestReuseAnnotations -LiteralPath (Join-Path $script:repoRoot 'REUSE.toml'))
-        $annotations.Count | Should -BeGreaterThan 0
-
         foreach ($manifest in $skillManifests) {
             $content = Get-Content -LiteralPath $manifest.FullName -Raw -Encoding utf8
-            $content | Should -Not -Match 'SPDX-(?:FileCopyrightText|License-Identifier)'
-            $relativePath = [IO.Path]::GetRelativePath($script:repoRoot, $manifest.FullName).Replace('\', '/')
-            $coveringAnnotations = @($annotations | Where-Object {
-                    $_.Contains('path') -and
-                    $_.Contains('SPDX-FileCopyrightText') -and -not [string]::IsNullOrWhiteSpace([string]$_['SPDX-FileCopyrightText']) -and
-                    $_.Contains('SPDX-License-Identifier') -and -not [string]::IsNullOrWhiteSpace([string]$_['SPDX-License-Identifier']) -and
-                    @($_.path | Where-Object { Test-ReusePathPattern -Pattern $_ -RelativePath $relativePath }).Count -gt 0
-                })
-            $coveringAnnotations.Count | Should -BeGreaterThan 0 -Because "$relativePath must have copyright and license coverage in REUSE.toml"
+            $content.Contains('SPDX-FileCopyrightText', [StringComparison]::Ordinal) | Should -BeFalse
+            $content.Contains('SPDX-License-Identifier', [StringComparison]::Ordinal) | Should -BeFalse
         }
-    }
-
-    It 'parses supported REUSE TOML string forms in <Name>' -ForEach @(
-        @{ Name = 'trailing comment'; Value = '"skills/**/SKILL.md" # cover manifests'; Expected = @('skills/**/SKILL.md') },
-        @{ Name = 'path array'; Value = '["skills/**/SKILL.md", ''docs/*.md'']'; Expected = @('skills/**/SKILL.md', 'docs/*.md') },
-        @{ Name = 'literal string'; Value = "'skills/**/SKILL.md'"; Expected = @('skills/**/SKILL.md') },
-        @{ Name = 'escaped basic string'; Value = '"skills/quoted\\name/SKILL.md"'; Expected = @('skills/quoted\name/SKILL.md') }
-    ) {
-        $fixturePath = Join-Path $TestDrive ("reuse-{0}.toml" -f ($Name -replace '[^a-z]', '-'))
-        @("[[annotations]]", "path = $Value") | Set-Content -LiteralPath $fixturePath -Encoding utf8
-        $parsed = @(Read-TestReuseAnnotations -LiteralPath $fixturePath)
-        @($parsed[0].path) | Should -Be $Expected
-    }
-
-    It 'rejects malformed REUSE TOML with the source line number' {
-        $fixturePath = Join-Path $TestDrive 'reuse-malformed.toml'
-        @('[[annotations]]', 'path = ["skills/**/SKILL.md"') | Set-Content -LiteralPath $fixturePath -Encoding utf8
-        { Read-TestReuseAnnotations -LiteralPath $fixturePath } | Should -Throw '*line 2*'
+        $reuseContent = Get-Content -LiteralPath (Join-Path $script:repoRoot 'REUSE.toml') -Raw -Encoding utf8
+        (Test-RequiredPolicyText -Content $reuseContent -RequiredText $reuseSkillAnnotationText) | Should -BeTrue
     }
 }
 
-Describe 'Capture Private Course Knowledge host-neutral contract' {
-    BeforeAll {
-        $script:obsoleteHostRestriction = '(?im)(?:\bWindows[- ]only\b|\bWindows[- ]hosted\b|\bonly\s+(?:on|using)\s+(?:a\s+)?Windows\s+host\b|\buse\s+Windows\s+as\s+the\s+only\s+host\b|\bWindows\s+(?:is|remains)\s+the\s+only\s+host\b|\bmust\s+(?:only\s+)?(?:run|execute|operate)\s+(?:only\s+)?on\s+Windows\b|\bdo\s+not\s+use\s+Linux,\s*macOS(?:,\s*WSL)?\b|只(?:能|在|用)[^\r\n]{0,40}Windows[^\r\n]{0,20}主機)'
-    }
-
-    It 'keeps <Path> host-neutral with its required policy semantics' -ForEach $hostNeutralFiles {
+Describe 'Capture Private Course Knowledge literal policy contract' {
+    It 'preserves the required literal policy text in <Path>' -ForEach $requiredPolicyText {
         $content = Get-Content -LiteralPath (Join-Path $script:repoRoot $Path) -Raw -Encoding utf8
-        $content | Should -Not -Match $script:obsoleteHostRestriction
-        $content | Should -Match $Required
+        (Test-RequiredPolicyText -Content $content -RequiredText $Text) | Should -BeTrue
     }
 
-    It 'requires an explicit negative host-switching relationship for <Path>' -ForEach $hostNeutralPolicyCases {
-        $Positive | Should -Match $Required
-        $Negative | Should -Not -Match $Required
+    It 'keeps legacy and fixed forbidden text out of their policy files' {
+        foreach ($forbidden in $forbiddenText) {
+            foreach ($path in $forbiddenTextPaths[$forbidden]) {
+                $content = Get-Content -LiteralPath (Join-Path $script:repoRoot $path) -Raw -Encoding utf8
+                $normalizedContent = Normalize-TestPolicyText -Text $content
+                $normalizedForbidden = Normalize-TestPolicyText -Text $forbidden
+                $normalizedContent.Contains($normalizedForbidden, [StringComparison]::Ordinal) | Should -BeFalse
+                $normalizedContent.ToLowerInvariant().Contains($normalizedForbidden.ToLowerInvariant(), [StringComparison]::Ordinal) | Should -BeFalse
+            }
+        }
     }
 
-    It 'preserves the complete local-host fallback and evidence boundary in SKILL.md' {
-        $content = Get-Content -LiteralPath (Join-Path $script:repoRoot 'skills/capture-private-course-knowledge/SKILL.md') -Raw -Encoding utf8
-        $content | Should -Match '(?is)required\s+local\s+tool\s+is\s+unavailable.*mark\s+the\s+affected\s+work\s+partial\s+or\s+draft'
-        $content | Should -Match '(?is)do\s+not\s+switch\s+to\s+another\s+host,\s+VM,\s+WSL,\s+or\s+container\s+as\s+a\s+fallback'
-        $content | Should -Match '(?is)Preserve\s+cross-platform\s+code\s+and\s+commands\s+found\s+in\s+course\s+materials\s+as\s+source\s+evidence'
+    It 'treats a one-letter case change as missing required text' {
+        $required = $requiredPolicyText[0].Text
+        $changedCase = 'w' + $required.Substring(1)
+        (Test-RequiredPolicyText -Content $changedCase -RequiredText $required) | Should -BeFalse
     }
 
-    It 'keeps each parsed OpenAI metadata field host-neutral and retains the Skill invocation token' {
-        $metadata = Read-TestOpenAiInterface -LiteralPath (Join-Path $script:repoRoot 'skills/capture-private-course-knowledge/agents/openai.yaml')
-        $legacyMetadataRestriction = '(?i)(?:\(\s*Windows\s*\)|\bWindows[- ]only\b|\bon\s+Windows\b|\bWindows\s+host\b)'
-        $metadata.display_name | Should -Not -Match $legacyMetadataRestriction
-        $metadata.short_description | Should -Not -Match $legacyMetadataRestriction
-        $metadata.default_prompt | Should -Not -Match $legacyMetadataRestriction
-        $metadata.default_prompt | Should -Match '\$capture-private-course-knowledge'
+    It 'detects a lowercase forbidden-text insertion' {
+        (Test-ForbiddenPolicyText -Content 'prefix windows-only suffix' -ForbiddenText 'Windows-only') | Should -BeTrue
     }
 
+    It 'treats a REUSE annotation with one missing line as missing' {
+        $missingLine = $reuseSkillAnnotationText.Replace("`nprecedence = `"aggregate`"", '')
+        (Test-RequiredPolicyText -Content $missingLine -RequiredText $reuseSkillAnnotationText) | Should -BeFalse
+    }
+}
+
+Describe 'OpenAI metadata field contract' {
     It 'accepts all supported optional OpenAI interface fields' {
         $fixturePath = Join-Path $TestDrive 'openai-interface-optionals.yaml'
         @(
@@ -424,7 +201,6 @@ Describe 'Capture Private Course Knowledge host-neutral contract' {
             '  icon_large: "./assets/icon-large.svg"',
             '  brand_color: "#123456"'
         ) | Set-Content -LiteralPath $fixturePath -Encoding utf8
-
         $metadata = Read-TestOpenAiInterface -LiteralPath $fixturePath
         $metadata.icon_small | Should -BeExactly './assets/icon-small.svg'
         $metadata.icon_large | Should -BeExactly './assets/icon-large.svg'
@@ -440,100 +216,6 @@ Describe 'Capture Private Course Knowledge host-neutral contract' {
             '  default_prompt: "Use $fixture-skill"',
             '  unknown_field: "must be rejected"'
         ) | Set-Content -LiteralPath $fixturePath -Encoding utf8
-
         { Read-TestOpenAiInterface -LiteralPath $fixturePath } | Should -Throw '*Unsupported or duplicate OpenAI interface metadata*'
-    }
-
-    It 'detects legacy Windows restrictions in OpenAI <Field>' -ForEach @(
-        @{ Field = 'display_name'; Value = 'Capture Private Course Knowledge (Windows)' },
-        @{ Field = 'short_description'; Value = 'Windows-only private course capture' },
-        @{ Field = 'default_prompt'; Value = 'Use $capture-private-course-knowledge on Windows' },
-        @{ Field = 'default_prompt'; Value = 'Run this Skill on a Windows host' }
-    ) {
-        $Value | Should -Match '(?i)(?:\(\s*Windows\s*\)|\bWindows[- ]only\b|\bon\s+Windows\b|\bWindows\s+host\b)'
-    }
-}
-
-Describe 'Capture Private Course Knowledge authorization and privacy contract' {
-    It 'preserves <Name>' -ForEach $authorizationAndPrivacyCases {
-        $content = Get-Content -LiteralPath (Join-Path $script:repoRoot 'skills/capture-private-course-knowledge/SKILL.md') -Raw -Encoding utf8
-        $content | Should -Match $Required
-    }
-
-    It 'rejects a counterexample without the required negative or approval condition for <Name>' -ForEach $authorizationAndPrivacyCases {
-        $Positive | Should -Match $Required
-        $Counterexample | Should -Not -Match $Required
-    }
-}
-
-Describe 'README three-platform CI contract' {
-    It 'declares the exact runner architecture legs, Ubuntu aggregation and mirrors, and non-E2E boundary' {
-        $content = Get-Content -LiteralPath (Join-Path $script:repoRoot 'README.md') -Raw -Encoding utf8
-        $content | Should -Match $readmeThreePlatformCiPattern
-    }
-
-    It 'rejects a CI declaration that omits one platform leg' {
-        $completeDeclaration = 'Canonical repository validation runs on GitHub Actions as three parallel matrix legs, `windows-latest` (x64), `ubuntu-latest` (x64), and `macos-latest` (arm64), then aggregates all three receipts on Ubuntu and runs the required status mirrors on Ubuntu. These legs validate the repository contract and regression suite on each platform; they are not end-to-end course-capture acceptance runs.'
-        $missingMacOsLeg = 'Canonical repository validation runs on GitHub Actions as three parallel matrix legs, `windows-latest` (x64) and `ubuntu-latest` (x64), then aggregates all three receipts on Ubuntu and runs the required status mirrors on Ubuntu. These legs validate the repository contract and regression suite on each platform; they are not end-to-end course-capture acceptance runs.'
-        $completeDeclaration | Should -Match $readmeThreePlatformCiPattern
-        $missingMacOsLeg | Should -Not -Match $readmeThreePlatformCiPattern
-    }
-}
-
-Describe 'Capture Private Course Knowledge concise Skill contract' {
-    BeforeAll {
-        $script:captureSkillContent = Get-Content -LiteralPath (Join-Path $script:repoRoot 'skills/capture-private-course-knowledge/SKILL.md') -Raw -Encoding utf8
-        $script:captureSkillSections = @(Split-TestMarkdownLevel2Sections -Content $script:captureSkillContent)
-        $script:expectedWorkflowExamplePattern = '(?is)(?:\bExpected\s+workflow\b[^\r\n]*\r?\n\s*```|```[^\r\n]*\r?\n(?:(?!```).)*\bExpected\s+workflow\b(?:(?!```).)*```)'
-    }
-
-    It 'keeps every Example section free of Expected workflow fenced blocks' {
-        $exampleSections = @($script:captureSkillSections | Where-Object { $_.Heading -match '(?i)\bExamples?\b' })
-        $exampleSections.Count | Should -BeGreaterThan 0
-        foreach ($section in $exampleSections) {
-            $section.Body | Should -Not -Match $script:expectedWorkflowExamplePattern -Because "the '$($section.Heading)' section must demonstrate output or a decision boundary instead of restating workflow steps"
-        }
-    }
-
-    It 'detects an Expected workflow fenced-block counterexample' {
-        $counterexample = @(
-            'Expected workflow:',
-            '```text',
-            '1. Inventory the course.',
-            '2. Extract the evidence.',
-            '3. Produce the result.',
-            '```'
-        ) -join "`n"
-        $counterexample | Should -Match $script:expectedWorkflowExamplePattern
-    }
-
-    It 'ignores level-2 headings inside <Name> fences while retaining the real Error Handling section' -ForEach @(
-        @{ Name = 'backtick'; Opening = '````markdown'; ShortFence = '```'; Closing = '`````' },
-        @{ Name = 'tilde'; Opening = '~~~~markdown'; ShortFence = '~~~'; Closing = '~~~~~' }
-    ) {
-        $content = @(
-            '## Example',
-            $Opening,
-            '## Error Handling',
-            $ShortFence,
-            '## Still Fenced',
-            $Closing,
-            '## Error Handling',
-            'Real section body.'
-        ) -join "`n"
-
-        $sections = @(Split-TestMarkdownLevel2Sections -Content $content)
-        @($sections.Heading) | Should -Be @('Example', 'Error Handling')
-        @($sections | Where-Object { $_.Heading -ceq 'Error Handling' }).Count | Should -Be 1
-    }
-
-    It 'does not repeat <Name> in Error Handling' -ForEach $errorHandlingDuplicationCases {
-        $errorHandlingSections = @($script:captureSkillSections | Where-Object { $_.Heading -ceq 'Error Handling' })
-        $errorHandlingSections.Count | Should -Be 1
-        $errorHandlingSections[0].Body | Should -Not -Match $Prohibited
-    }
-
-    It 'detects the Error Handling duplication counterexample for <Name>' -ForEach $errorHandlingDuplicationCases {
-        $Counterexample | Should -Match $Prohibited
     }
 }
