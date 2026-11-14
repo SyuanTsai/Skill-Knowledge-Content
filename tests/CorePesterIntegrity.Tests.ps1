@@ -261,7 +261,13 @@ Describe 'Verified Pester 6.2.0 module closure' {
             modulePayload = @([pscustomobject]@{ path = 'Pester.psm1'; sha256 = $hash })
         }
 
-        if ($IsWindows) {
+        [IO.File]::WriteAllBytes((Join-Path $moduleRoot 'pester.psm1'), $bytes)
+        $observedNames = @(Get-ChildItem -LiteralPath $moduleRoot -File -Force | ForEach-Object Name)
+        $supportsCaseDistinctFiles =
+            ($observedNames -ccontains 'Pester.psm1') -and
+            ($observedNames -ccontains 'pester.psm1')
+
+        if (-not $supportsCaseDistinctFiles) {
             $script:caseDuplicateClosureItems = @(
                 Get-Item -LiteralPath $canonicalPath -Force
                 [pscustomobject]@{
@@ -273,9 +279,6 @@ Describe 'Verified Pester 6.2.0 module closure' {
             Mock -CommandName Get-ChildItem -ModuleName CorePesterIntegrity -MockWith {
                 $script:caseDuplicateClosureItems
             }
-        }
-        else {
-            [IO.File]::WriteAllBytes((Join-Path $moduleRoot 'pester.psm1'), $bytes)
         }
 
         $result = Test-CorePesterClosure -ModuleRoot $moduleRoot -Lock $fixtureLock
