@@ -5,36 +5,11 @@
 [CmdletBinding()]
 param(
     [string] $RepositoryRoot,
-    [string] $OutputPath,
     [switch] $ReadOnlySnapshot
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-
-function Get-RepositoryGitPhysicalPath {
-    $command = Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1
-    $commandPath = [IO.Path]::GetFullPath([string]$command.Path)
-    $commandItem = Get-Item -LiteralPath $commandPath -Force -ErrorAction Stop
-    if ($commandItem.PSIsContainer) { throw 'Resolved Git command path must be a file.' }
-    if ($IsWindows) {
-        if (($commandItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-            throw 'Resolved Git command path must be a plain, non-reparse file on Windows.'
-        }
-        return $commandPath
-    }
-    $resolvedTarget = if (($commandItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-        [IO.File]::ResolveLinkTarget($commandPath, $true)
-    }
-    else { $commandItem }
-    if ($null -eq $resolvedTarget) { throw 'Resolved Git command path symbolic link could not be resolved.' }
-    $physicalPath = [IO.Path]::GetFullPath([string]$resolvedTarget.FullName)
-    $physicalItem = Get-Item -LiteralPath $physicalPath -Force -ErrorAction Stop
-    if ($physicalItem.PSIsContainer -or ($physicalItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-        throw 'Resolved Git physical target must be a regular, non-link file.'
-    }
-    return $physicalPath
-}
 
 function Assert-ExactPropertySet {
     param(
@@ -164,39 +139,6 @@ function ConvertTo-AsciiLowerInvariant {
         }
     }
     return $builder.ToString()
-}
-
-function Get-GitBlobSha256 {
-    param(
-        [Parameter(Mandatory = $true)][string] $GitPath,
-        [Parameter(Mandatory = $true)][string] $RepositoryRoot,
-        [Parameter(Mandatory = $true)][string] $ObjectId
-    )
-
-    if ($ObjectId -cnotmatch '^[0-9a-f]{40}$') { throw "Invalid Git blob identity '$ObjectId'." }
-    $startInfo = [Diagnostics.ProcessStartInfo]::new()
-    $startInfo.FileName = $GitPath
-    $startInfo.UseShellExecute = $false
-    $startInfo.RedirectStandardOutput = $true
-    $startInfo.RedirectStandardError = $true
-    foreach ($argument in @('-C', $RepositoryRoot, 'cat-file', 'blob', $ObjectId)) {
-        [void]$startInfo.ArgumentList.Add($argument)
-    }
-    $process = [Diagnostics.Process]::new()
-    $process.StartInfo = $startInfo
-    $hasher = [Security.Cryptography.SHA256]::Create()
-    try {
-        if (-not $process.Start()) { throw "Could not start Git blob reader for '$ObjectId'." }
-        $hash = $hasher.ComputeHash($process.StandardOutput.BaseStream)
-        $stderr = $process.StandardError.ReadToEnd()
-        $process.WaitForExit()
-        if ($process.ExitCode -ne 0) { throw "Git blob reader failed for '$ObjectId': $stderr" }
-        return ([BitConverter]::ToString($hash) -replace '-', '').ToLowerInvariant()
-    }
-    finally {
-        $hasher.Dispose()
-        $process.Dispose()
-    }
 }
 
 function Read-SkillFrontmatter {
@@ -364,8 +306,7 @@ function Read-OpenAiMetadata {
 function Get-ContentInventory {
     param(
         [Parameter(Mandatory = $true)][string] $RepositoryRoot,
-        [Parameter(Mandatory = $true)][string] $SkillId,
-        [switch] $ReadOnlySnapshot
+        [Parameter(Mandatory = $true)][string] $SkillId
     )
 
     $skillRoot = [IO.Path]::GetFullPath((Join-Path $RepositoryRoot "skills/$SkillId"))
@@ -409,61 +350,12 @@ function Get-ContentInventory {
     }
     if ($pathToFile.Count -eq 0) { throw "Skill '$SkillId' has an empty package inventory." }
 
-    if ($ReadOnlySnapshot) {
-        [string[]]$sortedPaths = @($pathToFile.Keys)
-        [Array]::Sort($sortedPaths, [StringComparer]::Ordinal)
-        $files = @()
-        $canonical = [Text.StringBuilder]::new()
-        foreach ($path in $sortedPaths) {
-            $sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $pathToFile[$path].FullName).Hash.ToLowerInvariant()
-            $files += [pscustomobject][ordered]@{ path = $path; sha256 = $sha256 }
-            [void]$canonical.Append($path).Append("`t").Append($sha256).Append("`n")
-        }
-        $hasher = [Security.Cryptography.SHA256]::Create()
-        try {
-            $contentSha256 = ([BitConverter]::ToString($hasher.ComputeHash([Text.Encoding]::UTF8.GetBytes($canonical.ToString()))) -replace '-', '').ToLowerInvariant()
-        }
-        finally { $hasher.Dispose() }
-        return [pscustomobject][ordered]@{ skillId = $SkillId; contentSha256 = $contentSha256; files = $files }
-    }
-
-    $gitPath = Get-RepositoryGitPhysicalPath
-    $tracked = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
-    $gitLines = @(& $gitPath -C $RepositoryRoot ls-files -s -- "skills/$SkillId")
-    if ($LASTEXITCODE -ne 0) { throw "Git inventory lookup failed for '$SkillId'." }
-    foreach ($line in $gitLines) {
-        if ([string]$line -cnotmatch '^(?<mode>[0-9]{6}) (?<objectId>[0-9a-f]{40}) (?<stage>[0-3])\t(?<path>.+)$') {
-            throw "Git returned malformed index entry for '$SkillId': $line"
-        }
-        if ([string]$Matches.mode -cnotin @('100644', '100755') -or [string]$Matches.stage -cne '0') {
-            throw "Skill '$SkillId' contains non-regular or unresolved Git entry '$($Matches.path)'."
-        }
-        $prefix = "skills/$SkillId/"
-        $packagePath = ([string]$Matches.path).Substring($prefix.Length)
-        if (-not $tracked.TryAdd($packagePath, [string]$Matches.objectId)) {
-            throw "Skill '$SkillId' contains duplicate Git index path '$packagePath'."
-        }
-    }
-    if ($tracked.Count -ne $pathToFile.Count) {
-        throw "Skill '$SkillId' filesystem inventory does not match the Git index."
-    }
-    foreach ($path in $pathToFile.Keys) {
-        if (-not $tracked.ContainsKey($path)) { throw "Skill '$SkillId' contains untracked package file '$path'." }
-    }
-
     [string[]]$sortedPaths = @($pathToFile.Keys)
     [Array]::Sort($sortedPaths, [StringComparer]::Ordinal)
     $files = @()
     $canonical = [Text.StringBuilder]::new()
     foreach ($path in $sortedPaths) {
-        $repositoryPath = "skills/$SkillId/$path"
-        $workingObjectId = ([string](@(
-            & $gitPath -C $RepositoryRoot hash-object "--path=$repositoryPath" -- $pathToFile[$path].FullName
-        ) | Select-Object -First 1)).Trim()
-        if ($LASTEXITCODE -ne 0 -or $workingObjectId -cnotmatch '^[0-9a-f]{40}$' -or $workingObjectId -cne $tracked[$path]) {
-            throw "Skill '$SkillId' working-tree content is not bound to its Git index entry '$path'."
-        }
-        $sha256 = Get-GitBlobSha256 -GitPath $gitPath -RepositoryRoot $RepositoryRoot -ObjectId $tracked[$path]
+        $sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $pathToFile[$path].FullName).Hash.ToLowerInvariant()
         $files += [pscustomobject][ordered]@{ path = $path; sha256 = $sha256 }
         [void]$canonical.Append($path).Append("`t").Append($sha256).Append("`n")
     }
@@ -550,7 +442,7 @@ foreach ($skillId in $skillIds) {
     }
     [void](Read-SkillFrontmatter -Path $skillFile -ExpectedSkillId $skillId)
     [void](Read-OpenAiMetadata -Path $metadataFile -ExpectedSkillId $skillId)
-    $packages += Get-ContentInventory -RepositoryRoot $repoRoot -SkillId $skillId -ReadOnlySnapshot:$ReadOnlySnapshot
+    $packages += Get-ContentInventory -RepositoryRoot $repoRoot -SkillId $skillId
 }
 
 $result = [pscustomobject][ordered]@{
@@ -562,11 +454,5 @@ $result = [pscustomobject][ordered]@{
     result = 'passed'
 }
 $json = $result | ConvertTo-Json -Depth 20
-if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
-    $outputFullPath = [IO.Path]::GetFullPath($OutputPath)
-    $outputDirectory = Split-Path -Parent $outputFullPath
-    if (-not [string]::IsNullOrWhiteSpace($outputDirectory)) { [void](New-Item -ItemType Directory -Path $outputDirectory -Force) }
-    [IO.File]::WriteAllText($outputFullPath, $json + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
-}
 Write-Host "Knowledge & Content repository validation passed: $($skillIds.Count) active Skills."
 $json

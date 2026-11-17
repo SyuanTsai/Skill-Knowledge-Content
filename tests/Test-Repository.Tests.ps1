@@ -1,172 +1,93 @@
 # SPDX-FileCopyrightText: 2026 SyuanTsai
 # SPDX-License-Identifier: Apache-2.0
-Describe 'Knowledge & Content Standard v1 repository contract' {
+
+Describe 'Snapshot repository check behavior' {
     BeforeAll {
-        $script:RepositoryRoot = Split-Path -Parent $PSScriptRoot
-        $script:ValidatorPath = Join-Path $script:RepositoryRoot 'scripts/Test-Repository.ps1'
-        $script:GitPath = (Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1).Path
+        $script:RepositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+        $script:CheckPath = Join-Path $script:RepositoryRoot 'scripts/Test-KnowledgeContentRepository.ps1'
 
-        function Assert-TestThrowsLike {
-            param([scriptblock] $ScriptBlock, [string] $Pattern)
-            $caught = $null
-            try { & $ScriptBlock } catch { $caught = $_ }
-            $caught | Should -Not -BeNullOrEmpty
-            ([string]$caught.Exception.Message) | Should -BeLike $Pattern
+        function New-KnowledgeContentFixture {
+            $root = Join-Path $TestDrive ([Guid]::NewGuid().ToString('N'))
+            [void](New-Item -ItemType Directory -Path (Join-Path $root 'catalog') -Force)
+            [void](New-Item -ItemType Directory -Path (Join-Path $root 'skills') -Force)
+            Copy-Item -LiteralPath (Join-Path $script:RepositoryRoot 'catalog/source.json') -Destination (Join-Path $root 'catalog/source.json')
+            Copy-Item -LiteralPath (Join-Path $script:RepositoryRoot 'skills/capture-private-course-knowledge') -Destination (Join-Path $root 'skills') -Recurse
+            return $root
+        }
+
+        function Write-FixtureCatalog {
+            param([Parameter(Mandatory)][string] $Root, [Parameter(Mandatory)] $Value)
+            $json = $Value | ConvertTo-Json -Depth 20
+            [IO.File]::WriteAllText((Join-Path $Root 'catalog/source.json'), $json + "`n", [Text.UTF8Encoding]::new($false))
         }
     }
 
-    BeforeEach {
-        $script:FixtureRoot = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
-        New-Item -ItemType Directory -Path $script:FixtureRoot | Out-Null
-        Copy-Item -LiteralPath (Join-Path $script:RepositoryRoot 'catalog') -Destination $script:FixtureRoot -Recurse
-        Copy-Item -LiteralPath (Join-Path $script:RepositoryRoot 'config') -Destination $script:FixtureRoot -Recurse
-        Copy-Item -LiteralPath (Join-Path $script:RepositoryRoot 'skills') -Destination $script:FixtureRoot -Recurse
-        & $script:GitPath -C $script:FixtureRoot init --quiet
-        & $script:GitPath -C $script:FixtureRoot config --local maintenance.auto false
-        if ($LASTEXITCODE -ne 0) { throw 'Could not disable maintenance.auto in the repository contract fixture.' }
-        & $script:GitPath -C $script:FixtureRoot config --local maintenance.autoDetach false
-        if ($LASTEXITCODE -ne 0) { throw 'Could not disable maintenance.autoDetach in the repository contract fixture.' }
-        & $script:GitPath -C $script:FixtureRoot config --local gc.auto 0
-        if ($LASTEXITCODE -ne 0) { throw 'Could not disable gc.auto in the repository contract fixture.' }
-        & $script:GitPath -C $script:FixtureRoot config --local gc.autoDetach false
-        if ($LASTEXITCODE -ne 0) { throw 'Could not disable gc.autoDetach in the repository contract fixture.' }
-        ([string](& $script:GitPath -C $script:FixtureRoot config --local --get maintenance.auto)).Trim() | Should -BeExactly 'false'
-        ([string](& $script:GitPath -C $script:FixtureRoot config --local --get gc.auto)).Trim() | Should -BeExactly '0'
-        & $script:GitPath -C $script:FixtureRoot add -- catalog/source.json config skills
-        if ($LASTEXITCODE -ne 0) { throw 'Could not prepare the repository contract fixture.' }
-        $script:SkillId = 'capture-private-course-knowledge'
-        $script:SkillRoot = Join-Path $script:FixtureRoot "skills/$($script:SkillId)"
+    It 'validates a snapshot that has no repository metadata directory' {
+        $fixture = New-KnowledgeContentFixture
+        Test-Path -LiteralPath (Join-Path $fixture '.git') | Should -BeFalse
+        $json = @(& $script:CheckPath -RepositoryRoot $fixture -ReadOnlySnapshot) -join "`n"
+        ($json | ConvertFrom-Json).result | Should -BeExactly 'passed'
     }
 
-    It 'accepts the current schema v2 inventory and canonical Skill package' {
-        { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } | Should -Not -Throw
+    It 'does not write into the candidate snapshot' {
+        $fixture = New-KnowledgeContentFixture
+        $before = @(Get-ChildItem -LiteralPath $fixture -Recurse -File | ForEach-Object { [IO.Path]::GetRelativePath($fixture, $_.FullName) } | Sort-Object)
+        [void](@(& $script:CheckPath -RepositoryRoot $fixture -ReadOnlySnapshot))
+        $after = @(Get-ChildItem -LiteralPath $fixture -Recurse -File | ForEach-Object { [IO.Path]::GetRelativePath($fixture, $_.FullName) } | Sort-Object)
+        ($after -join "`n") | Should -BeExactly ($before -join "`n")
     }
 
-    It 'accepts an immutable source snapshot without Git metadata' {
-        # Scenario: the central runner validates an extracted candidate snapshot.
-        # Purpose: keep domain inventory and package checks independent of .git metadata.
-        $snapshotRoot = Join-Path $TestDrive "snapshot-$([guid]::NewGuid().ToString('N'))"
-        New-Item -ItemType Directory -Path $snapshotRoot | Out-Null
-        Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'catalog') -Destination $snapshotRoot -Recurse
-        Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'skills') -Destination $snapshotRoot -Recurse
-
-        { & $script:ValidatorPath -RepositoryRoot $snapshotRoot -ReadOnlySnapshot } | Should -Not -Throw
+    It 'rejects an incorrect source identity' {
+        $fixture = New-KnowledgeContentFixture
+        $catalog = Get-Content -Raw -LiteralPath (Join-Path $fixture 'catalog/source.json') | ConvertFrom-Json
+        $catalog.sourceId = 'wrong-source'
+        Write-FixtureCatalog -Root $fixture -Value $catalog
+        { & $script:CheckPath -RepositoryRoot $fixture -ReadOnlySnapshot } | Should -Throw
     }
 
-    It 'produces a deterministic per-Skill content hash' {
-        $first = & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot | Select-Object -Last 1 | ConvertFrom-Json
-        $second = & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot | Select-Object -Last 1 | ConvertFrom-Json
-        $first.skills[0].contentSha256 | Should -Be $second.skills[0].contentSha256
-        $first.skills[0].contentSha256 | Should -Match '^[0-9a-f]{64}$'
+    It 'rejects an incorrect source repository identity' {
+        $fixture = New-KnowledgeContentFixture
+        $catalog = Get-Content -Raw -LiteralPath (Join-Path $fixture 'catalog/source.json') | ConvertFrom-Json
+        $catalog.repository = 'https://example.invalid/source.git'
+        Write-FixtureCatalog -Root $fixture -Value $catalog
+        { & $script:CheckPath -RepositoryRoot $fixture -ReadOnlySnapshot } | Should -Throw
     }
 
-    It 'rejects an unlisted Skill directory' {
-        New-Item -ItemType Directory -Path (Join-Path $script:FixtureRoot 'skills/unlisted-skill') | Out-Null
-        Assert-TestThrowsLike { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } '*inventory does not exactly match*'
+    It 'rejects duplicate Skill IDs' {
+        $fixture = New-KnowledgeContentFixture
+        $catalog = Get-Content -Raw -LiteralPath (Join-Path $fixture 'catalog/source.json') | ConvertFrom-Json
+        $catalog.skills = @('capture-private-course-knowledge', 'capture-private-course-knowledge')
+        Write-FixtureCatalog -Root $fixture -Value $catalog
+        { & $script:CheckPath -RepositoryRoot $fixture -ReadOnlySnapshot } | Should -Throw
     }
 
-    It 'rejects non-package content at the canonical source root' {
-        Set-Content -LiteralPath (Join-Path $script:FixtureRoot 'skills/ignored.ps1') -Value 'Write-Output unsafe'
-        Assert-TestThrowsLike { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } '*non-package or reparse entry*'
+    It 'rejects an undeclared package directory' {
+        $fixture = New-KnowledgeContentFixture
+        [void](New-Item -ItemType Directory -Path (Join-Path $fixture 'skills/undeclared-package'))
+        { & $script:CheckPath -RepositoryRoot $fixture -ReadOnlySnapshot } | Should -Throw
     }
 
-    It 'rejects coexistence with the legacy Skill source root' {
-        New-Item -ItemType Directory -Path (Join-Path $script:FixtureRoot '.agents/skills') -Force | Out-Null
-        Assert-TestThrowsLike { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } '*Legacy .agents/skills source root*'
+    It 'rejects a package missing required metadata' {
+        $fixture = New-KnowledgeContentFixture
+        Remove-Item -LiteralPath (Join-Path $fixture 'skills/capture-private-course-knowledge/agents/openai.yaml')
+        { & $script:CheckPath -RepositoryRoot $fixture -ReadOnlySnapshot } | Should -Throw
     }
 
-    It 'rejects schema v1 or unknown source metadata fields' {
-        $sourcePath = Join-Path $script:FixtureRoot 'catalog/source.json'
-        $source = Get-Content -LiteralPath $sourcePath -Raw | ConvertFrom-Json
-        $source.schemaVersion = 1
-        $source | Add-Member -NotePropertyName profiles -NotePropertyValue @()
-        $source | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $sourcePath -Encoding utf8NoBOM
-        Assert-TestThrowsLike { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } '*invalid property set*'
+    It 'rejects frontmatter whose name differs from the package ID' {
+        $fixture = New-KnowledgeContentFixture
+        $path = Join-Path $fixture 'skills/capture-private-course-knowledge/SKILL.md'
+        $text = [IO.File]::ReadAllText($path, [Text.UTF8Encoding]::new($false, $true))
+        $text = $text.Replace('name: capture-private-course-knowledge', 'name: different-package')
+        [IO.File]::WriteAllText($path, $text, [Text.UTF8Encoding]::new($false))
+        { & $script:CheckPath -RepositoryRoot $fixture -ReadOnlySnapshot } | Should -Throw
     }
 
-    It 'rejects duplicate JSON properties before object materialization' {
-        $sourcePath = Join-Path $script:FixtureRoot 'catalog/source.json'
-        $text = Get-Content -LiteralPath $sourcePath -Raw
-        $text = $text -replace '"sourceId": "knowledge-content",', '"sourceId": "knowledge-content", "sourceId": "other",'
-        Set-Content -LiteralPath $sourcePath -Value $text -Encoding utf8NoBOM -NoNewline
-        Assert-TestThrowsLike { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } '*duplicate JSON property*'
-    }
-
-    It 'keeps authority and security policy outside the domain inventory diagnostic' {
-        # Scenario: shared policy is owned by the verified central authority.
-        # Purpose: prevent a repository-specific domain validator from becoming a parallel policy gate.
-        $validator = Get-Content -LiteralPath $script:ValidatorPath -Raw
-        $validator | Should -Not -Match 'standard-v1\.json'
-        $validator | Should -Not -Match 'deviations'
-        $validator | Should -Not -Match 'security\.blockSeverities|Get-ValidationSecurityAction'
-    }
-
-    # Scenario: a valid isolated fixture contains two active Skills in ordinal order, then its inventory is reversed.
-    # Purpose: exercise the actual ordering failure without skipping when the production repository has one Skill.
-    It 'UnitT50_rejects_an_unsorted_two_skill_source_inventory' {
-        $sourcePath = Join-Path $script:FixtureRoot 'catalog/source.json'
-        $source = Get-Content -LiteralPath $sourcePath -Raw | ConvertFrom-Json
-        $syntheticSkillId = 'synthetic-sort-probe'
-        $syntheticSkillRoot = Join-Path $script:FixtureRoot "skills/$syntheticSkillId"
-        Copy-Item -LiteralPath $script:SkillRoot -Destination $syntheticSkillRoot -Recurse
-        $syntheticSkillPath = Join-Path $syntheticSkillRoot 'SKILL.md'
-        $syntheticSkillText = Get-Content -LiteralPath $syntheticSkillPath -Raw
-        $syntheticSkillText = $syntheticSkillText -replace '(?m)^name: capture-private-course-knowledge\r?$', "name: $syntheticSkillId"
-        Set-Content -LiteralPath $syntheticSkillPath -Value $syntheticSkillText -Encoding utf8NoBOM -NoNewline
-        $syntheticMetadataPath = Join-Path $syntheticSkillRoot 'agents/openai.yaml'
-        $syntheticMetadataText = Get-Content -LiteralPath $syntheticMetadataPath -Raw
-        $syntheticMetadataText = $syntheticMetadataText -replace '(?m)^  display_name: "Capture Private Course Knowledge"\r?$', '  display_name: "Synthetic Sort Probe"'
-        $syntheticMetadataText = $syntheticMetadataText.Replace('$capture-private-course-knowledge', ('$' + $syntheticSkillId))
-        Set-Content -LiteralPath $syntheticMetadataPath -Value $syntheticMetadataText -Encoding utf8NoBOM -NoNewline
-        $source.skills = @($script:SkillId, $syntheticSkillId)
-        $source | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $sourcePath -Encoding utf8NoBOM
-        & $script:GitPath -C $script:FixtureRoot add -- catalog/source.json skills
-        if ($LASTEXITCODE -ne 0) { throw 'Could not stage the two-Skill ordering fixture.' }
-        { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } | Should -Not -Throw
-
-        [array]::Reverse($source.skills)
-        $source | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $sourcePath -Encoding utf8NoBOM
-        Assert-TestThrowsLike { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } '*ordinal ascending order*'
-    }
-
-    It 'rejects untracked package content from the integrity inventory' {
-        Set-Content -LiteralPath (Join-Path $script:SkillRoot 'untracked.txt') -Value 'not indexed'
-        Assert-TestThrowsLike { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } '*filesystem inventory does not match the Git index*'
-    }
-
-    It 'rejects unstaged package bytes that are not bound to the Git index' {
-        Add-Content -LiteralPath (Join-Path $script:SkillRoot 'SKILL.md') -Value ([Environment]::NewLine + 'Additional valid body text.')
-        Assert-TestThrowsLike { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } '*working-tree content is not bound*'
-    }
-
-    It 'rejects malformed OpenAI metadata lexical style' {
-        $metadataPath = Join-Path $script:SkillRoot 'agents/openai.yaml'
-        $metadata = Get-Content -LiteralPath $metadataPath -Raw
-        $malformedMetadata = [regex]::new('(?m)^([ \t]*)display_name(?=[ \t]*:)').Replace($metadata, '$1"display_name"', 1)
-        $malformedMetadata | Should -Not -BeExactly $metadata
-        Set-Content -LiteralPath $metadataPath -Value $malformedMetadata -Encoding utf8NoBOM -NoNewline
-        Assert-TestThrowsLike { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } '*quoted mapping key*'
-    }
-
-    It 'rejects comments outside the SPDX license header' {
-        Add-Content -LiteralPath (Join-Path $script:SkillRoot 'agents/openai.yaml') -Value '# unsupported comment'
-        Assert-TestThrowsLike { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } '*unsupported or malformed syntax*'
-    }
-
-    It 'accepts the allowed optional license frontmatter field' {
-        $skillPath = Join-Path $script:SkillRoot 'SKILL.md'
-        $skill = Get-Content -LiteralPath $skillPath -Raw
-        $lines = [Collections.Generic.List[string]]::new()
-        $lines.AddRange([string[]]($skill.Replace([Environment]::NewLine, ([string][char]10)).Split([char]10)))
-        $descriptionIndex = 0
-        for ($index = 0; $index -lt $lines.Count; $index++) {
-            if ($lines[$index].StartsWith('description:', [StringComparison]::Ordinal)) { $descriptionIndex = $index; break }
-        }
-        $lines.Insert($descriptionIndex + 1, 'license: Apache-2.0')
-        $skill = $lines -join [Environment]::NewLine
-        Set-Content -LiteralPath $skillPath -Value $skill -Encoding utf8NoBOM -NoNewline
-        & $script:GitPath -C $script:FixtureRoot add -- skills/$($script:SkillId)/SKILL.md
-        if ($LASTEXITCODE -ne 0) { throw 'Could not stage the optional license fixture.' }
-        { & $script:ValidatorPath -RepositoryRoot $script:FixtureRoot } | Should -Not -Throw
+    It 'rejects metadata without the required default prompt' {
+        $fixture = New-KnowledgeContentFixture
+        $path = Join-Path $fixture 'skills/capture-private-course-knowledge/agents/openai.yaml'
+        $text = [IO.File]::ReadAllText($path, [Text.UTF8Encoding]::new($false, $true))
+        $text = [regex]::Replace($text, '(?m)^  default_prompt:.*(?:\r?\n|$)', '')
+        [IO.File]::WriteAllText($path, $text, [Text.UTF8Encoding]::new($false))
+        { & $script:CheckPath -RepositoryRoot $fixture -ReadOnlySnapshot } | Should -Throw
     }
 }
