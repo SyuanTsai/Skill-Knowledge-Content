@@ -19,9 +19,10 @@ Describe 'Knowledge Content repository report' {
     It 'reports every package file in ordinal order' {
         foreach ($package in @($script:Result.skills)) {
             $skillRoot = Join-Path $script:RepositoryRoot ('skills/' + [string]$package.skillId)
-            $actual = @(Get-ChildItem -LiteralPath $skillRoot -Recurse -File -Force | ForEach-Object {
+            [string[]]$actual = @(Get-ChildItem -LiteralPath $skillRoot -Recurse -File -Force | ForEach-Object {
                     [IO.Path]::GetRelativePath($skillRoot, $_.FullName).Replace('\', '/')
-                } | Sort-Object -CaseSensitive)
+                })
+            [Array]::Sort($actual, [StringComparer]::Ordinal)
             (@($package.files.path) -join "`n") | Should -BeExactly ($actual -join "`n")
         }
     }

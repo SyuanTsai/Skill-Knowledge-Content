@@ -16,14 +16,17 @@ Describe 'Knowledge Content package conformance' {
 
     It 'keeps the declared Skill IDs unique and ordinally sorted' {
         @($script:Source.skills | Sort-Object -Unique) | Should -HaveCount @($script:Source.skills).Count
-        (@($script:Source.skills) -join "`n") | Should -BeExactly (@($script:Source.skills | Sort-Object -CaseSensitive) -join "`n")
+        [string[]]$sortedSkillIds = @($script:Source.skills)
+        [Array]::Sort($sortedSkillIds, [StringComparer]::Ordinal)
+        (@($script:Source.skills) -join "`n") | Should -BeExactly ($sortedSkillIds -join "`n")
         foreach ($skillId in @($script:Source.skills)) {
-            [string]$skillId | Should -Match '^[a-z0-9]+(?:-[a-z0-9]+)*$'
+            ([string]$skillId -cmatch '^[a-z0-9]+(?:-[a-z0-9]+)*$') | Should -BeTrue
         }
     }
 
     It 'matches the source inventory to the package directories' {
-        $actual = @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot 'skills') -Directory -Force | ForEach-Object Name | Sort-Object -CaseSensitive)
+        [string[]]$actual = @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot 'skills') -Directory -Force | ForEach-Object Name)
+        [Array]::Sort($actual, [StringComparer]::Ordinal)
         ($actual -join "`n") | Should -BeExactly (@($script:Source.skills) -join "`n")
     }
 
@@ -38,7 +41,7 @@ Describe 'Knowledge Content package conformance' {
     It 'binds each Skill frontmatter name to its package ID' {
         foreach ($skillId in @($script:Source.skills)) {
             $text = [IO.File]::ReadAllText((Join-Path $script:RepositoryRoot ('skills/' + [string]$skillId + '/SKILL.md')), [Text.UTF8Encoding]::new($false, $true)).Replace("`r`n", "`n")
-            $text | Should -Match '(?s)\A---\n.*?\n---\n\S'
+            ($text -cmatch '(?s)\A---\n(?<frontmatter>.*?)\n---\n(?<body>.*)\z') | Should -BeTrue
             $nameLine = @($text.Split("`n") | Where-Object { $_ -cmatch '^name:\s+' })
             $nameLine | Should -HaveCount 1
             $nameLine[0].Substring(5).Trim() | Should -BeExactly ([string]$skillId)
@@ -48,10 +51,10 @@ Describe 'Knowledge Content package conformance' {
     It 'provides the required quoted interface metadata' {
         foreach ($skillId in @($script:Source.skills)) {
             $text = [IO.File]::ReadAllText((Join-Path $script:RepositoryRoot ('skills/' + [string]$skillId + '/agents/openai.yaml')), [Text.UTF8Encoding]::new($false, $true))
-            $text | Should -Match '(?m)^interface:$'
-            $text | Should -Match '(?m)^  display_name: "[^"\r\n]+"$'
-            $text | Should -Match '(?m)^  short_description: "[^"\r\n]+"$'
-            $text | Should -Match '(?m)^  default_prompt: "[^"\r\n]+"$'
+            ($text -cmatch '(?m)^interface:$') | Should -BeTrue
+            ($text -cmatch '(?m)^  display_name: "[^"\r\n]+"$') | Should -BeTrue
+            ($text -cmatch '(?m)^  short_description: "[^"\r\n]+"$') | Should -BeTrue
+            ($text -cmatch '(?m)^  default_prompt: "[^"\r\n]+"$') | Should -BeTrue
         }
     }
 }
