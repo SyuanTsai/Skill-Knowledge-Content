@@ -123,23 +123,34 @@ BeforeAll {
         if ($annotations.Count -eq 0) { throw 'REUSE annotations are missing.' }
         return @($annotations)
     }
+
+    function Get-RepositoryFiles {
+        param([Parameter(Mandatory)][string] $RepositoryRoot)
+
+        return @(Get-ChildItem -LiteralPath $RepositoryRoot -Recurse -File -Force | ForEach-Object {
+                $relativePath = [IO.Path]::GetRelativePath($RepositoryRoot, $_.FullName).Replace('\', '/')
+                if (-not $relativePath.StartsWith('.git/', [StringComparison]::Ordinal)) {
+                    [pscustomobject]@{ FullName = $_.FullName; RelativePath = $relativePath }
+                }
+            })
+    }
 }
 
 Describe 'Consumer repository layout' {
     It 'contains only the repository check and authority bootstrap under scripts' {
-        $actual = @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot 'scripts') -File | ForEach-Object Name | Sort-Object -CaseSensitive)
+        $actual = @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot 'scripts') -File -Force | ForEach-Object Name | Sort-Object -CaseSensitive)
         $expected = @('Invoke-PinnedAuthority.ps1', 'Test-KnowledgeContentRepository.ps1')
         ($actual -join "`n") | Should -BeExactly ($expected -join "`n")
     }
 
     It 'contains exactly the consumer workflow pair' {
-        $actual = @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot '.github/workflows') -File | ForEach-Object Name | Sort-Object -CaseSensitive)
+        $actual = @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot '.github/workflows') -File -Force | ForEach-Object Name | Sort-Object -CaseSensitive)
         $expected = @('consumer-gate-transition.yml', 'consumer-gate.yml')
         ($actual -join "`n") | Should -BeExactly ($expected -join "`n")
     }
 
     It 'contains only consumer configuration files' {
-        $actual = @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot 'config') -File | ForEach-Object Name | Sort-Object -CaseSensitive)
+        $actual = @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot 'config') -File -Force | ForEach-Object Name | Sort-Object -CaseSensitive)
         $expected = @('authority-pin.json', 'consumer-gate.json')
         ($actual -join "`n") | Should -BeExactly ($expected -join "`n")
     }
@@ -154,7 +165,7 @@ Describe 'Consumer repository layout' {
 
 Describe 'REUSE annotation contract' {
     It 'keeps every Skill manifest free of inline SPDX comments' {
-        $manifests = @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot 'skills') -Filter 'SKILL.md' -File -Recurse)
+        $manifests = @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot 'skills') -Filter 'SKILL.md' -File -Recurse -Force)
         $manifests.Count | Should -BeGreaterThan 0
         foreach ($manifest in $manifests) {
             $content = Get-Content -Raw -LiteralPath $manifest.FullName
@@ -165,15 +176,13 @@ Describe 'REUSE annotation contract' {
 
     It 'provides one exact annotation for every protected file without an inline header' {
         $annotations = @(Read-TestReuseAnnotations -LiteralPath (Join-Path $script:RepositoryRoot 'REUSE.toml'))
-        $allFiles = @(Get-ChildItem -LiteralPath $script:RepositoryRoot -Recurse -File | ForEach-Object {
-                [IO.Path]::GetRelativePath($script:RepositoryRoot, $_.FullName).Replace([IO.Path]::DirectorySeparatorChar, '/')
-            })
+        $allFiles = @(Get-RepositoryFiles -RepositoryRoot $script:RepositoryRoot | ForEach-Object RelativePath)
         foreach ($annotation in $annotations) {
             $pattern = [Management.Automation.WildcardPattern]::new($annotation.path, [Management.Automation.WildcardOptions]::CultureInvariant)
             @($allFiles | Where-Object { $pattern.IsMatch($_) }).Count | Should -BeGreaterThan 0
         }
         $protected = @('catalog/source.json', 'config/authority-pin.json', 'config/consumer-gate.json', '.github/workflows/consumer-gate.yml', '.github/workflows/consumer-gate-transition.yml')
-        $protected += @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot 'skills') -Filter 'SKILL.md' -File -Recurse | ForEach-Object {
+        $protected += @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot 'skills') -Filter 'SKILL.md' -File -Recurse -Force | ForEach-Object {
                 [IO.Path]::GetRelativePath($script:RepositoryRoot, $_.FullName).Replace([IO.Path]::DirectorySeparatorChar, '/')
             })
         foreach ($path in $protected) {
@@ -196,7 +205,7 @@ Describe 'REUSE annotation contract' {
     }
 
     It 'requires both fields in every inline SPDX header' {
-        foreach ($file in Get-ChildItem -LiteralPath $script:RepositoryRoot -Recurse -File) {
+        foreach ($file in Get-RepositoryFiles -RepositoryRoot $script:RepositoryRoot) {
             $content = Get-Content -Raw -LiteralPath $file.FullName
             $hasCopyright = $content.Contains('SPDX-FileCopyrightText', [StringComparison]::Ordinal)
             $hasLicense = $content.Contains('SPDX-License-Identifier', [StringComparison]::Ordinal)
@@ -205,6 +214,22 @@ Describe 'REUSE annotation contract' {
                 $hasLicense | Should -BeTrue
             }
         }
+    }
+
+    It 'enumerates hidden repository entries while excluding repository metadata' {
+        $fixture = Join-Path $TestDrive ([Guid]::NewGuid().ToString('N'))
+        [void](New-Item -ItemType Directory -Path (Join-Path $fixture '.hidden-dir') -Force)
+        [void](New-Item -ItemType Directory -Path (Join-Path $fixture '.git') -Force)
+        [IO.File]::WriteAllText((Join-Path $fixture '.hidden-dir/file.yml'), 'hidden', [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText((Join-Path $fixture 'ordinary.txt'), 'ordinary', [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText((Join-Path $fixture '.git/ignored.yml'), 'metadata', [Text.UTF8Encoding]::new($false))
+        $fixtureFiles = @(Get-RepositoryFiles -RepositoryRoot $fixture | ForEach-Object RelativePath)
+        $fixtureFiles | Should -Contain '.hidden-dir/file.yml'
+        $fixtureFiles | Should -Contain 'ordinary.txt'
+        $fixtureFiles | Should -Not -Contain '.git/ignored.yml'
+        $repositoryFiles = @(Get-RepositoryFiles -RepositoryRoot $script:RepositoryRoot | ForEach-Object RelativePath)
+        $repositoryFiles | Should -Contain '.github/workflows/consumer-gate.yml'
+        $repositoryFiles | Should -Contain '.github/workflows/consumer-gate-transition.yml'
     }
 
     It 'rejects an annotation missing one required line' {

@@ -31,9 +31,9 @@ Describe 'Snapshot repository check behavior' {
 
     It 'does not write into the candidate snapshot' {
         $fixture = New-KnowledgeContentFixture
-        $before = @(Get-ChildItem -LiteralPath $fixture -Recurse -File | ForEach-Object { [IO.Path]::GetRelativePath($fixture, $_.FullName) } | Sort-Object)
+        $before = @(Get-ChildItem -LiteralPath $fixture -Recurse -File -Force | ForEach-Object { [IO.Path]::GetRelativePath($fixture, $_.FullName).Replace('\', '/') } | Sort-Object)
         [void](@(& $script:CheckPath -RepositoryRoot $fixture -ReadOnlySnapshot))
-        $after = @(Get-ChildItem -LiteralPath $fixture -Recurse -File | ForEach-Object { [IO.Path]::GetRelativePath($fixture, $_.FullName) } | Sort-Object)
+        $after = @(Get-ChildItem -LiteralPath $fixture -Recurse -File -Force | ForEach-Object { [IO.Path]::GetRelativePath($fixture, $_.FullName).Replace('\', '/') } | Sort-Object)
         ($after -join "`n") | Should -BeExactly ($before -join "`n")
     }
 

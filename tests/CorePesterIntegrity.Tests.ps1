@@ -4,7 +4,7 @@
 Describe 'Complete repository test suite integrity' {
     BeforeAll {
         $script:RepositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-        $script:TestFiles = @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot 'tests') -Filter '*.Tests.ps1' -File | Sort-Object Name)
+        $script:TestFiles = @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot 'tests') -Filter '*.Tests.ps1' -File -Force | Sort-Object Name)
     }
 
     It 'contains only parseable PowerShell test files' {
