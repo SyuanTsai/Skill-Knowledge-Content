@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 $ErrorActionPreference = 'Stop'
 
-# 改寫任何政策句時，必須同步更新本清單；本測試刻意逐字比對。
+# Policy text is intentionally literal. Update these cases with any deliberate policy rewrite.
 $requiredPolicyText = @(
     @{ Path = 'skills/capture-private-course-knowledge/SKILL.md'; Text = 'Work only with content the user provides or can access through an authorized session.' },
     @{ Path = 'skills/capture-private-course-knowledge/SKILL.md'; Text = 'Never request, inspect, extract, or store passwords, cookies, tokens, browser storage, or session data.' },
@@ -18,316 +18,43 @@ $requiredPolicyText = @(
     @{ Path = 'skills/capture-private-course-knowledge/agents/openai.yaml'; Text = 'short_description: "Unify course videos, PDFs, code, recall, and exports"' },
     @{ Path = 'skills/capture-private-course-knowledge/agents/openai.yaml'; Text = 'default_prompt: "Use $capture-private-course-knowledge to capture this authorized course across videos, PDFs, slides, code, and attachments as evidence-linked notes, then create the requested NotebookLM sources or website article. Preserve cross-platform course commands as source evidence."' },
     @{ Path = 'README.md'; Text = "The Skill instructions are host-neutral: local Agent work runs on the user's current Windows, Linux, or macOS host. When a required local tool is unavailable, the Skill reports the gap and marks the affected work partial or draft instead of switching to another host, VM, WSL, or container. Authorized SaaS, browser, and API services remain in scope when the user permits them; cross-platform course code and commands remain source evidence." },
-    @{ Path = 'README.md'; Text = 'Canonical repository validation runs on GitHub Actions as three parallel matrix legs, `windows-latest` (x64), `ubuntu-latest` (x64), and `macos-latest` (arm64), then aggregates all three receipts on Ubuntu and runs the required status mirrors on Ubuntu. These legs validate the repository contract and regression suite on each platform; they are not end-to-end course-capture acceptance runs.' },
-    @{ Path = 'RELEASING.md'; Text = 'Local Agent development may run on Windows, Linux, or macOS hosts. Canonical CI runs parallel `windows-latest` (x64), `ubuntu-latest` (x64), and `macos-latest` (arm64) validation legs, aggregates all three receipts on Ubuntu, and hosts the three required status mirrors on Ubuntu. A release requires all three legs and the aggregate to pass.' },
     @{ Path = 'skills/capture-private-course-knowledge/SKILL.md'; Text = 'If no safe, approved destination is available, stop before persistence and explain the blocker.' },
     @{ Path = 'skills/capture-private-course-knowledge/SKILL.md'; Text = 'When a no-caption video, including one that requires unavailable audio, a scanned PDF, or a protected document cannot be processed with available authorized tools, mark the affected range inaccessible and preserve partial coverage accurately.' },
     @{ Path = 'skills/capture-private-course-knowledge/SKILL.md'; Text = 'If a public output cannot exclude private or unlicensed material, stop before persistence or publication and explain the blocker.' }
 )
 
-$forbiddenText = @(
-    'Use Windows as the only host for local development, installation, execution, testing, acceptance, and CI. Do not use Linux, macOS, WSL, or Linux containers as host fallbacks. Authorized SaaS, browser, and API services remain available for course capture. Preserve cross-platform code and commands found in course materials as source evidence; their presence does not change the local host requirement.',
-    'If authentication, MFA, or CAPTCHA blocks access, stop and request only the minimum user action needed to restore the authorized session.',
-    'If every authorized route to a required material fails, stop and report the exact material and access gap instead of substituting public or inferred content.',
-    'If the only remaining route would bypass protections, stop and explain the blocker.',
-    'If private material would leave the current environment through transcription, OCR, vision, storage, or another external service, obtain explicit approval before sending it.',
-    'Expected workflow:',
-    'Create and process local note files on Windows. Preserve course-supplied commands with their source platform as evidence; do not run them by switching the local host to Linux, macOS, WSL, or a Linux container. Authorized SaaS, browser, and API services remain available when the user permits them.',
-    'Generate local export files and run local preparation tools on Windows only. Use authorized Google Drive, NotebookLM, browser, or API services as SaaS destinations; do not use Linux, macOS, WSL, or Linux containers as local-host fallbacks. Retain platform-specific course commands in the export as source evidence rather than executing them as host setup.',
-    'Run local extraction, rendering, and OCR with Windows-native tools. If a needed tool is unavailable, report the tooling gap and mark the work partial or draft; do not switch to Linux, macOS, WSL, or Linux containers. Authorized SaaS/browser/API services remain in scope when the user permits their use, and cross-platform commands printed in the PDF remain source evidence.',
-    'Keep local research, editing, validation, and site builds on Windows. Use the site''s authorized SaaS/browser/API services as needed, and preserve cross-platform course code and commands as source evidence. Use the site''s documented native Windows toolchain; if it is unavailable, report the gap and keep the article draft instead of switching to Linux, macOS, WSL, or Linux containers.',
-    'Run local media inspection, transcription, and note preparation on Windows with Windows-native tools. Authorized course SaaS, browser playback, and API routes remain available; if a required local tool is unavailable, report the limitation or use an authorized service instead of switching to Linux, macOS, WSL, or Linux containers. Keep platform-specific code and commands shown in the course as source evidence.',
-    'Local Agent development, installation, execution, testing, and acceptance remain Windows-hosted. Canonical repository validation is the required exception: GitHub Actions runs Windows, Linux, and macOS matrix legs, aggregates them on Ubuntu, and runs the required status mirrors on Ubuntu. Authorized SaaS, browser, and API services remain in scope; cross-platform course code and commands remain source evidence.',
-    'Local Agent development remains Windows-hosted. Canonical CI is the required exception: it runs parallel `windows-latest`, `ubuntu-latest`, and `macos-latest` validation legs, aggregates all three receipts on Ubuntu, and hosts the three required status mirrors on Ubuntu.',
-    'display_name: "Capture Private Course Knowledge (Windows)"',
-    'short_description: "Windows-only: unify videos, PDFs, code, recall, and exports"',
-    'default_prompt: "Use $capture-private-course-knowledge on Windows to capture this authorized course across videos, PDFs, slides, code, and attachments as evidence-linked notes, then create the requested NotebookLM sources or website article. Preserve cross-platform course commands as source evidence."',
-    'Windows-only',
-    'Windows-hosted',
-    '(Windows)',
-    'on Windows',
-    'If a no-caption video, scanned PDF, or protected document cannot be processed with available authorized tools, including when a no-caption video requires unavailable audio, mark the affected range inaccessible and preserve partial coverage accurately.',
-    'If durable recall has no safe, approved destination, stop before persistence and explain the blocker.',
-    'If public output cannot avoid private or unlicensed material, stop before persistence or publication and explain the blocker.'
-)
-
-$forbiddenTextPaths = @{
-    $forbiddenText[0] = @('skills/capture-private-course-knowledge/SKILL.md')
-    $forbiddenText[1] = @('skills/capture-private-course-knowledge/SKILL.md')
-    $forbiddenText[2] = @('skills/capture-private-course-knowledge/SKILL.md')
-    $forbiddenText[3] = @('skills/capture-private-course-knowledge/SKILL.md')
-    $forbiddenText[4] = @('skills/capture-private-course-knowledge/SKILL.md')
-    $forbiddenText[5] = @('skills/capture-private-course-knowledge/SKILL.md')
-    $forbiddenText[6] = @('skills/capture-private-course-knowledge/references/course-notes-format.md')
-    $forbiddenText[7] = @('skills/capture-private-course-knowledge/references/notebooklm-export.md')
-    $forbiddenText[8] = @('skills/capture-private-course-knowledge/references/pdf-material-capture.md')
-    $forbiddenText[9] = @('skills/capture-private-course-knowledge/references/syuantsai-github-article.md')
-    $forbiddenText[10] = @('skills/capture-private-course-knowledge/references/video-capture.md')
-    $forbiddenText[11] = @('README.md')
-    $forbiddenText[12] = @('RELEASING.md')
-    $forbiddenText[13] = @('skills/capture-private-course-knowledge/agents/openai.yaml')
-    $forbiddenText[14] = @('skills/capture-private-course-knowledge/agents/openai.yaml')
-    $forbiddenText[15] = @('skills/capture-private-course-knowledge/agents/openai.yaml')
-    $forbiddenText[16] = @('skills/capture-private-course-knowledge/SKILL.md', 'skills/capture-private-course-knowledge/agents/openai.yaml')
-    $forbiddenText[17] = @('README.md', 'RELEASING.md')
-    $forbiddenText[18] = @('skills/capture-private-course-knowledge/agents/openai.yaml')
-    $forbiddenText[19] = @('skills/capture-private-course-knowledge/agents/openai.yaml')
-    $forbiddenText[20] = @('skills/capture-private-course-knowledge/SKILL.md')
-    $forbiddenText[21] = @('skills/capture-private-course-knowledge/SKILL.md')
-    $forbiddenText[22] = @('skills/capture-private-course-knowledge/SKILL.md')
-}
-$reuseSkillAnnotationText = @'
-[[annotations]]
-path = "skills/**/SKILL.md"
-precedence = "aggregate"
-SPDX-FileCopyrightText = "2026 SyuanTsai"
-SPDX-License-Identifier = "Apache-2.0"
-'@
 $forbiddenPolicyCases = @(
-    for ($index = 0; $index -lt $forbiddenText.Count; $index++) {
-        @{
-            CaseIndex = $index
-            ForbiddenText = $forbiddenText[$index]
-            Paths = @($forbiddenTextPaths[$forbiddenText[$index]])
-        }
-    }
-)
-$forbiddenCoverageCases = @(
-    @{ ComparedCount = $forbiddenPolicyCases.Count; ExpectedCount = $forbiddenText.Count; CaseId = 1 }
-)
-$reuseAnnotationCases = @(
-    @{ ReuseAnnotationText = $reuseSkillAnnotationText; CaseId = 1 }
-)
-$requiredCaseSensitivityCases = @(
-    @{ RequiredText = $requiredPolicyText[0].Text; CaseId = 1 }
-)
-$forbiddenCaseSensitivityCases = @(
-    @{ ForbiddenText = $forbiddenText[16]; CaseId = 1 }
-)
-$forEachExpandedNameGateCases = @(
-    @{ IsValid = $false; Errors = @('The discovery check has not run.'); CheckedCommandCount = 0; ExpandedNameCount = 0; CaseId = 1 }
-)
-$forEachExpandedNameFixtureCases = @(
-    @{ Fixture = 'duplicate expanded name'; IsValid = $true; Errors = @(); CheckedCommandCount = 0; ExpandedNameCount = 0; ExpectedErrorPattern = 'duplicate expanded It name'; CaseId = 1 },
-    @{ Fixture = 'non-variable data source'; IsValid = $true; Errors = @(); CheckedCommandCount = 0; ExpandedNameCount = 0; ExpectedErrorPattern = 'simple variable reference'; CaseId = 2 }
+    @{ Paths = @('skills/capture-private-course-knowledge/SKILL.md'); Text = 'Use Windows as the only host for local development, installation, execution, testing, acceptance, and CI. Do not use Linux, macOS, WSL, or Linux containers as host fallbacks. Authorized SaaS, browser, and API services remain available for course capture. Preserve cross-platform code and commands found in course materials as source evidence; their presence does not change the local host requirement.' },
+    @{ Paths = @('skills/capture-private-course-knowledge/SKILL.md'); Text = 'If authentication, MFA, or CAPTCHA blocks access, stop and request only the minimum user action needed to restore the authorized session.' },
+    @{ Paths = @('skills/capture-private-course-knowledge/SKILL.md'); Text = 'If every authorized route to a required material fails, stop and report the exact material and access gap instead of substituting public or inferred content.' },
+    @{ Paths = @('skills/capture-private-course-knowledge/SKILL.md'); Text = 'If the only remaining route would bypass protections, stop and explain the blocker.' },
+    @{ Paths = @('skills/capture-private-course-knowledge/SKILL.md'); Text = 'If private material would leave the current environment through transcription, OCR, vision, storage, or another external service, obtain explicit approval before sending it.' },
+    @{ Paths = @('skills/capture-private-course-knowledge/SKILL.md'); Text = 'Expected workflow:' },
+    @{ Paths = @('skills/capture-private-course-knowledge/references/course-notes-format.md'); Text = 'Create and process local note files on Windows. Preserve course-supplied commands with their source platform as evidence; do not run them by switching the local host to Linux, macOS, WSL, or a Linux container. Authorized SaaS, browser, and API services remain available when the user permits them.' },
+    @{ Paths = @('skills/capture-private-course-knowledge/references/notebooklm-export.md'); Text = 'Generate local export files and run local preparation tools on Windows only. Use authorized Google Drive, NotebookLM, browser, or API services as SaaS destinations; do not use Linux, macOS, WSL, or Linux containers as local-host fallbacks. Retain platform-specific course commands in the export as source evidence rather than executing them as host setup.' },
+    @{ Paths = @('skills/capture-private-course-knowledge/references/pdf-material-capture.md'); Text = 'Run local extraction, rendering, and OCR with Windows-native tools. If a needed tool is unavailable, report the tooling gap and mark the work partial or draft; do not switch to Linux, macOS, WSL, or Linux containers. Authorized SaaS/browser/API services remain in scope when the user permits their use, and cross-platform commands printed in the PDF remain source evidence.' },
+    @{ Paths = @('skills/capture-private-course-knowledge/references/syuantsai-github-article.md'); Text = "Keep local research, editing, validation, and site builds on Windows. Use the site's authorized SaaS/browser/API services as needed, and preserve cross-platform course code and commands as source evidence. Use the site's documented native Windows toolchain; if it is unavailable, report the gap and keep the article draft instead of switching to Linux, macOS, WSL, or Linux containers." },
+    @{ Paths = @('skills/capture-private-course-knowledge/references/video-capture.md'); Text = 'Run local media inspection, transcription, and note preparation on Windows with Windows-native tools. Authorized course SaaS, browser playback, and API routes remain available; if a required local tool is unavailable, report the limitation or use an authorized service instead of switching to Linux, macOS, WSL, or Linux containers. Keep platform-specific code and commands shown in the course as source evidence.' },
+    @{ Paths = @('skills/capture-private-course-knowledge/agents/openai.yaml'); Text = 'display_name: "Capture Private Course Knowledge (Windows)"' },
+    @{ Paths = @('skills/capture-private-course-knowledge/agents/openai.yaml'); Text = 'short_description: "Windows-only: unify videos, PDFs, code, recall, and exports"' },
+    @{ Paths = @('skills/capture-private-course-knowledge/agents/openai.yaml'); Text = 'default_prompt: "Use $capture-private-course-knowledge on Windows to capture this authorized course across videos, PDFs, slides, code, and attachments as evidence-linked notes, then create the requested NotebookLM sources or website article. Preserve cross-platform course commands as source evidence."' },
+    @{ Paths = @('skills/capture-private-course-knowledge/SKILL.md', 'skills/capture-private-course-knowledge/agents/openai.yaml'); Text = 'Windows-only' },
+    @{ Paths = @('skills/capture-private-course-knowledge/agents/openai.yaml'); Text = '(Windows)' },
+    @{ Paths = @('skills/capture-private-course-knowledge/agents/openai.yaml'); Text = 'on Windows' },
+    @{ Paths = @('skills/capture-private-course-knowledge/SKILL.md'); Text = 'If a no-caption video, scanned PDF, or protected document cannot be processed with available authorized tools, including when a no-caption video requires unavailable audio, mark the affected range inaccessible and preserve partial coverage accurately.' },
+    @{ Paths = @('skills/capture-private-course-knowledge/SKILL.md'); Text = 'If durable recall has no safe, approved destination, stop before persistence and explain the blocker.' },
+    @{ Paths = @('skills/capture-private-course-knowledge/SKILL.md'); Text = 'If public output cannot avoid private or unlicensed material, stop before persistence or publication and explain the blocker.' }
 )
 
-for ($index = 0; $index -lt $requiredPolicyText.Count; $index++) {
-    $requiredPolicyText[$index].CaseId = $index + 1
-}
-function Test-ForEachExpandedNameUniqueness {
-    [CmdletBinding(DefaultParameterSetName = 'File')]
-    param(
-        [Parameter(Mandatory, ParameterSetName = 'File')][string] $LiteralPath,
-        [Parameter(Mandatory, ParameterSetName = 'Source')][string] $SourceText,
-        [System.Collections.IDictionary] $VariableValues
-    )
-
-    $tokens = $null
-    $parseErrors = $null
-    if ($PSCmdlet.ParameterSetName -eq 'File') {
-        $syntaxTree = [System.Management.Automation.Language.Parser]::ParseFile(
-            $LiteralPath,
-            [ref] $tokens,
-            [ref] $parseErrors
-        )
-    }
-    else {
-        $syntaxTree = [System.Management.Automation.Language.Parser]::ParseInput(
-            $SourceText,
-            [ref] $tokens,
-            [ref] $parseErrors
-        )
-    }
-    $errors = [System.Collections.Generic.List[string]]::new()
-    foreach ($parseError in $parseErrors) {
-        $errors.Add("Line $($parseError.Extent.StartLineNumber): parser error: $($parseError.Message)")
-    }
-
-    $commands = @($syntaxTree.FindAll({
-                param($node)
-                if ($node -isnot [System.Management.Automation.Language.CommandAst] -or
-                    $node.GetCommandName() -ine 'It') {
-                    return $false
-                }
-                return $null -ne ($node.CommandElements | Where-Object {
-                        $_ -is [System.Management.Automation.Language.CommandParameterAst] -and
-                        $_.ParameterName -iin @('ForEach', 'TestCases')
-                    } | Select-Object -First 1)
-            }, $true))
-    $expandedNameCount = 0
-
-    foreach ($command in $commands) {
-        $lineNumber = $command.Extent.StartLineNumber
-        $nameAst = $null
-        $dataAst = $null
-        $positionalArguments = [System.Collections.Generic.List[object]]::new()
-
-        for ($index = 1; $index -lt $command.CommandElements.Count; $index++) {
-            $element = $command.CommandElements[$index]
-            if ($element -isnot [System.Management.Automation.Language.CommandParameterAst]) {
-                $positionalArguments.Add($element)
-                continue
-            }
-
-            if ($element.ParameterName -iin @('Name', 'ForEach', 'TestCases')) {
-                $argument = $element.Argument
-                if ($null -eq $argument -and $index + 1 -lt $command.CommandElements.Count -and
-                    $command.CommandElements[$index + 1] -isnot [System.Management.Automation.Language.CommandParameterAst]) {
-                    $argument = $command.CommandElements[++$index]
-                }
-                if ($element.ParameterName -ieq 'Name') {
-                    $nameAst = $argument
-                }
-                else {
-                    $dataAst = $argument
-                }
-            }
-        }
-        if ($null -eq $nameAst -and $positionalArguments.Count -gt 0) {
-            $nameAst = $positionalArguments[0]
-        }
-
-        if ($nameAst -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
-            $nameTemplate = $nameAst.Value
-        }
-        elseif ($nameAst -is [System.Management.Automation.Language.ExpandableStringExpressionAst] -and
-            $nameAst.NestedExpressions.Count -eq 0) {
-            $nameTemplate = $nameAst.Value
-        }
-        else {
-            $errors.Add("Line ${lineNumber}: It -ForEach name must be a literal string.")
-            continue
-        }
-
-        if ($dataAst -isnot [System.Management.Automation.Language.VariableExpressionAst]) {
-            $errors.Add("Line ${lineNumber}: It -ForEach data must be a simple variable reference.")
-            continue
-        }
-        $variableName = $dataAst.VariablePath.UserPath
-        try {
-            if ($null -ne $VariableValues -and $VariableValues.Contains($variableName)) {
-                $data = $VariableValues[$variableName]
-            }
-            elseif ($null -ne $VariableValues) {
-                throw "fixture variable '$variableName' was not supplied"
-            }
-            else {
-                $data = Get-Variable -Name $variableName -Scope Script -ValueOnly -ErrorAction Stop
-            }
-        }
-        catch {
-            $errors.Add("Line ${lineNumber}: cannot resolve -ForEach variable '$variableName': $($_.Exception.Message)")
-            continue
-        }
-
-        $expandedNames = [System.Collections.Generic.List[string]]::new()
-        $rowNumber = 0
-        foreach ($row in @($data)) {
-            $rowNumber++
-            $expandedName = $nameTemplate
-            $rowFailed = $false
-            foreach ($placeholder in [regex]::Matches($nameTemplate, '<(?<Field>[^<>]+)>')) {
-                $fieldName = $placeholder.Groups['Field'].Value
-                $fieldFound = $false
-                $fieldValue = $null
-                if ($row -is [System.Collections.IDictionary]) {
-                    foreach ($key in $row.Keys) {
-                        if ([string]::Equals([string] $key, $fieldName, [StringComparison]::OrdinalIgnoreCase)) {
-                            $fieldValue = $row[$key]
-                            $fieldFound = $true
-                            break
-                        }
-                    }
-                }
-                elseif ($null -ne $row) {
-                    $property = $row.PSObject.Properties | Where-Object Name -IEQ $fieldName | Select-Object -First 1
-                    if ($null -ne $property) {
-                        $fieldValue = $property.Value
-                        $fieldFound = $true
-                    }
-                }
-                if (-not $fieldFound) {
-                    $errors.Add("Line ${lineNumber}: row $rowNumber from '$variableName' has no field '$fieldName'.")
-                    $rowFailed = $true
-                    continue
-                }
-                $expandedName = $expandedName.Replace($placeholder.Value, [string] $fieldValue)
-            }
-            if (-not $rowFailed) {
-                $expandedNames.Add($expandedName)
-                $expandedNameCount++
-            }
-        }
-
-        $duplicates = @($expandedNames | Group-Object | Where-Object Count -gt 1)
-        foreach ($duplicate in $duplicates) {
-            $errors.Add("Line ${lineNumber}: duplicate expanded It name '$($duplicate.Name)' ($($duplicate.Count) occurrences).")
-        }
-    }
-
-    [pscustomobject]@{
-        IsValid = $errors.Count -eq 0
-        Errors = @($errors)
-        CheckedCommandCount = $commands.Count
-        ExpandedNameCount = $expandedNameCount
-    }
-}
-
-$forEachExpandedNameResult = Test-ForEachExpandedNameUniqueness -LiteralPath $PSCommandPath -VariableValues @{
-    forEachExpandedNameGateCases = $forEachExpandedNameGateCases
-    forEachExpandedNameFixtureCases = $forEachExpandedNameFixtureCases
-    reuseAnnotationCases = $reuseAnnotationCases
-    requiredPolicyText = $requiredPolicyText
-    forbiddenPolicyCases = $forbiddenPolicyCases
-    forbiddenCoverageCases = $forbiddenCoverageCases
-    requiredCaseSensitivityCases = $requiredCaseSensitivityCases
-    forbiddenCaseSensitivityCases = $forbiddenCaseSensitivityCases
-}
-$forEachExpandedNameGateCases = @(
-    @{
-        IsValid = $forEachExpandedNameResult.IsValid
-        Errors = @($forEachExpandedNameResult.Errors)
-        CheckedCommandCount = $forEachExpandedNameResult.CheckedCommandCount
-        ExpandedNameCount = $forEachExpandedNameResult.ExpandedNameCount
-        CaseId = 1
-    }
-)
-
-$duplicateFixtureSource = @'
-$cases = @(@{ Label = 'same'; CaseId = 1 }, @{ Label = 'same'; CaseId = 2 })
-Describe 'fixture' { It 'case <Label>' -ForEach $cases {} }
-'@
-$duplicateFixtureResult = Test-ForEachExpandedNameUniqueness -SourceText $duplicateFixtureSource -VariableValues @{
-    cases = @(@{ Label = 'same'; CaseId = 1 }, @{ Label = 'same'; CaseId = 2 })
-}
-$expressionFixtureSource = @'
-Describe 'fixture' { It 'case <Label>' -ForEach @(@{ Label = 'one' }) {} }
-'@
-$expressionFixtureResult = Test-ForEachExpandedNameUniqueness -SourceText $expressionFixtureSource
-$forEachExpandedNameFixtureCases = @(
-    @{
-        Fixture = 'duplicate expanded name'
-        IsValid = $duplicateFixtureResult.IsValid
-        Errors = @($duplicateFixtureResult.Errors)
-        CheckedCommandCount = $duplicateFixtureResult.CheckedCommandCount
-        ExpandedNameCount = $duplicateFixtureResult.ExpandedNameCount
-        ExpectedErrorPattern = 'duplicate expanded It name'
-        CaseId = 1
-    },
-    @{
-        Fixture = 'non-variable data source'
-        IsValid = $expressionFixtureResult.IsValid
-        Errors = @($expressionFixtureResult.Errors)
-        CheckedCommandCount = $expressionFixtureResult.CheckedCommandCount
-        ExpandedNameCount = $expressionFixtureResult.ExpandedNameCount
-        ExpectedErrorPattern = 'simple variable reference'
-        CaseId = 2
-    }
-)
+for ($index = 0; $index -lt $requiredPolicyText.Count; $index++) { $requiredPolicyText[$index].CaseId = $index + 1 }
+for ($index = 0; $index -lt $forbiddenPolicyCases.Count; $index++) { $forbiddenPolicyCases[$index].CaseId = $index + 1 }
+$forbiddenCoverageCases = @(@{ ComparedCount = $forbiddenPolicyCases.Count; ExpectedCount = 20; CaseId = 1 })
+$requiredCaseSensitivityCases = @(@{ RequiredText = $requiredPolicyText[0].Text; CaseId = 1 })
+$forbiddenCaseSensitivityCases = @(@{ ForbiddenText = $forbiddenPolicyCases[14].Text; CaseId = 1 })
 
 BeforeAll {
-    $script:repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+    $script:RepositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+    $script:CheckPath = Join-Path $script:RepositoryRoot 'scripts/Test-KnowledgeContentRepository.ps1'
 
     function Normalize-TestPolicyText {
         param([Parameter(Mandatory)][AllowEmptyString()][string] $Text)
@@ -336,110 +63,243 @@ BeforeAll {
 
     function Test-RequiredPolicyText {
         param([Parameter(Mandatory)][AllowEmptyString()][string] $Content, [Parameter(Mandatory)][string] $RequiredText)
-        $normalizedContent = Normalize-TestPolicyText -Text $Content
-        $normalizedRequired = Normalize-TestPolicyText -Text $RequiredText
-        return $normalizedContent.Contains($normalizedRequired, [StringComparison]::Ordinal)
+        return (Normalize-TestPolicyText -Text $Content).Contains((Normalize-TestPolicyText -Text $RequiredText), [StringComparison]::Ordinal)
     }
 
     function Test-ForbiddenPolicyText {
         param([Parameter(Mandatory)][AllowEmptyString()][string] $Content, [Parameter(Mandatory)][string] $ForbiddenText)
-        $normalizedContent = Normalize-TestPolicyText -Text $Content
-        $normalizedForbidden = Normalize-TestPolicyText -Text $ForbiddenText
-        $hasExactText = $normalizedContent.Contains($normalizedForbidden, [StringComparison]::Ordinal)
-        $hasCaseInsensitiveText = $normalizedContent.ToLowerInvariant().Contains($normalizedForbidden.ToLowerInvariant(), [StringComparison]::Ordinal)
-        return $hasExactText -or $hasCaseInsensitiveText
+        $contentText = Normalize-TestPolicyText -Text $Content
+        $forbidden = Normalize-TestPolicyText -Text $ForbiddenText
+        return $contentText.Contains($forbidden, [StringComparison]::Ordinal) -or $contentText.Contains($forbidden, [StringComparison]::OrdinalIgnoreCase)
     }
 
-    function Read-TestOpenAiInterface {
+    function New-PolicyFixture {
+        $root = Join-Path $TestDrive ([Guid]::NewGuid().ToString('N'))
+        [void](New-Item -ItemType Directory -Path (Join-Path $root 'catalog') -Force)
+        [void](New-Item -ItemType Directory -Path (Join-Path $root 'skills') -Force)
+        Copy-Item -LiteralPath (Join-Path $script:RepositoryRoot 'catalog/source.json') -Destination (Join-Path $root 'catalog/source.json')
+        Copy-Item -LiteralPath (Join-Path $script:RepositoryRoot 'skills/capture-private-course-knowledge') -Destination (Join-Path $root 'skills') -Recurse
+        return $root
+    }
+
+    function Complete-ReuseAnnotation {
+        param([Collections.IDictionary] $Current, [Collections.Generic.List[object]] $Annotations)
+        [string[]]$actual = @($Current.Keys)
+        [string[]]$expected = @('SPDX-FileCopyrightText', 'SPDX-License-Identifier', 'path', 'precedence')
+        [Array]::Sort($actual, [StringComparer]::Ordinal)
+        [Array]::Sort($expected, [StringComparer]::Ordinal)
+        if (($actual -join "`n") -cne ($expected -join "`n")) { throw 'REUSE annotation does not contain exactly the four required keys.' }
+        $Annotations.Add([pscustomobject]$Current)
+    }
+
+    function Assert-ConsumerWorkflowLayout {
+        param([Parameter(Mandatory)][string] $WorkflowDirectory)
+
+        [string[]]$actualHashes = @(Get-ChildItem -LiteralPath $WorkflowDirectory -File -Force | ForEach-Object {
+                [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($_.Name)))
+            })
+        [Array]::Sort($actualHashes, [StringComparer]::Ordinal)
+        [string[]]$permanentOnly = @('9B0727A51E55F29C2C72D5A579ACF1584890229E7DAA6CFB113737DA9B986063')
+        [string[]]$conversion = @(
+            '9B0727A51E55F29C2C72D5A579ACF1584890229E7DAA6CFB113737DA9B986063'
+            'DA13DE9D7142D2061DCCFF52DF9522A141F365DB655FEEAF1823E48DDB9A217C'
+        )
+        [Array]::Sort($conversion, [StringComparer]::Ordinal)
+        $actualText = $actualHashes -join "`n"
+        if ($actualText -cne ($permanentOnly -join "`n") -and $actualText -cne ($conversion -join "`n")) {
+            throw 'The workflow directory contains an unsupported file set.'
+        }
+    }
+
+    function Read-TestReuseAnnotations {
         param([Parameter(Mandatory)][string] $LiteralPath)
-        $allowedFields = @('display_name', 'short_description', 'default_prompt', 'icon_small', 'icon_large', 'brand_color')
-        $fields = [ordered]@{}
-        $inInterface = $false
+        $annotations = [Collections.Generic.List[object]]::new()
+        $current = $null
+        $versionSeen = $false
         $lineNumber = 0
         foreach ($rawLine in Get-Content -LiteralPath $LiteralPath -Encoding utf8) {
             $lineNumber++
-            if ($rawLine -match '^interface:\s*(?:#.*)?$') { $inInterface = $true; continue }
-            if (-not $inInterface -or $rawLine -match '^\s*(?:#.*)?$') { continue }
-            if ($rawLine -notmatch '^\s{2}(?<key>[a-z_]+):\s*(?<value>.+?)\s*$') {
-                if ($rawLine -notmatch '^\s') { break }
-                throw "Unsupported OpenAI interface metadata at line $lineNumber."
+            $line = $rawLine.Trim()
+            if ($line.Length -eq 0 -or $line.StartsWith('#', [StringComparison]::Ordinal)) { continue }
+            if ($line -eq 'version = 1') {
+                if ($versionSeen -or $null -ne $current -or $annotations.Count -gt 0) { throw ('Invalid REUSE version declaration at line {0}.' -f $lineNumber) }
+                $versionSeen = $true
+                continue
             }
-            if ([string]$Matches.key -cnotin $allowedFields -or $fields.Contains([string]$Matches.key)) {
-                throw "Unsupported or duplicate OpenAI interface metadata at line $lineNumber."
+            if ($line -eq '[[annotations]]') {
+                if ($null -ne $current) { Complete-ReuseAnnotation -Current $current -Annotations $annotations }
+                $current = [ordered]@{}
+                continue
             }
-            try { $fields[[string]$Matches.key] = [string](ConvertFrom-Json -InputObject ([string]$Matches.value) -ErrorAction Stop) }
-            catch { throw "OpenAI interface metadata at line $lineNumber must use a quoted scalar." }
+            if ($null -eq $current -or $line -notmatch '^(?<Key>path|precedence|SPDX-FileCopyrightText|SPDX-License-Identifier)\s*=\s*(?<Value>"(?:[^"\\]|\\.)*")$') {
+                throw ('Unsupported REUSE syntax at line {0}.' -f $lineNumber)
+            }
+            $key = [string]$Matches.Key
+            if ($current.Contains($key)) { throw ('Duplicate REUSE key at line {0}.' -f $lineNumber) }
+            try { $current[$key] = [string](ConvertFrom-Json -InputObject ([string]$Matches.Value) -ErrorAction Stop) }
+            catch { throw ('Invalid REUSE string value at line {0}.' -f $lineNumber) }
         }
-        foreach ($requiredField in @('display_name', 'short_description', 'default_prompt')) {
-            if (-not $fields.Contains($requiredField)) { throw "OpenAI interface metadata is missing '$requiredField'." }
-        }
-        return $fields
+        if (-not $versionSeen) { throw 'REUSE version declaration is missing.' }
+        if ($null -ne $current) { Complete-ReuseAnnotation -Current $current -Annotations $annotations }
+        if ($annotations.Count -eq 0) { throw 'REUSE annotations are missing.' }
+        return @($annotations)
+    }
+
+    function Get-RepositoryFiles {
+        param([Parameter(Mandatory)][string] $RepositoryRoot)
+
+        return @(Get-ChildItem -LiteralPath $RepositoryRoot -Recurse -File -Force | ForEach-Object {
+                $relativePath = [IO.Path]::GetRelativePath($RepositoryRoot, $_.FullName).Replace('\', '/')
+                if (-not $relativePath.StartsWith('.git/', [StringComparison]::Ordinal)) {
+                    [pscustomobject]@{ FullName = $_.FullName; RelativePath = $relativePath }
+                }
+            })
     }
 }
 
-Describe 'Knowledge & Content repository contract' {
-    It 'keeps every -ForEach expanded test name unique #<CaseId>' -ForEach $forEachExpandedNameGateCases {
-        $IsValid | Should -BeTrue -Because ($Errors -join [Environment]::NewLine)
-        $CheckedCommandCount | Should -BeGreaterThan 0
-        $ExpandedNameCount | Should -BeGreaterThan 0
+Describe 'Consumer repository layout' {
+    It 'contains only the repository check and authority bootstrap under scripts' {
+        [string[]]$actual = @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot 'scripts') -File -Force | ForEach-Object Name)
+        [string[]]$expected = @('Invoke-PinnedAuthority.ps1', 'Test-KnowledgeContentRepository.ps1')
+        [Array]::Sort($actual, [StringComparer]::Ordinal)
+        [Array]::Sort($expected, [StringComparer]::Ordinal)
+        ($actual -join "`n") | Should -BeExactly ($expected -join "`n")
     }
 
-    It 'rejects invalid -ForEach fixture <Fixture> #<CaseId>' -ForEach $forEachExpandedNameFixtureCases {
-        $IsValid | Should -BeFalse
-        ($Errors -join "`n") | Should -Match $ExpectedErrorPattern
-        $CheckedCommandCount | Should -Be 1
+    It 'contains exactly a supported consumer workflow set' {
+        { Assert-ConsumerWorkflowLayout -WorkflowDirectory (Join-Path $script:RepositoryRoot '.github/workflows') } | Should -Not -Throw
     }
 
-    It 'validates the repository' {
-        { & (Join-Path $script:repoRoot 'scripts/Test-Repository.ps1') -ReadOnlySnapshot } | Should -Not -Throw
+    It 'contains only consumer configuration files' {
+        [string[]]$actual = @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot 'config') -File -Force | ForEach-Object Name)
+        [string[]]$expected = @('authority-pin.json', 'consumer-gate.json')
+        [Array]::Sort($actual, [StringComparer]::Ordinal)
+        [Array]::Sort($expected, [StringComparer]::Ordinal)
+        ($actual -join "`n") | Should -BeExactly ($expected -join "`n")
     }
 
-    It 'contains only declared top-level Skill directories' {
-        $source = Get-Content -Raw -Encoding utf8 -LiteralPath (Join-Path $script:repoRoot 'catalog/source.json') | ConvertFrom-Json
-        $declared = @($source.skills | Sort-Object)
-        $actual = @(Get-ChildItem -LiteralPath (Join-Path $script:repoRoot 'skills') -Directory | ForEach-Object Name | Sort-Object)
-        ($actual -join "`n") | Should -BeExactly ($declared -join "`n")
+    It 'accepts the permanent workflow alone with REUSE coverage and rejects a third workflow' {
+        $fixture = Join-Path $TestDrive ([Guid]::NewGuid().ToString('N'))
+        $workflowDirectory = Join-Path $fixture '.github/workflows'
+        [void](New-Item -ItemType Directory -Path $workflowDirectory -Force)
+        [IO.File]::WriteAllText((Join-Path $workflowDirectory 'consumer-gate.yml'), 'fixture', [Text.UTF8Encoding]::new($false))
+
+        { Assert-ConsumerWorkflowLayout -WorkflowDirectory $workflowDirectory } | Should -Not -Throw
+        $annotations = @(Read-TestReuseAnnotations -LiteralPath (Join-Path $script:RepositoryRoot 'REUSE.toml'))
+        $matches = @($annotations | Where-Object {
+                [Management.Automation.WildcardPattern]::new($_.path, [Management.Automation.WildcardOptions]::CultureInvariant).IsMatch('.github/workflows/consumer-gate.yml')
+            })
+        $matches | Should -HaveCount 1
+        $matches[0].path | Should -BeExactly '.github/workflows/consumer-gate*.yml'
+
+        [IO.File]::WriteAllText((Join-Path $workflowDirectory 'third.yml'), 'fixture', [Text.UTF8Encoding]::new($false))
+        { Assert-ConsumerWorkflowLayout -WorkflowDirectory $workflowDirectory } | Should -Throw '*unsupported file set*'
     }
 
-    It 'keeps the stable source ID' {
-        $source = Get-Content -Raw -Encoding utf8 -LiteralPath (Join-Path $script:repoRoot 'catalog/source.json') | ConvertFrom-Json
-        $source.sourceId | Should -BeExactly 'knowledge-content'
+    It 'keeps the gate identity consistent with source metadata' {
+        $source = Get-Content -Raw -LiteralPath (Join-Path $script:RepositoryRoot 'catalog/source.json') | ConvertFrom-Json
+        $gate = Get-Content -Raw -LiteralPath (Join-Path $script:RepositoryRoot 'config/consumer-gate.json') | ConvertFrom-Json
+        $gate.sourceRepository | Should -BeExactly $source.repository
+        (@($gate.activeSkills) -join "`n") | Should -BeExactly (@($source.skills) -join "`n")
     }
+}
 
+Describe 'REUSE annotation contract' {
     It 'keeps every Skill manifest free of inline SPDX comments' {
-        $skillManifests = @(Get-ChildItem -LiteralPath (Join-Path $script:repoRoot 'skills') -Filter 'SKILL.md' -File -Recurse)
-        $skillManifests.Count | Should -BeGreaterThan 0
-        foreach ($manifest in $skillManifests) {
-            $content = Get-Content -LiteralPath $manifest.FullName -Raw -Encoding utf8
+        $manifests = @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot 'skills') -Filter 'SKILL.md' -File -Recurse -Force)
+        $manifests.Count | Should -BeGreaterThan 0
+        foreach ($manifest in $manifests) {
+            $content = Get-Content -Raw -LiteralPath $manifest.FullName
             $content.Contains('SPDX-FileCopyrightText', [StringComparison]::Ordinal) | Should -BeFalse
             $content.Contains('SPDX-License-Identifier', [StringComparison]::Ordinal) | Should -BeFalse
         }
     }
 
-    It 'covers every Skill manifest with the exact REUSE annotation #<CaseId>' -ForEach $reuseAnnotationCases {
-        $reuseContent = Get-Content -LiteralPath (Join-Path $script:repoRoot 'REUSE.toml') -Raw -Encoding utf8
-        (Test-RequiredPolicyText -Content $reuseContent -RequiredText $ReuseAnnotationText) | Should -BeTrue
+    It 'provides one exact annotation for every protected file without an inline header' {
+        $annotations = @(Read-TestReuseAnnotations -LiteralPath (Join-Path $script:RepositoryRoot 'REUSE.toml'))
+        $allFiles = @(Get-RepositoryFiles -RepositoryRoot $script:RepositoryRoot | ForEach-Object RelativePath)
+        foreach ($annotation in $annotations) {
+            $pattern = [Management.Automation.WildcardPattern]::new($annotation.path, [Management.Automation.WildcardOptions]::CultureInvariant)
+            @($allFiles | Where-Object { $pattern.IsMatch($_) }).Count | Should -BeGreaterThan 0
+        }
+        $protected = @('catalog/source.json', 'config/authority-pin.json', 'config/consumer-gate.json')
+        $protected += @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot '.github/workflows') -File -Force | ForEach-Object {
+                [IO.Path]::GetRelativePath($script:RepositoryRoot, $_.FullName).Replace([IO.Path]::DirectorySeparatorChar, '/')
+            })
+        $protected += @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot 'skills') -Filter 'SKILL.md' -File -Recurse -Force | ForEach-Object {
+                [IO.Path]::GetRelativePath($script:RepositoryRoot, $_.FullName).Replace([IO.Path]::DirectorySeparatorChar, '/')
+            })
+        foreach ($path in $protected) {
+            $content = Get-Content -Raw -LiteralPath (Join-Path $script:RepositoryRoot $path)
+            $hasCopyright = $content.Contains('SPDX-FileCopyrightText', [StringComparison]::Ordinal)
+            $hasLicense = $content.Contains('SPDX-License-Identifier', [StringComparison]::Ordinal)
+            if ($hasCopyright -or $hasLicense) {
+                $hasCopyright | Should -BeTrue
+                $hasLicense | Should -BeTrue
+                continue
+            }
+            $matches = @($annotations | Where-Object {
+                    [Management.Automation.WildcardPattern]::new($_.path, [Management.Automation.WildcardOptions]::CultureInvariant).IsMatch($path)
+                })
+            $matches | Should -HaveCount 1
+            $matches[0].precedence | Should -BeExactly 'aggregate'
+            $matches[0].'SPDX-FileCopyrightText' | Should -BeExactly '2026 SyuanTsai'
+            $matches[0].'SPDX-License-Identifier' | Should -BeExactly 'Apache-2.0'
+        }
+    }
+
+    It 'requires both fields in every inline SPDX header' {
+        foreach ($file in Get-RepositoryFiles -RepositoryRoot $script:RepositoryRoot) {
+            $content = Get-Content -Raw -LiteralPath $file.FullName
+            $hasCopyright = $content.Contains('SPDX-FileCopyrightText', [StringComparison]::Ordinal)
+            $hasLicense = $content.Contains('SPDX-License-Identifier', [StringComparison]::Ordinal)
+            if ($hasCopyright -or $hasLicense) {
+                $hasCopyright | Should -BeTrue
+                $hasLicense | Should -BeTrue
+            }
+        }
+    }
+
+    It 'enumerates hidden repository entries while excluding repository metadata' {
+        $fixture = Join-Path $TestDrive ([Guid]::NewGuid().ToString('N'))
+        [void](New-Item -ItemType Directory -Path (Join-Path $fixture '.hidden-dir') -Force)
+        [void](New-Item -ItemType Directory -Path (Join-Path $fixture '.git') -Force)
+        [IO.File]::WriteAllText((Join-Path $fixture '.hidden-dir/file.yml'), 'hidden', [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText((Join-Path $fixture 'ordinary.txt'), 'ordinary', [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText((Join-Path $fixture '.git/ignored.yml'), 'metadata', [Text.UTF8Encoding]::new($false))
+        $fixtureFiles = @(Get-RepositoryFiles -RepositoryRoot $fixture | ForEach-Object RelativePath)
+        $fixtureFiles | Should -Contain '.hidden-dir/file.yml'
+        $fixtureFiles | Should -Contain 'ordinary.txt'
+        $fixtureFiles | Should -Not -Contain '.git/ignored.yml'
+        $repositoryFiles = @(Get-RepositoryFiles -RepositoryRoot $script:RepositoryRoot | ForEach-Object RelativePath)
+        $repositoryFiles | Should -Contain '.github/workflows/consumer-gate.yml'
+    }
+
+    It 'rejects an annotation missing one required line' {
+        $fixturePath = Join-Path $TestDrive 'REUSE.toml'
+        $text = Get-Content -Raw -LiteralPath (Join-Path $script:RepositoryRoot 'REUSE.toml')
+        $mutated = [regex]::Replace($text, '(?m)^SPDX-License-Identifier = "Apache-2\.0"\r?\n', '', 1)
+        $mutated | Should -Not -BeExactly $text
+        [IO.File]::WriteAllText($fixturePath, $mutated, [Text.UTF8Encoding]::new($false))
+        { Read-TestReuseAnnotations -LiteralPath $fixturePath } | Should -Throw '*does not contain exactly the four required keys*'
     }
 }
 
 Describe 'Capture Private Course Knowledge literal policy contract' {
-    It 'preserves the required literal policy text in <Path> #<CaseId>' -ForEach $requiredPolicyText {
-        $content = Get-Content -LiteralPath (Join-Path $script:repoRoot $Path) -Raw -Encoding utf8
+    It 'preserves required literal policy text in <Path> #<CaseId>' -ForEach $requiredPolicyText {
+        $content = Get-Content -Raw -LiteralPath (Join-Path $script:RepositoryRoot $Path)
         (Test-RequiredPolicyText -Content $content -RequiredText $Text) | Should -BeTrue
     }
 
-    It 'keeps forbidden policy text case <CaseIndex> out of its policy files' -ForEach $forbiddenPolicyCases {
+    It 'keeps forbidden policy text case <CaseId> out of its policy files' -ForEach $forbiddenPolicyCases {
         $Paths.Count | Should -BeGreaterThan 0
         foreach ($path in $Paths) {
-            $content = Get-Content -LiteralPath (Join-Path $script:repoRoot $path) -Raw -Encoding utf8
-            $normalizedContent = Normalize-TestPolicyText -Text $content
-            $normalizedForbidden = Normalize-TestPolicyText -Text $ForbiddenText
-            $normalizedContent.Contains($normalizedForbidden, [StringComparison]::Ordinal) | Should -BeFalse
-            $normalizedContent.ToLowerInvariant().Contains($normalizedForbidden.ToLowerInvariant(), [StringComparison]::Ordinal) | Should -BeFalse
+            $content = Get-Content -Raw -LiteralPath (Join-Path $script:RepositoryRoot $path)
+            (Test-ForbiddenPolicyText -Content $content -ForbiddenText $Text) | Should -BeFalse
         }
     }
 
-    It 'compares exactly every forbidden-text list entry #<CaseId>' -ForEach $forbiddenCoverageCases {
+    It 'compares exactly every forbidden policy entry #<CaseId>' -ForEach $forbiddenCoverageCases {
         $ComparedCount | Should -BeGreaterThan 0
         $ComparedCount | Should -Be $ExpectedCount
     }
@@ -449,43 +309,33 @@ Describe 'Capture Private Course Knowledge literal policy contract' {
         (Test-RequiredPolicyText -Content $changedCase -RequiredText $RequiredText) | Should -BeFalse
     }
 
-    It 'detects a lowercase forbidden-text insertion #<CaseId>' -ForEach $forbiddenCaseSensitivityCases {
-        (Test-ForbiddenPolicyText -Content "prefix $($ForbiddenText.ToLowerInvariant()) suffix" -ForbiddenText $ForbiddenText) | Should -BeTrue
-    }
-
-    It 'treats a REUSE annotation with one missing line as missing #<CaseId>' -ForEach $reuseAnnotationCases {
-        $missingLine = $ReuseAnnotationText.Replace("`nprecedence = `"aggregate`"", '')
-        (Test-RequiredPolicyText -Content $missingLine -RequiredText $ReuseAnnotationText) | Should -BeFalse
+    It 'detects a lowercase forbidden text insertion #<CaseId>' -ForEach $forbiddenCaseSensitivityCases {
+        $insertion = 'prefix ' + $ForbiddenText.ToLowerInvariant() + ' suffix'
+        (Test-ForbiddenPolicyText -Content $insertion -ForbiddenText $ForbiddenText) | Should -BeTrue
     }
 }
 
-Describe 'OpenAI metadata field contract' {
+Describe 'OpenAI metadata field contract through the repository check' {
     It 'accepts all supported optional OpenAI interface fields' {
-        $fixturePath = Join-Path $TestDrive 'openai-interface-optionals.yaml'
-        @(
-            'interface:',
-            '  display_name: "Fixture Skill"',
-            '  short_description: "Fixture metadata with optional fields"',
-            '  default_prompt: "Use $fixture-skill"',
-            '  icon_small: "./assets/icon-small.svg"',
-            '  icon_large: "./assets/icon-large.svg"',
-            '  brand_color: "#123456"'
-        ) | Set-Content -LiteralPath $fixturePath -Encoding utf8
-        $metadata = Read-TestOpenAiInterface -LiteralPath $fixturePath
-        $metadata.icon_small | Should -BeExactly './assets/icon-small.svg'
-        $metadata.icon_large | Should -BeExactly './assets/icon-large.svg'
-        $metadata.brand_color | Should -BeExactly '#123456'
+        $fixture = New-PolicyFixture
+        $path = Join-Path $fixture 'skills/capture-private-course-knowledge/agents/openai.yaml'
+        $text = [IO.File]::ReadAllText($path, [Text.UTF8Encoding]::new($false, $true))
+        $needle = '  default_prompt: "Use $capture-private-course-knowledge to capture this authorized course across videos, PDFs, slides, code, and attachments as evidence-linked notes, then create the requested NotebookLM sources or website article. Preserve cross-platform course commands as source evidence."'
+        $replacement = $needle + "`n" + '  icon_small: "./assets/icon-small.svg"' + "`n" + '  icon_large: "./assets/icon-large.svg"' + "`n" + '  brand_color: "#123456"'
+        $mutated = $text.Replace($needle, $replacement)
+        $mutated | Should -Not -BeExactly $text
+        [IO.File]::WriteAllText($path, $mutated, [Text.UTF8Encoding]::new($false))
+        { & $script:CheckPath -RepositoryRoot $fixture -ReadOnlySnapshot } | Should -Not -Throw
     }
 
-    It 'rejects unknown OpenAI interface fields' {
-        $fixturePath = Join-Path $TestDrive 'openai-interface-unknown-field.yaml'
-        @(
-            'interface:',
-            '  display_name: "Fixture Skill"',
-            '  short_description: "Fixture metadata with unknown field"',
-            '  default_prompt: "Use $fixture-skill"',
-            '  unknown_field: "must be rejected"'
-        ) | Set-Content -LiteralPath $fixturePath -Encoding utf8
-        { Read-TestOpenAiInterface -LiteralPath $fixturePath } | Should -Throw '*Unsupported or duplicate OpenAI interface metadata*'
+    It 'rejects an unknown OpenAI interface field' {
+        $fixture = New-PolicyFixture
+        $path = Join-Path $fixture 'skills/capture-private-course-knowledge/agents/openai.yaml'
+        $text = [IO.File]::ReadAllText($path, [Text.UTF8Encoding]::new($false, $true))
+        $needle = '  default_prompt: "Use $capture-private-course-knowledge to capture this authorized course across videos, PDFs, slides, code, and attachments as evidence-linked notes, then create the requested NotebookLM sources or website article. Preserve cross-platform course commands as source evidence."'
+        $mutated = $text.Replace($needle, $needle + "`n" + '  unknown_field: "must be rejected"')
+        $mutated | Should -Not -BeExactly $text
+        [IO.File]::WriteAllText($path, $mutated, [Text.UTF8Encoding]::new($false))
+        { & $script:CheckPath -RepositoryRoot $fixture -ReadOnlySnapshot } | Should -Throw '*unsupported or duplicate interface key*'
     }
 }

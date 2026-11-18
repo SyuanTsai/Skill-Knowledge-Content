@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "repositoryId": "skill-knowledge-content",
+  "sourceRepository": "https://github.com/SyuanTsai/Skill-Knowledge-Content.git",
+  "activeSkills": [
+    "capture-private-course-knowledge"
+  ],
+  "repositoryChecks": [
+    {
+      "id": "repository-knowledge-content",
+      "kind": "general",
+      "path": "scripts/Test-KnowledgeContentRepository.ps1"
+    },
+    {
+      "id": "repository-pester",
+      "kind": "pester",
+      "path": "tests"
+    }
+  ]
+}

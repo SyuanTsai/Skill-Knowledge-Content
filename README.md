@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 Independent Agent Skills repository for the **Knowledge & Content** domain.
 
-For source maintenance and review, follow the [central Skill maintenance guidelines](https://github.com/SyuanTsai/SyuanTsai-AI-Instructions/blob/bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1/docs/skill-maintenance-guidelines.md) when deciding scope, supporting resources, dependencies, and replacement cleanup.
+For source maintenance and review, follow the [central Skill maintenance guidelines](https://github.com/SyuanTsai/SyuanTsai-AI-Instructions/blob/main/docs/skill-maintenance-guidelines.md) when deciding scope, supporting resources, dependencies, and replacement cleanup.
 
 ## Repository contract
 
@@ -14,7 +14,7 @@ For source maintenance and review, follow the [central Skill maintenance guideli
 - Repository: `SyuanTsai/Skill-Knowledge-Content`
 - Skill layout: `skills/<skill-id>/**`
 - Source inventory: `catalog/source.json`
-- Validation entry point: `scripts/Validate.ps1`
+- Repository check: `scripts/Test-KnowledgeContentRepository.ps1`
 - Contract tests: the repository regression suite
 - Release and rollback rules: `RELEASING.md`
 
@@ -22,7 +22,7 @@ For source maintenance and review, follow the [central Skill maintenance guideli
 
 The Skill instructions are host-neutral: local Agent work runs on the user's current Windows, Linux, or macOS host. When a required local tool is unavailable, the Skill reports the gap and marks the affected work partial or draft instead of switching to another host, VM, WSL, or container. Authorized SaaS, browser, and API services remain in scope when the user permits them; cross-platform course code and commands remain source evidence.
 
-Canonical repository validation runs on GitHub Actions as three parallel matrix legs, `windows-latest` (x64), `ubuntu-latest` (x64), and `macos-latest` (arm64), then aggregates all three receipts on Ubuntu and runs the required status mirrors on Ubuntu. These legs validate the repository contract and regression suite on each platform; they are not end-to-end course-capture acceptance runs.
+The pinned authority consumer gate validates the repository on `windows-latest`, `ubuntu-latest`, and `macos-latest`. Each platform runs the repository-specific snapshot check and the complete `tests/` suite; these checks are not end-to-end course-capture acceptance runs.
 
 `catalog/source.json` records only the stable source inventory. Its exact schema has no description or platform field.
 
@@ -97,114 +97,19 @@ This Skill does not require a specific tool. The table lists common local tools 
 
 ## Validation
 
-The public validation entry point is `scripts/Validate.ps1`, and the canonical protected CI workflow entry point is `.github/workflows/validate.yml`. With the active Standard v1 pin at `bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1`, validation has two explicit purposes: `scripts/Validate.ps1 -PrepareSourceTools` creates run-owned setup receipts, and `scripts/Validate.ps1 -SourceValidation` performs the protected source acceptance using those receipts and the exact event base commit. The protected three-platform workflow invokes both purposes with the required clean roots and runtime evidence. A bare `scripts/Validate.ps1` call fails closed, so it cannot be mistaken for a completed release gate.
+The authority-published consumer gate is the canonical CI entry. Its protected workflow runs on Windows, Linux, and macOS from the immutable commit in `config/authority-pin.json`. Repository-owned behavior is limited to:
 
-The validator checks:
+- `scripts/Test-KnowledgeContentRepository.ps1`, which validates `catalog/source.json`, Skill package structure, frontmatter, `agents/openai.yaml`, licensing boundaries, and deterministic content inventory from a read-only snapshot;
+- the complete `tests/` tree, discovered and executed by the pinned authority runtime.
 
-- the stable `knowledge-content` source metadata;
-- source inventory against actual `skills/*` directories;
-- lowercase stable Skill IDs and flat source paths;
-- required `SKILL.md` and `agents/openai.yaml` files;
-- `SKILL.md` name matching the stable Skill ID;
-- deterministic `contentSha256` using repository-relative paths and raw file SHA-256 values.
+The repository check accepts `-RepositoryRoot` and `-ReadOnlySnapshot`, does not require repository metadata, does not write into the candidate, and writes its JSON result to stdout.
 
-The canonical validator invokes the repository contract and Pester components. They are not additional public validation commands. The protected source gate covers stages 1–5 and runs Static without an LLM plus the complete repository test suite. GitHub Actions runs Windows, Linux, and macOS legs against the exact event candidate, protected base driver, and bb32fe9 authority; an aggregate requires all three receipts before the unchanged required status contexts can succeed. This source gate does not grant release, installation, publication, or downstream cutover authority. The field `releaseEligible=false` remains false permanently, including after a PASS, review, or merge. See [the three-platform CI template](docs/ci/three-platform-ci-template.md) for adoption and bootstrap details.
+The transition workflow exists only for the initial conversion. After conversion cleanup, routine authority upgrades change only the full commit in `config/authority-pin.json`; the copied bootstrap and primary workflow remain authority-published bytes.
 
-### Protected local run
+## Versioning and rollback
 
-The local equivalent uses a clean candidate checkout at the exact event head and a separate, clean protected-driver checkout of this repository at the exact event base. Before cloning or checking out any of these roots, set global `core.autocrlf=false`; keep it false through source validation so checkout files and subsequent Git archives retain committed bytes. Recreate any checkout made while line-ending conversion was enabled. The base must be a full nonzero 40-character SHA, must resolve to itself, and must be a distinct ancestor of the candidate. Use a separate clean authority checkout at `bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1`. `OwnedRoot` is a fresh parent that contains `RuntimeRoot` and the Pester setup area. Keep `ArtifactsRoot` fresh as a separate sibling outside `OwnedRoot`, candidate, driver, authority, and runtime; setup cleanup must stay within its owned paths and must not remove those roots. `SourceToolsPath` must be directly under `ArtifactsRoot`. Use the exact stable Go version installed for the run. Verify the official PowerShell archive hash against the release `hashes.sha256`; Windows also requires the Microsoft Authenticode signature.
+Consumers should pin this Skill source to a full commit SHA or an immutable release tag. Skill content hashes are deterministic and can be recorded in external catalog locks.
 
-Set the root paths and event SHAs first. Then run the global line-ending control and verification before cloning or checking out the three repositories. After checkout, the commands below bind the exact event head, protected driver base, clean ancestry, effective line-ending settings, and clean worktrees. The Pester setup uses the same verified PowerShell and `RUN_OWNED_ROOT` between the two canonical calls:
+Do not repurpose stable Skill IDs or move a Skill away from `skills/<skill-id>` without coordinating the consuming Catalog lifecycle contract. Rollback uses a normal reviewed pull request that restores a previously validated source commit or authority pin; release history and immutable tags must not be rewritten.
 
-```powershell
-$CandidateRoot = $env:KC_CANDIDATE_ROOT
-$DriverRoot = $env:KC_DRIVER_ROOT
-$AuthorityRoot = $env:KC_AUTHORITY_ROOT
-$OwnedRoot = $env:KC_OWNED_ROOT
-$RuntimeRoot = Join-Path $OwnedRoot 'runtime'
-$ArtifactsRoot = $env:KC_ARTIFACTS_ROOT
-$CandidateHead = $env:KC_EVENT_HEAD_COMMIT
-$BaseCommit = $env:KC_EVENT_BASE_COMMIT
-
-# Run before cloning or checking out candidate, driver, and authority.
-git config --global core.autocrlf false
-if ($LASTEXITCODE -ne 0) { throw 'Could not disable global Git line-ending conversion before checkout.' }
-$globalAutoCrlf = (& git config --global --get core.autocrlf 2>$null | Out-String).Trim()
-if ($LASTEXITCODE -ne 0 -or $globalAutoCrlf -cne 'false') { throw 'Global core.autocrlf must remain false.' }
-
-# These paths must be separate clones created after the global setting above.
-if ($CandidateHead -cnotmatch '^[0-9a-f]{40}$' -or $CandidateHead -match '^0+$' -or $BaseCommit -cnotmatch '^[0-9a-f]{40}$' -or $BaseCommit -match '^0+$') { throw 'Supply exact nonzero event head and base SHAs.' }
-& git -C $CandidateRoot checkout --detach $CandidateHead
-if ($LASTEXITCODE -ne 0) { throw 'Could not check out the exact event candidate head.' }
-& git -C $DriverRoot checkout --detach $BaseCommit
-if ($LASTEXITCODE -ne 0) { throw 'Could not check out the exact event base as protected driver.' }
-& git -C $AuthorityRoot checkout --detach bb32fe9914ca99ed91fe2102b2beb13fef7b3ed1
-if ($LASTEXITCODE -ne 0) { throw 'Could not check out the exact bb32fe9 authority.' }
-
-$candidateHeadObserved = (& git -C $CandidateRoot rev-parse --verify --end-of-options 'HEAD^{commit}' 2>$null | Out-String).Trim()
-if ($LASTEXITCODE -ne 0 -or $candidateHeadObserved -cne $CandidateHead) { throw 'Candidate HEAD must equal the exact event head.' }
-$driverHeadObserved = (& git -C $DriverRoot rev-parse --verify --end-of-options 'HEAD^{commit}' 2>$null | Out-String).Trim()
-if ($LASTEXITCODE -ne 0 -or $driverHeadObserved -cne $BaseCommit) { throw 'Protected driver HEAD must equal the exact event base.' }
-$baseObserved = (& git -C $CandidateRoot rev-parse --verify --end-of-options "$($BaseCommit)^{commit}" 2>$null | Out-String).Trim()
-if ($LASTEXITCODE -ne 0 -or $baseObserved -cne $BaseCommit) { throw 'The event base must resolve to itself in the candidate checkout.' }
-& git -C $CandidateRoot merge-base --is-ancestor $BaseCommit $CandidateHead
-if ($LASTEXITCODE -ne 0 -or $BaseCommit -ceq $CandidateHead) { throw 'The exact event base must be a distinct ancestor of the event candidate.' }
-
-foreach ($root in @($CandidateRoot, $DriverRoot, $AuthorityRoot)) {
-  & git -C $root config --local core.autocrlf false
-  if ($LASTEXITCODE -ne 0) { throw "Could not disable checkout line-ending conversion: $root" }
-  $effectiveAutoCrlf = (& git -C $root config --get core.autocrlf 2>$null | Out-String).Trim()
-  if ($LASTEXITCODE -ne 0 -or $effectiveAutoCrlf -cne 'false') { throw "Effective core.autocrlf must be false: $root" }
-  $dirty = @(& git -C $root status --porcelain=v1 --untracked-files=all)
-  if ($LASTEXITCODE -ne 0 -or $dirty.Count -ne 0) { throw "Checkout must be clean: $root" }
-}
-
-$PowerShellExecutable = Join-Path $RuntimeRoot $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })
-$SourceToolsPath = Join-Path $ArtifactsRoot 'source-tools.json'
-$env:RUN_OWNED_ROOT = $OwnedRoot
-$env:GITHUB_EVENT_NAME = 'pull_request'
-$goVersionOutput = & go version
-if ($LASTEXITCODE -ne 0 -or $goVersionOutput -notmatch '^go version go(?<version>[0-9]+\.[0-9]+\.[0-9]+)') { throw 'A stable Go runtime is required.' }
-$env:STANDARD_GO_RUNTIME_VERSION = $Matches.version
-if (-not (Test-Path -LiteralPath $RuntimeRoot -PathType Container) -or
-    -not (Test-Path -LiteralPath $PowerShellExecutable -PathType Leaf)) { throw 'OwnedRoot must contain the verified runtime directory.' }
-if (Test-Path -LiteralPath $ArtifactsRoot) { throw 'ArtifactsRoot must be fresh and unique.' }
-[void](New-Item -ItemType Directory -Path $ArtifactsRoot -ErrorAction Stop)
-
-& $PowerShellExecutable -NoProfile -NonInteractive -File (Join-Path $DriverRoot 'scripts/Prepare-PesterRuntime.ps1') `
-  -RuntimeExecutable $PowerShellExecutable -OwnedRoot $OwnedRoot
-if ($LASTEXITCODE -ne 0) { throw 'Locked Pester runtime setup failed.' }
-
-& $PowerShellExecutable -NoProfile -NonInteractive -File (Join-Path $DriverRoot 'scripts/Validate.ps1') `
-  -RepositoryRoot $CandidateRoot -PrepareSourceTools -ArtifactsRoot $ArtifactsRoot `
-  -SourceToolsPath $SourceToolsPath -AuthorityRepositoryRoot $AuthorityRoot `
-  -TrustedToolRoot $RuntimeRoot -ExpectedGoRuntimeVersion $env:STANDARD_GO_RUNTIME_VERSION -TimeoutSeconds 1800
-if ($LASTEXITCODE -ne 0) { throw 'Protected source-tool preparation failed.' }
-
-& $PowerShellExecutable -NoProfile -NonInteractive -File (Join-Path $DriverRoot 'scripts/Validate.ps1') `
-  -RepositoryRoot $CandidateRoot -SourceValidation -ArtifactsRoot $ArtifactsRoot `
-  -SourceToolsPath $SourceToolsPath -AuthorityRepositoryRoot $AuthorityRoot `
-  -TrustedToolRoot $RuntimeRoot -BaseCommit $BaseCommit `
-  -ExpectedGoRuntimeVersion $env:STANDARD_GO_RUNTIME_VERSION -TimeoutSeconds 1800
-if ($LASTEXITCODE -ne 0) { throw 'Protected source validation failed.' }
-```
-
-The source gate is limited to stages 1–5, no-LLM Static, and the whole test suite. A report PASS, workflow success, review, and merge do not authorize release, installation, publication, or downstream cutover. `releaseEligible` is permanently false; any separate release process must make its own decision.
-
-## Rollback
-
-Rollback must use a normal reviewed PR that reverts the entire adoption together: `.github/workflows/validate.yml`, `config/standard-v1.json`, the active driver selection, tests, and documentation. It must restore the complete previously validated 6cee5b8 authority tuple: commit `6cee5b8e43fe4e327fedc788865f931c561d6e89`, archive SHA-256 `336290db31dde3d04fe89f11d90e517f88e8140b1b235b72fe01f7ed12345cd2`, its full 49-file inventory, and the matching three-platform protected workflow bindings. Reverting only part of the adoption is invalid because the active candidate must use one exact authority tuple end to end.
-
-## Versioning
-
-Consumers should pin this repository to a full commit SHA or an immutable release tag resolving to that commit. Skill content hashes are deterministic and are emitted by the validation script for use by external catalog locks.
-
-Do not repurpose stable Skill IDs or move a Skill away from `skills/<skill-id>` without coordinating the consuming Catalog lifecycle contract.
-
-## Release, update, rename, removal, and rollback
-
-See [RELEASING.md](RELEASING.md). Rollback is performed by returning the consumer source pin to a previously validated commit or immutable tag; release history must not be rewritten.
-
-## Migration scope
-
-This repository owns the Knowledge & Content Skill source after migration. Cross-repository Catalog/bootstrap cutover is intentionally outside this repository's own baseline and is handled separately.
+See [RELEASING.md](RELEASING.md) for release, update, rename, removal, and rollback rules.
