@@ -34,11 +34,10 @@ Describe 'Consumer repository contract' {
         $pester[0].path | Should -BeExactly 'tests'
     }
 
-    It 'contains the three authority-published consumer templates' {
+    It 'contains the permanent authority-published consumer templates' {
         @(
             'scripts/Invoke-PinnedAuthority.ps1'
             '.github/workflows/consumer-gate.yml'
-            '.github/workflows/consumer-gate-transition.yml'
         ) | ForEach-Object {
             Test-Path -LiteralPath (Join-Path $script:RepositoryRoot $_) -PathType Leaf | Should -BeTrue
         }

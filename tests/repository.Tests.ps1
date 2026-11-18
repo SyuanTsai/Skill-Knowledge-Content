@@ -84,10 +84,31 @@ BeforeAll {
 
     function Complete-ReuseAnnotation {
         param([Collections.IDictionary] $Current, [Collections.Generic.List[object]] $Annotations)
-        $actual = @($Current.Keys | Sort-Object -CaseSensitive)
-        $expected = @('SPDX-FileCopyrightText', 'SPDX-License-Identifier', 'path', 'precedence') | Sort-Object -CaseSensitive
+        [string[]]$actual = @($Current.Keys)
+        [string[]]$expected = @('SPDX-FileCopyrightText', 'SPDX-License-Identifier', 'path', 'precedence')
+        [Array]::Sort($actual, [StringComparer]::Ordinal)
+        [Array]::Sort($expected, [StringComparer]::Ordinal)
         if (($actual -join "`n") -cne ($expected -join "`n")) { throw 'REUSE annotation does not contain exactly the four required keys.' }
         $Annotations.Add([pscustomobject]$Current)
+    }
+
+    function Assert-ConsumerWorkflowLayout {
+        param([Parameter(Mandatory)][string] $WorkflowDirectory)
+
+        [string[]]$actualHashes = @(Get-ChildItem -LiteralPath $WorkflowDirectory -File -Force | ForEach-Object {
+                [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($_.Name)))
+            })
+        [Array]::Sort($actualHashes, [StringComparer]::Ordinal)
+        [string[]]$permanentOnly = @('9B0727A51E55F29C2C72D5A579ACF1584890229E7DAA6CFB113737DA9B986063')
+        [string[]]$conversion = @(
+            '9B0727A51E55F29C2C72D5A579ACF1584890229E7DAA6CFB113737DA9B986063'
+            'DA13DE9D7142D2061DCCFF52DF9522A141F365DB655FEEAF1823E48DDB9A217C'
+        )
+        [Array]::Sort($conversion, [StringComparer]::Ordinal)
+        $actualText = $actualHashes -join "`n"
+        if ($actualText -cne ($permanentOnly -join "`n") -and $actualText -cne ($conversion -join "`n")) {
+            throw 'The workflow directory contains an unsupported file set.'
+        }
     }
 
     function Read-TestReuseAnnotations {
@@ -138,21 +159,41 @@ BeforeAll {
 
 Describe 'Consumer repository layout' {
     It 'contains only the repository check and authority bootstrap under scripts' {
-        $actual = @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot 'scripts') -File -Force | ForEach-Object Name | Sort-Object -CaseSensitive)
-        $expected = @('Invoke-PinnedAuthority.ps1', 'Test-KnowledgeContentRepository.ps1')
+        [string[]]$actual = @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot 'scripts') -File -Force | ForEach-Object Name)
+        [string[]]$expected = @('Invoke-PinnedAuthority.ps1', 'Test-KnowledgeContentRepository.ps1')
+        [Array]::Sort($actual, [StringComparer]::Ordinal)
+        [Array]::Sort($expected, [StringComparer]::Ordinal)
         ($actual -join "`n") | Should -BeExactly ($expected -join "`n")
     }
 
-    It 'contains exactly the consumer workflow pair' {
-        $actual = @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot '.github/workflows') -File -Force | ForEach-Object Name | Sort-Object -CaseSensitive)
-        $expected = @('consumer-gate-transition.yml', 'consumer-gate.yml')
-        ($actual -join "`n") | Should -BeExactly ($expected -join "`n")
+    It 'contains exactly a supported consumer workflow set' {
+        { Assert-ConsumerWorkflowLayout -WorkflowDirectory (Join-Path $script:RepositoryRoot '.github/workflows') } | Should -Not -Throw
     }
 
     It 'contains only consumer configuration files' {
-        $actual = @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot 'config') -File -Force | ForEach-Object Name | Sort-Object -CaseSensitive)
-        $expected = @('authority-pin.json', 'consumer-gate.json')
+        [string[]]$actual = @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot 'config') -File -Force | ForEach-Object Name)
+        [string[]]$expected = @('authority-pin.json', 'consumer-gate.json')
+        [Array]::Sort($actual, [StringComparer]::Ordinal)
+        [Array]::Sort($expected, [StringComparer]::Ordinal)
         ($actual -join "`n") | Should -BeExactly ($expected -join "`n")
+    }
+
+    It 'accepts the permanent workflow alone with REUSE coverage and rejects a third workflow' {
+        $fixture = Join-Path $TestDrive ([Guid]::NewGuid().ToString('N'))
+        $workflowDirectory = Join-Path $fixture '.github/workflows'
+        [void](New-Item -ItemType Directory -Path $workflowDirectory -Force)
+        [IO.File]::WriteAllText((Join-Path $workflowDirectory 'consumer-gate.yml'), 'fixture', [Text.UTF8Encoding]::new($false))
+
+        { Assert-ConsumerWorkflowLayout -WorkflowDirectory $workflowDirectory } | Should -Not -Throw
+        $annotations = @(Read-TestReuseAnnotations -LiteralPath (Join-Path $script:RepositoryRoot 'REUSE.toml'))
+        $matches = @($annotations | Where-Object {
+                [Management.Automation.WildcardPattern]::new($_.path, [Management.Automation.WildcardOptions]::CultureInvariant).IsMatch('.github/workflows/consumer-gate.yml')
+            })
+        $matches | Should -HaveCount 1
+        $matches[0].path | Should -BeExactly '.github/workflows/consumer-gate*.yml'
+
+        [IO.File]::WriteAllText((Join-Path $workflowDirectory 'third.yml'), 'fixture', [Text.UTF8Encoding]::new($false))
+        { Assert-ConsumerWorkflowLayout -WorkflowDirectory $workflowDirectory } | Should -Throw '*unsupported file set*'
     }
 
     It 'keeps the gate identity consistent with source metadata' {
@@ -181,7 +222,10 @@ Describe 'REUSE annotation contract' {
             $pattern = [Management.Automation.WildcardPattern]::new($annotation.path, [Management.Automation.WildcardOptions]::CultureInvariant)
             @($allFiles | Where-Object { $pattern.IsMatch($_) }).Count | Should -BeGreaterThan 0
         }
-        $protected = @('catalog/source.json', 'config/authority-pin.json', 'config/consumer-gate.json', '.github/workflows/consumer-gate.yml', '.github/workflows/consumer-gate-transition.yml')
+        $protected = @('catalog/source.json', 'config/authority-pin.json', 'config/consumer-gate.json')
+        $protected += @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot '.github/workflows') -File -Force | ForEach-Object {
+                [IO.Path]::GetRelativePath($script:RepositoryRoot, $_.FullName).Replace([IO.Path]::DirectorySeparatorChar, '/')
+            })
         $protected += @(Get-ChildItem -LiteralPath (Join-Path $script:RepositoryRoot 'skills') -Filter 'SKILL.md' -File -Recurse -Force | ForEach-Object {
                 [IO.Path]::GetRelativePath($script:RepositoryRoot, $_.FullName).Replace([IO.Path]::DirectorySeparatorChar, '/')
             })
@@ -229,7 +273,6 @@ Describe 'REUSE annotation contract' {
         $fixtureFiles | Should -Not -Contain '.git/ignored.yml'
         $repositoryFiles = @(Get-RepositoryFiles -RepositoryRoot $script:RepositoryRoot | ForEach-Object RelativePath)
         $repositoryFiles | Should -Contain '.github/workflows/consumer-gate.yml'
-        $repositoryFiles | Should -Contain '.github/workflows/consumer-gate-transition.yml'
     }
 
     It 'rejects an annotation missing one required line' {
