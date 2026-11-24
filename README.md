@@ -4,6 +4,54 @@ SPDX-License-Identifier: Apache-2.0
 -->
 # Skill-Knowledge-Content
 
+## Overview
+
+**What it is:** An Agent Skills repository for the Knowledge & Content domain.
+
+**Problem it solves:** It brings scattered course and lecture materials together as evidence-linked notes, with exports for NotebookLM or articles.
+
+**Key Skills**
+
+| Skill | What it does |
+| --- | --- |
+| [`capture-private-course-knowledge`](skills/capture-private-course-knowledge/SKILL.md) | Analyzes and archives authorized course materials with links to evidence. It can transcribe videos that require sign-in, connect PDFs, slides, code, and attachments, and export notes, NotebookLM sources, or articles. |
+
+**Platform:** Local work runs on your current Windows, Linux, or macOS host.
+
+**Quick start:**
+
+1. Install the Skill through [SyuanTsai-AI-Instructions](https://github.com/SyuanTsai/SyuanTsai-AI-Instructions).
+2. Invoke `capture-private-course-knowledge` by name or ask your agent to capture an authorized course as evidence-linked notes.
+
+**Content rights:** Use only materials you are authorized to access and respect the provider’s access controls.
+
+**License:** [Apache-2.0](LICENSE) covers repository-authored content. See [provenance and licensing scope](PROVENANCE.md) for input and output rights.
+
+## 概覽
+
+**這是什麼：** 這是 Knowledge & Content 領域的 Agent Skills 儲存庫。
+
+**解決的問題：** 將分散的課程與講座素材整理成附有佐證連結的筆記，並可匯出為 NotebookLM 來源或文章。
+
+**主要 Skills**
+
+| Skill | 功能 |
+| --- | --- |
+| [`capture-private-course-knowledge`](skills/capture-private-course-knowledge/SKILL.md) | 分析並保存已獲授權的課程素材，附上佐證連結。可轉錄須登入才能觀看的影片，串聯 PDF、投影片、程式碼與附件，並匯出筆記、NotebookLM 來源或文章。 |
+
+**平台：** 本機作業在你目前使用的 Windows、Linux 或 macOS 主機上執行。
+
+**快速開始：**
+
+1. 透過 [SyuanTsai-AI-Instructions](https://github.com/SyuanTsai/SyuanTsai-AI-Instructions) 安裝此 Skill。
+2. 指定 `capture-private-course-knowledge`，或請你的代理程式將已獲授權的課程整理成附有佐證連結的筆記。
+
+**內容權利：** 僅使用你有權存取的素材，並遵守內容提供者的存取限制。
+
+**授權：** [Apache-2.0](LICENSE) 適用於儲存庫原創內容。輸入與輸出的權利請參閱[來源與授權範圍](PROVENANCE.md)。
+
+---
+
 Independent Agent Skills repository for the **Knowledge & Content** domain.
 
 For source maintenance and review, follow the [central Skill maintenance guidelines](https://github.com/SyuanTsai/SyuanTsai-AI-Instructions/blob/main/docs/skill-maintenance-guidelines.md) when deciding scope, supporting resources, dependencies, and replacement cleanup.
